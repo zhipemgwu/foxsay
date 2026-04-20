@@ -263,3 +263,73 @@ HomePage
 
 _最近一次更新：2026-04-20_
 _维护：配合 `system-logic-v1.md`（偏业务契约）一起阅读；本文档偏"代码在哪、数据在哪、规则在哪"。_
+
+
+---
+
+## 13. AI 聊天五件套（2026-04 新增）
+
+关卡聊天从"自由练习"升级为带数值、阶段、结局、奖励的正式副本。
+
+### 13.1 总览
+
+```
+startChat(levelKid,mode)
+                                          免费 5 次/关/日；仅第1次给 XP
+[beginAttempt]  attemptLimit.ts     Pro 10 次，前 2 次给 XP
+                                          Pro+ 20 次，前 3 次给 XP
+[initAffinity]  affinity.ts   story: 每关重置 40/40/40/40
+                                 challenge: 按 partner.kid 累积（localStorage）
+[buildLevelScenePrompt]  levelCards.ts  注入 world/scene/story_node/NPC/player_role
+   
+  每轮：system 追加 4 维好感 + 轮次阶段(opening/developing/climax/closing)
+       + 要求输出 <meta>{"deltas":{...},"mood":"","inner_os":"","suggest_end":false}</meta>
+   
+[parseChatMeta]  chatMeta.ts  从流里剥 meta，正文展示，JSON 解析 deltas
+   
+[applyDelta]    更新 4 维  主好感 (心动+暧昧)/2*0.6 + (信任+理解)/2*0.4
+   
+  结束触发：turnsUsedmax_turns / 主好感<20 且>4轮 / suggest_end 且min_turns_for_good
+   
+[scoreLevel]  levelScore.ts  AI主观0.6 + 硬规则0.4  total/star/ending
+   
+ChatSummary 弹层  retry/next
+```
+
+### 13.2 文件索引
+
+| 文件 | 角色 |
+|---|---|
+| [src/data/level-cards.json](../src/data/level-cards.json) | 30 关完整配置（dialogue/scoring/endings/world/scene） |
+| [src/services/levelCards.ts](../src/services/levelCards.ts) | 关卡卡访问层；`buildLevelScenePrompt` 扁平化 system 文本 |
+| [src/services/affinity.ts](../src/services/affinity.ts) | 4 维 State + 主好感公式 + storage（challenge 累积） |
+| [src/services/chatMeta.ts](../src/services/chatMeta.ts) | `<meta></meta>` JSON 尾解析 + 流中片段剥离 |
+| [src/services/attemptLimit.ts](../src/services/attemptLimit.ts) | 每日每关次数 + XP 发放次数（按 VipTier） |
+| [src/services/levelScore.ts](../src/services/levelScore.ts) | 三星评分 + 结局判定 + XP 奖励表 |
+| [src/components/ChatSummary.tsx](../src/components/ChatSummary.tsx) | 结束弹层（好感曲线+4维+星级+回放+奖励+CTA） |
+| [src/components/PracticePage.tsx](../src/components/PracticePage.tsx) | `startChat/sendMessage/finalizeChat` 串联 |
+
+### 13.3 关键决策
+
+| 议题 | 决策 |
+|---|---|
+| 轮数来源 | 直接读 `level-cards.json` 的 `dialogue.max_turns` / `min_turns_for_good_ending` |
+| 好感度重置 | 剧情每关重置；人物邂逅按 `partner.kid` 累积到 localStorage |
+| 内心 OS | 默认关；**仅 Pro+ 能开**（VIP/Pro 也看不到） |
+| 次数 | 免费 5/关/日，仅第 1 次给 XP；Pro 10/2；Pro+ 20/3 |
+| 结构化输出 | JSON tail（不是 function calling）；`<meta>{...}</meta>` |
+
+### 13.4 存储 Key 追加
+
+| Key | 含义 |
+|---|---|
+| `foxsay_affinity_by_kid` | `{[kid]: {heart,trust,mind,spark,updated_at}}` 累积好感 |
+| `foxsay_attempts_{levelKid}_{YYYY-MM-DD}` | `{tries, xp_granted}` 当日尝试计数 |
+
+### 13.5 AI system prompt 硬规则（摘要）
+
+1. 你是真人聊天，严禁括号动作/表情旁白。
+2. 严禁"评分/提示/建议/你可以..."上帝视角。
+3. 每次回复 1-3 句，微信口语化。
+4. 必须在正文后追加 `<meta>` JSON：`deltas`(4 维 -10~+10 整数)、`mood`、`inner_os`、`suggest_end`。
+5. 根据 **当前好感度** 调整态度（高则亲昵、低则冷淡/抽离）。
