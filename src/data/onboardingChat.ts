@@ -16,6 +16,11 @@ export type ChatOption = {
   tags?: string[];
   /** NPC 即时短反馈（选完后显示） */
   reply?: string;
+  /** 资料采集元信息（性别/年龄/目标）—— 用于把传统表单融入对话 */
+  meta?:
+    | { kind: 'gender'; value: 'male' | 'female' | null }
+    | { kind: 'age'; value: string }
+    | { kind: 'goal'; value: string };
 };
 
 export type ChatTurn = {
@@ -27,9 +32,39 @@ export type ChatTurn = {
 };
 
 export const onboardingScript: ChatTurn[] = [
+  // —— 资料题 1：性别（聊天化引导）——
+  {
+    id: 'p1_gender',
+    npc: '来啦～我是老司狐🦊\n先认识一下，你是？',
+    options: [
+      { id: 'p1_m', emoji: '🤴', label: '帅气男生', scores: {}, meta: { kind: 'gender', value: 'male' }, reply: '收到，帅哥！👋' },
+      { id: 'p1_f', emoji: '👸', label: '可爱女生', scores: {}, meta: { kind: 'gender', value: 'female' }, reply: '可可爱爱，登记好～' },
+      { id: 'p1_n', emoji: '🙈', label: '暂时不想说', scores: {}, meta: { kind: 'gender', value: null }, reply: '没关系，先聊聊别的～' },
+    ],
+  },
+  // —— 资料题 2：年龄段 ——
+  {
+    id: 'p2_age',
+    npc: '嘿嘿～再告诉我一个，你现在大概在哪个阶段？',
+    options: [
+      { id: 'p2_a', emoji: '🌱', label: '学生时代 (18-22)', scores: {}, meta: { kind: 'age', value: '18-22' }, reply: '青春正好～' },
+      { id: 'p2_b', emoji: '☀️', label: '职场新人 (23-27)', scores: {}, meta: { kind: 'age', value: '23-27' }, reply: '热恋黄金期，记下了' },
+      { id: 'p2_c', emoji: '🔥', label: '成熟阶段 (28+)', scores: {}, meta: { kind: 'age', value: '28-32' }, reply: '成熟稳重系 ✨' },
+    ],
+  },
+  // —— 资料题 3：想先突破的方向 ——
+  {
+    id: 'p3_goal',
+    npc: '最后一个基础题～来这里，你最想先突破哪个？',
+    options: [
+      { id: 'p3_chat', emoji: '💬', label: '聊天不冷场', scores: {}, tags: ['聊天技巧'], meta: { kind: 'goal', value: 'chat' }, reply: '聊天达人培养计划启动～' },
+      { id: 'p3_date', emoji: '☕', label: '约会更完美', scores: {}, tags: ['约会攻略'], meta: { kind: 'goal', value: 'date' }, reply: '约会攻略安排上 💫' },
+      { id: 'p3_express', emoji: '💌', label: '表达心意', scores: {}, tags: ['表达情感'], meta: { kind: 'goal', value: 'express' }, reply: '情感表达是加分项哦～' },
+    ],
+  },
   {
     id: 'q1_heart',
-    npc: '先唠两句帮你定制～\n最近一次让你心动的瞬间，是哪种？',
+    npc: '好，基础信息搞定，开始正经的～\n最近一次让你心动的瞬间，是哪种？',
     options: [
       { id: 'q1_a', emoji: '💘', label: '一见钟情，眼神对上就破防', scores: { lianfeihu: 2, tiantianhu: 2, xiaochouhu: 1 }, tags: ['表达情感', '告白技巧'], reply: '哟，纯爱战士一枚～ 💕' },
       { id: 'q1_b', emoji: '🌙', label: '深夜聊天聊到凌晨那种', scores: { caonihu: 3, xinjihu: 2, lvchahu: 1 }, tags: ['聊天技巧'], reply: '懂懂懂，氛围感拿捏了～' },
@@ -86,6 +121,27 @@ export function computeSpecies(answers: ChatOption[]): { speciesId: string; matc
   const matchRate = Math.min(99, 85 + Math.round((topScore / 12) * 14));
   const tagsTopN = Object.entries(tagCount).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([t]) => t);
   return { speciesId: topSp, matchRate, tagsTopN };
+}
+
+/**
+ * 从聊天答题序列中提取用户资料（性别/年龄段/目标）
+ * 资料题的 option 带 `meta` 字段，此函数只抽取它们。
+ */
+export function extractProfile(answers: ChatOption[]): {
+  gender: 'male' | 'female' | null;
+  age: string | null;
+  goals: string[];
+} {
+  let gender: 'male' | 'female' | null = null;
+  let age: string | null = null;
+  const goals: string[] = [];
+  for (const a of answers) {
+    if (!a.meta) continue;
+    if (a.meta.kind === 'gender') gender = a.meta.value;
+    else if (a.meta.kind === 'age') age = a.meta.value;
+    else if (a.meta.kind === 'goal' && !goals.includes(a.meta.value)) goals.push(a.meta.value);
+  }
+  return { gender, age, goals };
 }
 
 /** 物种 → 推荐 5 维倾向（用于首页雷达初值）

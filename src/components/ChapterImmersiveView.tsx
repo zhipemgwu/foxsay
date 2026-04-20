@@ -49,6 +49,7 @@ interface Props {
   ctaLabelOverride?: string; // 可选：覆盖 CTA 文案（如 “开始这一关”）
   enablePartnerPicker?: boolean;                                      // 启用右上角“切换搭档”按钮
   onConfirmPartner?: (chapterId: number, partner: PartnerInfo) => void;
+  entranceEffect?: boolean;  // 打开时播放柔光入场特效（用于从推荐卡进入）
 }
 
 const slideVariants = {
@@ -66,10 +67,12 @@ function imgSeed(url: string): number {
   return Math.abs(h);
 }
 
-export function ChapterImmersiveView({ open, mode, chapters, initialIndex, onClose, onStart, onOpenVIP, headerLabel, ctaLabelOverride, enablePartnerPicker, onConfirmPartner }: Props) {
+export function ChapterImmersiveView({ open, mode, chapters, initialIndex, onClose, onStart, onOpenVIP, headerLabel, ctaLabelOverride, enablePartnerPicker, onConfirmPartner, entranceEffect }: Props) {
   const sub = useSub();
   const [[index, direction], setPage] = useState<[number, number]>([initialIndex, 0]);
   const [showVipTip, setShowVipTip] = useState(false);
+  // 是否是首次渲染（跳过首帧的滑入动画）
+  const [isFirstRender, setIsFirstRender] = useState(true);
   // 搭档选择状态机：idle（浏览/已锁定）→ picking（左右滑选角色）→ idle（已锁定）
   const [pickerPhase, setPickerPhase] = useState<'idle' | 'picking'>('idle');
   const [pickerIndex, setPickerIndex] = useState(0);
@@ -77,6 +80,8 @@ export function ChapterImmersiveView({ open, mode, chapters, initialIndex, onClo
   // 确认时的仪式感动画标记 / 白光闪屏
   const [justConfirmed, setJustConfirmed] = useState(false);
   const [confirmFlash, setConfirmFlash] = useState(false);
+  // 入场柔光特效（直接从 prop 初始化，避免 useEffect 延迟）
+  const [entranceGlow, setEntranceGlow] = useState(() => !!entranceEffect && open);
 
   // 每次打开时重置为 initialIndex（避免上次滑动的 index 残留到下次打开）
   useEffect(() => {
@@ -86,8 +91,24 @@ export function ChapterImmersiveView({ open, mode, chapters, initialIndex, onClo
       setPickerPhase('idle');
       setJustConfirmed(false);
       setConfirmFlash(false);
+      setIsFirstRender(true);
+      // 入场特效
+      if (entranceEffect) {
+        setEntranceGlow(true);
+        window.setTimeout(() => setEntranceGlow(false), 2000);
+      } else {
+        setEntranceGlow(false);
+      }
     }
-  }, [open, mode, initialIndex]);
+  }, [open, mode, initialIndex]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 首帧渲染后立即标记为非首次（下一次滑动就会有动画）
+  useEffect(() => {
+    if (isFirstRender && open) {
+      const raf = requestAnimationFrame(() => setIsFirstRender(false));
+      return () => cancelAnimationFrame(raf);
+    }
+  }, [isFirstRender, open]);
 
   // 切换关卡时，退出 picker 模式 & 重置特效
   useEffect(() => {
@@ -251,10 +272,10 @@ export function ChapterImmersiveView({ open, mode, chapters, initialIndex, onClo
     <AnimatePresence>
       <motion.div
         key="immersive-root"
-        initial={{ opacity: 0 }}
+        initial={false}
         animate={{ opacity: 1 }}
         exit={{ opacity: 0 }}
-        transition={{ duration: 0.22 }}
+        transition={{ duration: 0.15 }}
         style={{
           position: 'fixed', inset: 0, zIndex: 9999,
           background: '#14101c',
@@ -341,11 +362,11 @@ export function ChapterImmersiveView({ open, mode, chapters, initialIndex, onClo
           <motion.div
             key={displayKey}
             custom={pickerPhase === 'picking' ? pickerDir : direction}
-            variants={slideVariants}
-            initial="enter"
+            variants={isFirstRender ? undefined : slideVariants}
+            initial={isFirstRender ? false : 'enter'}
             animate="center"
             exit="exit"
-            transition={{ x: { type: 'spring', stiffness: 320, damping: 34 }, opacity: { duration: 0.22 } }}
+            transition={isFirstRender ? { duration: 0 } : { x: { type: 'spring', stiffness: 320, damping: 34 }, opacity: { duration: 0.22 } }}
             drag
             dragElastic={0.22}
             dragConstraints={{ left: 0, right: 0, top: 0, bottom: 0 }}
@@ -828,6 +849,88 @@ export function ChapterImmersiveView({ open, mode, chapters, initialIndex, onClo
             />
           )}
         </AnimatePresence>
+
+        {/* ===== 入场柔光特效（从推荐卡进入时） ===== */}
+        {entranceGlow && (
+          <>
+            {/* 柔光 — 从底部向上扩散的暖光 */}
+            <motion.div
+              key="entrance-glow"
+              initial={{ opacity: 0 }}
+              animate={{ opacity: [0, 0.85, 0.5, 0] }}
+              transition={{ duration: 1.8, ease: 'easeOut', times: [0, 0.15, 0.55, 1] }}
+              style={{
+                position: 'absolute', inset: 0, zIndex: 7,
+                pointerEvents: 'none',
+                background: 'radial-gradient(ellipse 130% 90% at 50% 80%, rgba(255,138,128,0.65) 0%, rgba(240,171,252,0.4) 30%, rgba(167,139,250,0.18) 55%, transparent 78%)',
+              }}
+            />
+            {/* 中心光晕扩散 */}
+            <motion.div
+              key="entrance-halo"
+              aria-hidden
+              initial={{ opacity: 0, scale: 0.4 }}
+              animate={{ opacity: [0, 0.75, 0.4, 0], scale: [0.4, 1.5, 2.2] }}
+              transition={{ duration: 1.6, ease: [0.16, 1, 0.3, 1], times: [0, 0.2, 0.6, 1] }}
+              style={{
+                position: 'absolute', top: '48%', left: '50%',
+                width: 450, height: 450, marginLeft: -225, marginTop: -225,
+                borderRadius: '50%',
+                background: 'radial-gradient(circle, rgba(255,255,255,0.7) 0%, rgba(255,190,180,0.5) 25%, rgba(255,138,128,0.2) 50%, transparent 72%)',
+                pointerEvents: 'none', zIndex: 7,
+              }}
+            />
+            {/* 冲击波环 */}
+            <motion.div
+              key="entrance-ring"
+              aria-hidden
+              initial={{ opacity: 0, scale: 0.15 }}
+              animate={{ opacity: [0, 0.7, 0], scale: [0.15, 2.2] }}
+              transition={{ duration: 1.2, ease: 'easeOut', delay: 0.08 }}
+              style={{
+                position: 'absolute', top: '48%', left: '50%',
+                width: 300, height: 300, marginLeft: -150, marginTop: -150,
+                borderRadius: '50%',
+                border: '2px solid rgba(255,190,180,0.75)',
+                boxShadow: '0 0 40px rgba(255,138,128,0.5), inset 0 0 30px rgba(255,138,128,0.2)',
+                pointerEvents: 'none', zIndex: 7,
+              }}
+            />
+            {/* 微光粒子（6 颗散开） */}
+            {[0, 1, 2, 3, 4, 5].map(i => {
+              const angle = (i / 6) * Math.PI * 2 + Math.PI / 5;
+              const dist = 140 + (i % 3) * 35;
+              const dx = Math.cos(angle) * dist;
+              const dy = Math.sin(angle) * dist;
+              return (
+                <motion.div
+                  key={`entrance-spark-${i}`}
+                  aria-hidden
+                  initial={{ opacity: 0, x: 0, y: 0, scale: 0 }}
+                  animate={{
+                    opacity: [0, 1, 0.6, 0],
+                    x: [0, dx * 0.4, dx],
+                    y: [0, dy * 0.4, dy],
+                    scale: [0, 1.2, 0.5, 0],
+                  }}
+                  transition={{ duration: 1.2, ease: 'easeOut', delay: 0.1 + (i % 3) * 0.06, times: [0, 0.25, 0.65, 1] }}
+                  style={{
+                    position: 'absolute', top: '48%', left: '50%',
+                    width: 8, height: 8, marginLeft: -4, marginTop: -4,
+                    borderRadius: '50%',
+                    background: i % 2 === 0
+                      ? 'radial-gradient(circle, #fff 30%, rgba(255,138,128,0.9) 100%)'
+                      : 'radial-gradient(circle, #fff 30%, rgba(240,171,252,0.9) 100%)',
+                    boxShadow: i % 2 === 0
+                      ? '0 0 16px rgba(255,138,128,0.8)'
+                      : '0 0 16px rgba(240,171,252,0.8)',
+                    pointerEvents: 'none', zIndex: 7,
+                  }}
+                />
+              );
+            })}
+          </>
+        )}
 
         {/* VIP 锁定提示弹窗 */}
         <AnimatePresence>

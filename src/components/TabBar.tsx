@@ -2,8 +2,8 @@ import { motion, AnimatePresence } from 'motion/react';
 
 const tabs = [
   { label: '首页', icon: TabHome },
-  { label: '恋商', icon: TabAI },
-  { label: '心动', icon: TabHeart, isPrimary: true },
+  { label: '成长', icon: TabAI },
+  { label: '练习', icon: TabHeart, isPrimary: true },
   { label: '社区', icon: TabChat },
   { label: '我的', icon: TabUser },
 ];

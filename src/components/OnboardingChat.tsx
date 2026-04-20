@@ -369,6 +369,8 @@ export function OnboardingChat({
         <div className="px-4 pb-6 pt-3" style={{
           background: 'linear-gradient(180deg, transparent 0%, rgba(17,14,26,0.8) 25%, rgba(17,14,26,0.98) 100%)',
           paddingBottom: 'max(24px, env(safe-area-inset-bottom, 24px))',
+          // 预留选项栏高度，避免选中后整块消失导致对话区跳动
+          minHeight: 268,
         }}>
           <AnimatePresence mode="wait">
             {(showOptions || showChosen || showDismiss) && (

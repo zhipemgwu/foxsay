@@ -1,11 +1,10 @@
-import { useState, useEffect, useCallback, lazy, Suspense } from 'react';
+import { useState, useEffect, useCallback, lazy, Suspense, useRef } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
 import { UserProvider } from './context/UserContext';
 import { ProfileModalProvider } from './components/ProfileModals';
 import { SubscriptionProvider } from './components/SubscriptionSheet';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Header } from './components/Header';
-import { SearchBar } from './components/SearchBar';
 import { GreetingSection } from './components/GreetingSection';
 import { TodayScene } from './components/TodayScene';
 import { DiagnosticStream } from './components/DiagnosticStream';
@@ -34,17 +33,81 @@ function TabFallback() {
 }
 
 export default function App() {
-  const [stage, setStage] = useState('splash');
-  const [activeTab, setActiveTab] = useState(0);
+  const [stage, setStage] = useState(() => {
+    try {
+      const saved = localStorage.getItem('foxsay_stage');
+      if (saved === 'main') return 'main';
+    } catch {}
+    return 'splash';
+  });
+  const [activeTab, setActiveTab] = useState(() => {
+    try {
+      const saved = localStorage.getItem('foxsay_stage');
+      if (saved === 'main') {
+        const jumped = localStorage.getItem('foxsay_newuser_jumped');
+        if (!jumped) {
+          const hasPractice = localStorage.getItem('foxsay_practice_history');
+          if (!hasPractice) return 2;
+        }
+      }
+    } catch {}
+    return 0;
+  });
   const [homeLoading, setHomeLoading] = useState(true);
+  const [practiceAction, setPracticeAction] = useState(null);
+  const skipTabAnimRef = useRef(false);
 
   const goToOnboarding = useCallback(() => setStage('onboarding'), []);
   const goToAuth = useCallback(() => setStage('auth'), []);
-  const goToMain = useCallback(() => setStage('main'), []);
+  const goToMain = useCallback(() => {
+    setStage('main');
+    try {
+      localStorage.setItem('foxsay_stage', 'main');
+      // 新用户首次进入直接跳练习页（与 setStage 同批，避免闪 HomePage）
+      const jumped = localStorage.getItem('foxsay_newuser_jumped');
+      if (!jumped) {
+        const hasPractice = localStorage.getItem('foxsay_practice_history');
+        if (!hasPractice) {
+          setActiveTab(2);
+          localStorage.setItem('foxsay_newuser_jumped', '1');
+        }
+      }
+    } catch {}
+  }, []);
+  const handleLogout = useCallback(() => {
+    try { localStorage.clear(); } catch {}
+    setStage('splash');
+    setActiveTab(0);
+    setHomeLoading(true);
+  }, []);
+
+  const goPractice = useCallback(() => setActiveTab(2), []);
+
+  const handlePracticeAction = useCallback((action) => {
+    setPracticeAction(action);
+    skipTabAnimRef.current = true;
+    setActiveTab(2);
+  }, []);
+
+  // 刷新页面时的兜底：如果 goToMain 未触发但 stage 已是 main
+  useEffect(() => {
+    if (stage === 'main') {
+      try {
+        const jumped = localStorage.getItem('foxsay_newuser_jumped');
+        if (!jumped) {
+          const hasPractice = localStorage.getItem('foxsay_practice_history');
+          if (!hasPractice) {
+            setActiveTab(2);
+            localStorage.setItem('foxsay_newuser_jumped', '1');
+          }
+        }
+      } catch {}
+    }
+  }, [stage]);
 
   useEffect(() => {
     if (stage === 'main' && homeLoading) {
-      const t = setTimeout(() => setHomeLoading(false), 1200);
+      const t = setTimeout(() => setHomeLoading(false), 600);
       return () => clearTimeout(t);
     }
   }, [stage, homeLoading]);
@@ -81,21 +144,22 @@ export default function App() {
         {stage === 'main' && (
           <>
             <div className="flex-1 overflow-hidden relative">
-              <AnimatePresence mode="wait">
+              <AnimatePresence mode="wait" initial={false}>
                 <motion.div
                   key={activeTab}
                   className="absolute inset-0 overflow-y-auto overflow-x-hidden"
                   style={{ WebkitOverflowScrolling: 'touch' }}
-                  initial={{ opacity: 0, y: 8 }}
+                  initial={skipTabAnimRef.current ? false : { opacity: 0, y: 8 }}
                   animate={{ opacity: 1, y: 0 }}
-                  exit={{ opacity: 0, y: -8 }}
-                  transition={{ duration: 0.2, ease: [0.4, 0, 0.2, 1] }}
+                  exit={skipTabAnimRef.current ? { opacity: 0 } : { opacity: 0, y: -8 }}
+                  transition={{ duration: skipTabAnimRef.current ? 0 : 0.2, ease: [0.4, 0, 0.2, 1] }}
+                  onAnimationComplete={() => { skipTabAnimRef.current = false; }}
                 >
-                  {activeTab === 0 && (homeLoading ? <HomeSkeletonLoader /> : <HomePage />)}
+                  {activeTab === 0 && (homeLoading ? <HomeSkeletonLoader /> : <HomePage onPracticeAction={handlePracticeAction} />)}
                   {activeTab === 1 && <ErrorBoundary><Suspense fallback={<TabFallback />}><DiagnosticPage /></Suspense></ErrorBoundary>}
-                  {activeTab === 2 && <ErrorBoundary><Suspense fallback={<TabFallback />}><PracticePage /></Suspense></ErrorBoundary>}
+                  {activeTab === 2 && <ErrorBoundary><Suspense fallback={<TabFallback />}><PracticePage pendingAction={practiceAction} onActionConsumed={() => setPracticeAction(null)} /></Suspense></ErrorBoundary>}
                   {activeTab === 3 && <ErrorBoundary><Suspense fallback={<TabFallback />}><CommunityPage /></Suspense></ErrorBoundary>}
-                  {activeTab === 4 && <ErrorBoundary><Suspense fallback={<TabFallback />}><ProfilePage /></Suspense></ErrorBoundary>}
+                  {activeTab === 4 && <ErrorBoundary><Suspense fallback={<TabFallback />}><ProfilePage onLogout={handleLogout} /></Suspense></ErrorBoundary>}
                 </motion.div>
               </AnimatePresence>
             </div>
@@ -111,7 +175,7 @@ export default function App() {
   );
 }
 
-function HomePage() {
+function HomePage({ onPracticeAction }) {
   return (
     <>
       {/* Unified top gradient covering Header → GreetingSection */}
@@ -121,14 +185,20 @@ function HomePage() {
           background: 'radial-gradient(ellipse 80% 50% at 50% 0%, rgba(255,138,128,0.22) 0%, rgba(155,126,222,0.10) 40%, transparent 100%)',
         }} />
         <Header />
-        <SearchBar />
         <GreetingSection />
       </div>
+
+      {/* 每日测评（独立 check-in） */}
       <HeatUpCard />
+      {/* 今日任务（独立模块，始终显示） */}
       <TodayTaskList />
-      <div style={{ height: 24 }} />
-      <TodayScene />
-      <div style={{ height: 24 }} />
+      <div style={{ height: 16 }} />
+
+      {/* 今日推荐 — 沉浸式故事/邂逅封面 */}
+      <TodayScene onPracticeAction={onPracticeAction} />
+      <div style={{ height: 16 }} />
+
+      {/* 今日洞察 — 折叠展示 */}
       <DiagnosticStream />
       <div style={{ height: 40 }} />
     </>

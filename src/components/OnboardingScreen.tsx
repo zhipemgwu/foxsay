@@ -1,6 +1,6 @@
 import { useState, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { IcHeartSpark, IcSparkle, IcChat, IcTarget, IcStar, gradients } from './CuteIcons';
+import { IcHeartSpark, IcSparkle, IcTarget, IcStar, gradients } from './CuteIcons';
 
 /* ---------- Hand-drawn SVG illustrations ---------- */
 function IllustrationChat() {
@@ -63,18 +63,8 @@ const slides = [
     iconBg: gradients.coral,
     heroIllustration: <IllustrationChat />,
     title: 'AI 恋爱陪练',
-    subtitle: '沉浸式模拟真实约会场景\n让你在安全的环境中练习恋爱技巧',
+    subtitle: '沉浸式模拟真实约会场景\nAI 实时分析，精准提升共情力与表达',
     accent: '#FF8A80',
-  },
-  {
-    gradient: 'radial-gradient(ellipse 80% 60% at 50% 30%, rgba(155,126,222,0.35) 0%, rgba(129,212,250,0.15) 40%, transparent 70%)',
-    deco: 'radial-gradient(ellipse 50% 40% at 30% 55%, rgba(255,138,128,0.1) 0%, transparent 60%)',
-    icon: <IcChat size={28} color="#fff" />,
-    iconBg: gradients.purple,
-    heroIllustration: <IllustrationAnalysis />,
-    title: '智能对话分析',
-    subtitle: 'AI 实时分析你的表达方式\n精准提升共情力和表达技巧',
-    accent: '#9B7EDE',
   },
   {
     gradient: 'radial-gradient(ellipse 80% 60% at 50% 30%, rgba(78,205,196,0.35) 0%, rgba(128,203,196,0.15) 40%, transparent 70%)',
@@ -234,7 +224,7 @@ export function OnboardingScreen({ onFinish }: { onFinish: () => void }) {
                   </div>
                 </div>
                 <div className="flex gap-1">
-                  {[0, 1, 2].map(i => (
+                  {slides.map((_, i) => (
                     <IcSparkle key={i} size={10} color={i <= current ? slide.accent : 'rgba(245,239,232,0.15)'} />
                   ))}
                 </div>

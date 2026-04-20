@@ -67,7 +67,7 @@ const settingsGroups = [
 
 type ModalType = 'achievements' | 'learning' | 'settings' | 'calendar' | 'collections' | 'privileges' | null;
 
-export function ProfilePage() {
+export function ProfilePage({ onLogout }: { onLogout?: () => void }) {
   const user = useUser();
   const [activeModal, setActiveModal] = useState<ModalType>(null);
   const [showVIP, setShowVIP] = useState(false);
@@ -869,7 +869,8 @@ export function ProfilePage() {
                         </div>
                       </div>
                     ))}
-                    <button className="w-full flex items-center justify-center gap-2 p-3 mt-2" style={{ background: 'rgba(255,138,128,0.08)', borderRadius: 12 }}>
+                    <button className="w-full flex items-center justify-center gap-2 p-3 mt-2" style={{ background: 'rgba(255,138,128,0.08)', borderRadius: 12 }}
+                      onClick={() => onLogout?.()}>
                       <span style={{ color: '#FF8A80', fontSize: '14px', fontWeight: 500 }}>退出登录</span>
                     </button>
                   </div>

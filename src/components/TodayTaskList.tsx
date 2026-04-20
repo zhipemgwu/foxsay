@@ -1,12 +1,13 @@
 /**
- * 今日任务清单 — check-in 后显示今日任务
+ * 今日任务清单 — 独立模块，始终显示
+ * （已与 check-in 解耦，check-in 作为独立的每日测评模块）
  */
 import { useState, useEffect, useCallback } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { CheckCircle2, Circle } from 'lucide-react';
 import { IcSparkle } from './CuteIcons';
 
-/* ── 今日任务（check-in 后可见） ── */
+/* ── 今日任务 ── */
 const defaultTasks = [
   { id: 1, title: '今日场景练习', desc: '完成一次约会模拟', xp: 50, expert: '汪俊豪', icon: '☕' },
   { id: 2, title: '主动发起一次对话', desc: '用学到的开场白和朋友聊天', xp: 20, expert: '余水', icon: '💬' },
@@ -16,19 +17,12 @@ const defaultTasks = [
 ];
 
 export function TodayTaskList() {
-  const [isCheckInDone, setIsCheckInDone] = useState(false);
   const [completedTasks, setCompletedTasks] = useState<number[]>([]);
 
   useEffect(() => {
     const today = new Date().toDateString();
-    setIsCheckInDone(!!localStorage.getItem(`heatup_${today}`));
-
     const tasksSaved = localStorage.getItem(`tasks_${today}`);
     if (tasksSaved) { try { setCompletedTasks(JSON.parse(tasksSaved)); } catch {} }
-
-    const onCheckIn = () => setIsCheckInDone(true);
-    window.addEventListener('foxsay_checkin_done', onCheckIn);
-    return () => window.removeEventListener('foxsay_checkin_done', onCheckIn);
   }, []);
 
   const toggleTask = useCallback((id: number) => {
@@ -56,19 +50,7 @@ export function TodayTaskList() {
         </span>
       </div>
 
-      {/* 未 check-in 提示 */}
-      {!isCheckInDone && (
-        <motion.div className="p-4 text-center mb-3" initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }}
-          style={{ background: 'rgba(245,239,232,0.04)', borderRadius: 14, border: '1px solid rgba(245,239,232,0.08)' }}>
-          <span style={{ fontSize: 24, display: 'block', marginBottom: 6 }}>☀️</span>
-          <span style={{ color: 'rgba(245,239,232,0.6)', fontSize: 13 }}>完成今日打卡后解锁任务</span>
-        </motion.div>
-      )}
-
-      {/* 已 check-in：显示任务 */}
-      {isCheckInDone && (
-        <>
-          {/* 进度条 */}
+      {/* 进度条 */}
           <div className="mb-4" style={{ height: 4, borderRadius: 2, background: 'rgba(245,239,232,0.08)' }}>
             <motion.div className="h-full" style={{
               borderRadius: 2,
@@ -141,8 +123,6 @@ export function TodayTaskList() {
               </span>
             </motion.div>
           )}
-        </>
-      )}
     </div>
   );
 }

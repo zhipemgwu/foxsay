@@ -12,7 +12,7 @@
  * ========================================
  */
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronRight, ChevronLeft, Lock, X, Send, Users, Zap } from 'lucide-react';
 import {
@@ -402,7 +402,10 @@ const userProgress = {
 /* ========================================
  *  主组件
  * ======================================== */
-export function PracticePage() {
+export function PracticePage({ pendingAction, onActionConsumed }: {
+  pendingAction?: { type: 'openLevel' | 'openChapter'; mode: 'story' | 'challenge'; chapterId: number; levelIndex?: number } | null;
+  onActionConsumed?: () => void;
+}) {
   /* ---------- 状态管理 ---------- */
   const user = useUser();
   const { openProfile } = useProfileModal();
@@ -410,7 +413,9 @@ export function PracticePage() {
 
   // 进入练习场自动打卡
   useEffect(() => { user.checkIn?.(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
-  const [practiceMode, setPracticeMode] = useState<'story' | 'challenge'>('story'); // 关卡模式
+  const [practiceMode, setPracticeMode] = useState<'story' | 'challenge'>(() =>
+    pendingAction ? (pendingAction.mode === 'challenge' ? 'challenge' : 'story') : 'story'
+  ); // 关卡模式
   const [immersive, setImmersive] = useState<{ mode: 'story' | 'challenge'; index: number } | null>(null); // 章节沉浸页
   const [showVIP, setShowVIP] = useState(false); // VIP 弹层
   const [activePractice, setActivePractice] = useState<typeof storyLevels[0] | null>(null); // 练习详情弹窗
@@ -431,8 +436,15 @@ export function PracticePage() {
   const [matchWeeklyUsed, setMatchWeeklyUsed] = useState(1);
   const [showRanking, setShowRanking] = useState(false);          // 排行榜弹窗
   const [bookingSuccess, setBookingSuccess] = useState<{ name: string; time: string } | null>(null); // 预约成功弹窗
-  const [expandedChapter, setExpandedChapter] = useState<number | null>(null);   // 当前展开的大章节 id（null = 全部收起）
-  const [levelImmersive, setLevelImmersive] = useState<{ chapterId: number; index: number } | null>(null); // 小关卡沉浸页
+  const [expandedChapter, setExpandedChapter] = useState<number | null>(() =>
+    pendingAction ? pendingAction.chapterId : null
+  );   // 当前展开的大章节 id（null = 全部收起）
+  const [levelImmersive, setLevelImmersive] = useState<{ chapterId: number; index: number } | null>(() =>
+    pendingAction?.type === 'openLevel'
+      ? { chapterId: pendingAction.chapterId, index: pendingAction.levelIndex ?? 0 }
+      : null
+  ); // 小关卡沉浸页
+  const cameFromHomeRef = useRef(!!pendingAction); // 是否从首页推荐进入
   // 已锁定的搭档（按小关卡 id 记录，进入该关直接使用）
   const [levelPartners, setLevelPartners] = useState<Record<number, { img: string; name: string; age: number; signature: string; traits: string[] }>>({});
 
@@ -442,6 +454,20 @@ export function PracticePage() {
   const _challengeLevels = isNewUser ? challengeLevelsNew : challengeLevels;
   const currentLevels = practiceMode === 'story' ? _storyLevels : _challengeLevels;
   const currentGroups = practiceMode === 'story' ? storyChapters : challengeGroups;
+
+  /* ---------- 来自首页推荐的 pending action（初始化已在 useState 中完成） ---------- */
+
+  // 挂载时消费 action + openChapter 类型需要滚动
+  useEffect(() => {
+    if (!pendingAction) return;
+    onActionConsumed?.();
+    if (pendingAction.type === 'openChapter') {
+      setTimeout(() => {
+        const el = document.querySelector(`[data-chapter-id="${pendingAction.chapterId}"]`);
+        if (el && 'scrollIntoView' in el) (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 200);
+    }
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
   /* ---------- 沉浸页章节数据 ---------- */
   const immersiveChapters = currentGroups.map(g => {
@@ -467,8 +493,10 @@ export function PracticePage() {
     const chapterLevels = currentLevels.filter(l => l.chapter === levelImmersive.chapterId);
     const groupMeta = currentGroups.find(g => g.id === levelImmersive.chapterId);
     const chapterLabel = practiceMode === 'story' ? `第 ${levelImmersive.chapterId} 章` : `第 ${levelImmersive.chapterId} 组`;
+    const userIsPro = user.isVip || user.isPro();
     const chapters = chapterLevels.map((lv) => {
-      const partnerCandidates = lv.vip ? undefined : getPartnerCandidates(lv.id, lv.chapter, lv.idxInChapter);
+      const isLocked = lv.vip && !userIsPro;
+      const partnerCandidates = isLocked ? undefined : getPartnerCandidates(lv.id, lv.chapter, lv.idxInChapter);
       const confirmedPartner = levelPartners[lv.id] ?? null;
       // 已锁定搭档则立绘使用它的图，否则使用默认 lv.image
       const immersiveImage = confirmedPartner?.img ?? lv.image;
@@ -479,8 +507,8 @@ export function PracticePage() {
         immersiveImage,
         narrative: lv.desc,
         synopsis: `${groupMeta?.name ?? ''} · 第 ${lv.idxInChapter + 1} 节\n\n${lv.desc}`,
-        readCount: lv.completed ? '已完成' : '待挑战',
-        vip: lv.vip,
+        readCount: lv.completed ? '已完成' : (isLocked ? '会员专享' : '待挑战'),
+        vip: isLocked,
         progress: { unlocked: lv.completed ? 1 : 0, total: 1 },
         unitLabel: `${chapterLabel} · 第 ${lv.idxInChapter + 1} 节`,
         partnerCandidates,
@@ -995,7 +1023,9 @@ export function PracticePage() {
                   >
                     <div className="grid grid-cols-2 gap-3 pt-3">
                       {groupLevels.map((lv, li) => {
-                        const isCurrent = !lv.completed && !lv.vip && li === completedCount;
+                        const userIsPro = user.isVip || user.isPro();
+                        const isLocked = lv.vip && !userIsPro;
+                        const isCurrent = !lv.completed && !isLocked && li === completedCount;
                         const isEnc = lv.isEncounter;
                         return (
                           <motion.button
@@ -1012,7 +1042,7 @@ export function PracticePage() {
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: li * 0.035 }}
                             onClick={() => {
-                              if (lv.vip) { setShowVIP(true); return; }
+                              if (isLocked) { setShowVIP(true); return; }
                               setLevelImmersive({ chapterId: g.id, index: li });
                             }}
                           >
@@ -1027,11 +1057,11 @@ export function PracticePage() {
                                 alt={lv.title}
                                 seed={lv.id}
                                 duration={13}
-                                tilt={!lv.vip}
+                                tilt={!isLocked}
                                 tiltStrength={3}
                                 glow={isCurrent}
                                 glowColor="rgba(255,180,170,0.35)"
-                                dimmed={lv.vip}
+                                dimmed={isLocked}
                                 imgStyle={isEnc ? { objectPosition: 'center 12%' } : undefined}
                               />
                               {/* 底部渐变过渡到卡片下半 */}
@@ -1044,8 +1074,8 @@ export function PracticePage() {
                                 pointerEvents: 'none',
                               }} />
 
-                              {/* VIP 锁覆盖 */}
-                              {lv.vip && (
+                              {/* VIP 锁覆盖（非VIP用户才锁定） */}
+                              {isLocked && (
                                 <>
                                   <div style={{
                                     position: 'absolute', inset: 0,
@@ -1061,16 +1091,19 @@ export function PracticePage() {
                                       <Lock size={18} color="#2b1a0a" strokeWidth={2.4} />
                                     </div>
                                   </div>
-                                  <div style={{
-                                    position: 'absolute', top: 8, left: 8,
-                                    display: 'inline-flex', alignItems: 'center', gap: 3,
-                                    background: 'linear-gradient(135deg, rgba(255,207,120,0.95), rgba(255,160,80,0.95))',
-                                    borderRadius: 6, padding: '2px 7px',
-                                    border: '1px solid rgba(255,220,150,0.7)',
-                                  }}>
-                                    <span style={{ color: '#2b1a0a', fontSize: 9, fontWeight: 800, letterSpacing: 1 }}>VIP</span>
-                                  </div>
                                 </>
+                              )}
+                              {/* VIP 标识（VIP关卡始终显示） */}
+                              {lv.vip && (
+                                <div style={{
+                                  position: 'absolute', top: 8, left: 8,
+                                  display: 'inline-flex', alignItems: 'center', gap: 3,
+                                  background: 'linear-gradient(135deg, rgba(255,207,120,0.95), rgba(255,160,80,0.95))',
+                                  borderRadius: 6, padding: '2px 7px',
+                                  border: '1px solid rgba(255,220,150,0.7)',
+                                }}>
+                                  <span style={{ color: '#2b1a0a', fontSize: 9, fontWeight: 800, letterSpacing: 1 }}>VIP</span>
+                                </div>
                               )}
 
                               {/* 已完成 ✓ */}
@@ -1118,7 +1151,7 @@ export function PracticePage() {
                             <div className="flex-1 flex flex-col" style={{ padding: '8px 12px 12px' }}>
                               {/* 状态徽章 */}
                               <div style={{ marginBottom: 6 }}>
-                                {lv.vip ? (
+                                {isLocked ? (
                                   <span style={{
                                     display: 'inline-block', padding: '1px 7px', borderRadius: 5,
                                     background: 'linear-gradient(135deg, rgba(255,207,120,0.22), rgba(255,160,80,0.18))',
@@ -1942,10 +1975,21 @@ export function PracticePage() {
         headerLabel={practiceMode === 'story' ? '剧情关卡' : '人物邂逅'}
         ctaLabelOverride="开始这一关"
         enablePartnerPicker
+        entranceEffect={cameFromHomeRef.current}
         onConfirmPartner={(chapterId, partner) => {
           setLevelPartners(prev => ({ ...prev, [chapterId]: partner }));
         }}
-        onClose={() => setLevelImmersive(null)}
+        onClose={() => {
+          setLevelImmersive(null);
+          // 从首页推荐进入 → 关闭后滚动到"我的故事"章节区
+          if (cameFromHomeRef.current) {
+            cameFromHomeRef.current = false;
+            setTimeout(() => {
+              const el = document.querySelector(`[data-chapter-id]`);
+              if (el) (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'start' });
+            }, 100);
+          }
+        }}
         onStart={(levelId) => {
           const lv = currentLevels.find(l => l.id === levelId);
           setLevelImmersive(null);

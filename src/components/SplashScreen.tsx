@@ -1,22 +1,31 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef, useCallback } from 'react';
 import { motion } from 'motion/react';
 import { IcHeartSpark, IcSparkle } from './CuteIcons';
 
 export function SplashScreen({ onFinish }: { onFinish: () => void }) {
   const [fadeOut, setFadeOut] = useState(false);
+  const finished = useRef(false);
+
+  const finish = useCallback(() => {
+    if (finished.current) return;
+    finished.current = true;
+    setFadeOut(true);
+    setTimeout(() => onFinish(), 500);
+  }, [onFinish]);
 
   useEffect(() => {
     const t1 = setTimeout(() => setFadeOut(true), 2000);
-    const t2 = setTimeout(() => onFinish(), 2600);
+    const t2 = setTimeout(() => { if (!finished.current) { finished.current = true; onFinish(); } }, 2600);
     return () => { clearTimeout(t1); clearTimeout(t2); };
   }, [onFinish]);
 
   return (
     <motion.div
-      className="absolute inset-0 z-[60] flex flex-col items-center justify-center"
+      className="absolute inset-0 z-[60] flex flex-col items-center justify-center cursor-pointer"
       style={{ background: '#2b2535' }}
       animate={{ opacity: fadeOut ? 0 : 1 }}
       transition={{ duration: 0.5, ease: 'easeInOut' }}
+      onClick={finish}
     >
       {/* Radial glow bg */}
       <div className="absolute inset-0 pointer-events-none" style={{
@@ -93,6 +102,15 @@ export function SplashScreen({ onFinish }: { onFinish: () => void }) {
         animate={{ opacity: [0, 1, 0] }}
         transition={{ duration: 1.5, repeat: Infinity, ease: 'easeInOut' }}
       />
+      <motion.p
+        className="absolute bottom-16"
+        style={{ color: 'rgba(245,239,232,0.3)', fontSize: 12 }}
+        initial={{ opacity: 0 }}
+        animate={{ opacity: 1 }}
+        transition={{ delay: 1.2, duration: 0.5 }}
+      >
+        点击任意位置跳过
+      </motion.p>
     </motion.div>
   );
 }

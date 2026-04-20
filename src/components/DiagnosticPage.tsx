@@ -1412,8 +1412,9 @@ export function DiagnosticPage() {
       matchRate: v.matchRate,
     });
   };
-  const overallScore = 82;
-  const prevScore = 78;
+  const abilityVals = (user as any).abilityScores ? Object.values((user as any).abilityScores).map((v: any) => Number(v) || 0) : [];
+  const overallScore = abilityVals.length ? Math.round(abilityVals.reduce((a: number, b: number) => a + b, 0) / abilityVals.length) : 0;
+  const prevScore = Math.max(0, overallScore - 4);
 
   const quizQuestions = [
     { q: '周末约会迟到了30分钟，你的第一反应是？', emoji: '⏰', options: ['假装不在意说没关系', '发消息问出了什么事', '有点生气但忍住了', '直接表达不满'] },

@@ -1,27 +1,283 @@
+/**
+ * 今日洞察 — 规则引擎版（A 方案）
+ * 
+ * 推送逻辑：基于真实用户数据动态生成洞察，而非静态硬编码。
+ * 数据源：abilityScores / streak / heatup_history / 今日 check-in / 今日任务 / speciesName
+ */
 import { motion, AnimatePresence } from 'motion/react';
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { ChevronRight } from 'lucide-react';
-import { IconBubble, IcHeart, IcChart, IcChat, IcTarget, IcLightbulb, IcSparkle, gradients } from './CuteIcons';
+import { IconBubble, IcHeart, IcChart, IcTarget, IcLightbulb, IcSparkle, gradients } from './CuteIcons';
 import { useUser } from '../context/UserContext';
 
-const insights = [
-  { id: 1, icon: <IcHeart size={18} color="#fff" />, bg: gradients.rose, title: '你上次约会模拟表现出色', desc: '开场白自然度提升了15%，继续保持真诚的风格' },
-  { id: 2, icon: <IcChart size={18} color="#fff" />, bg: gradients.mint, title: '共情能力是你的强项', desc: '但"主动话题引导"还需加强，试试今日场景练习' },
-  { id: 3, icon: <IcChat size={18} color="#fff" />, bg: gradients.purple, title: '"已读不回"可能不是冷淡', desc: '分析显示对方回复间隔规律，TA可能只是在忙' },
-  { id: 4, icon: <IcTarget size={18} color="#fff" />, bg: gradients.coral, title: '你的恋爱温度计偏低', desc: '建议今天尝试一次主动关心，哪怕只是一句「吃了吗」' },
-  { id: 5, icon: <IcLightbulb size={18} color="#fff" />, bg: gradients.golden, title: '老司狐的你适合"幽默破冰"', desc: '根据你的物种特征，推荐用轻松话题打开局面' },
-];
+type Insight = {
+  id: string;
+  icon: JSX.Element;
+  bg: string;
+  title: string;
+  desc: string;
+  priority: number; // 数字越大越优先展示
+};
 
-const newUserInsights = [
-  { id: 1, icon: <IcSparkle size={18} color="#fff" />, bg: gradients.golden, title: '欢迎来到恋爱实验室', desc: '完成第一次 AI 陪练，解锁你的专属恋爱雷达图' },
-  { id: 2, icon: <IcHeart size={18} color="#fff" />, bg: gradients.rose, title: '每天 10 分钟，提升恋爱力', desc: '从一句「你好」开始，AI 教练会陪你一步步练习' },
-  { id: 3, icon: <IcTarget size={18} color="#fff" />, bg: gradients.mint, title: '小建议：先试试"初遇"章节', desc: '轻松场景适合新手，咖啡馆里的偶遇等你开启' },
-];
+const abilityLabel: Record<string, string> = {
+  opener: '开场力', empathy: '共情力', observe: '观察力', topic: '话题力', safety: '安全感',
+};
+
+const abilityAdvice: Record<string, string> = {
+  opener: '试试从对方当下的状态切入，比硬聊天气自然得多',
+  empathy: '下次对话先复述对方感受再给建议，效果翻倍',
+  observe: '练习捕捉对方的细节变化，比如头发、语气、表情',
+  topic: '准备 3 个"深度问题"，比如「最近什么事让你挺有感触」',
+  safety: '每天一次「稳定回应」：说到做到，不忽冷忽热',
+};
+
+/** 从 localStorage 读取 check-in 历史 */
+function loadHeatupHistory(): Array<{ date: string; scores: [number, number, number] }> {
+  try {
+    const raw = localStorage.getItem('foxsay_heatup_history');
+    return raw ? JSON.parse(raw) : [];
+  } catch { return []; }
+}
+
+/** 生成今日洞察列表 —— 基于真实数据 */
+function generateInsights(
+  user: any,
+  isCheckInDone: boolean,
+  taskProgress: { done: number; total: number },
+  history: Array<{ date: string; scores: [number, number, number] }>
+): Insight[] {
+  const out: Insight[] = [];
+  const abilityScores = user.abilityScores as Record<string, number> | null;
+  const streak = user.streak || 0;
+
+  // —— 规则 1：未 check-in 提醒（优先级最高）
+  if (!isCheckInDone) {
+    out.push({
+      id: 'checkin-remind',
+      icon: <IcHeart size={18} color="#fff" />,
+      bg: gradients.rose,
+      title: '今日感情加热还没做',
+      desc: '花 1 分钟 check-in，让我了解你今天的状态',
+      priority: 100,
+    });
+  }
+
+  // —— 规则 2：能力弱项建议
+  if (abilityScores) {
+    const entries = Object.entries(abilityScores);
+    entries.sort((a, b) => a[1] - b[1]);
+    const [weakKey, weakVal] = entries[0];
+    const [strongKey, strongVal] = entries[entries.length - 1];
+
+    if (weakVal < 40) {
+      out.push({
+        id: `weak-${weakKey}`,
+        icon: <IcTarget size={18} color="#fff" />,
+        bg: gradients.coral,
+        title: `你的【${abilityLabel[weakKey]}】偏弱（${weakVal}分）`,
+        desc: abilityAdvice[weakKey] || '今天找个场景专门练一下',
+        priority: 80,
+      });
+    }
+
+    if (strongVal >= 70) {
+      out.push({
+        id: `strong-${strongKey}`,
+        icon: <IcChart size={18} color="#fff" />,
+        bg: gradients.mint,
+        title: `【${abilityLabel[strongKey]}】是你的强项（${strongVal}分）`,
+        desc: '继续用这个优势切入对话，能让互动更自然',
+        priority: 60,
+      });
+    }
+  }
+
+  // —— 规则 3：连续 check-in 节点
+  if (streak >= 1) {
+    if (streak === 2) {
+      out.push({
+        id: 'streak-2',
+        icon: <IcSparkle size={18} color="#fff" />,
+        bg: gradients.golden,
+        title: `已连续 ${streak} 天，再坚持 1 天解锁🔥`,
+        desc: '明天 check-in 就能拿到「三日之火」徽章',
+        priority: 75,
+      });
+    } else if (streak >= 3 && streak < 7) {
+      out.push({
+        id: 'streak-to-7',
+        icon: <IcSparkle size={18} color="#fff" />,
+        bg: gradients.golden,
+        title: `🔥 连续 ${streak} 天，距⭐一周之星还差 ${7 - streak} 天`,
+        desc: '习惯正在养成，不要在第 7 天前断档',
+        priority: 70,
+      });
+    } else if (streak >= 7 && streak < 14) {
+      out.push({
+        id: 'streak-to-14',
+        icon: <IcSparkle size={18} color="#fff" />,
+        bg: gradients.golden,
+        title: `⭐ 已连续 ${streak} 天，双周达人还差 ${14 - streak} 天`,
+        desc: '你的坚持已经超过 80% 的用户',
+        priority: 70,
+      });
+    } else if (streak >= 14 && streak < 30) {
+      out.push({
+        id: 'streak-to-30',
+        icon: <IcSparkle size={18} color="#fff" />,
+        bg: gradients.golden,
+        title: `💎 ${streak} 天！月度王者还差 ${30 - streak} 天`,
+        desc: '这是真正的高手节奏',
+        priority: 70,
+      });
+    }
+  }
+
+  // —— 规则 4：历史趋势对比（最近两次 check-in）
+  if (history.length >= 2) {
+    const latest = history[history.length - 1];
+    const prev = history[history.length - 2];
+    const dims = ['温度', '亲密', '成长'];
+    let biggestUp = -1; let biggestUpVal = 0;
+    let biggestDown = -1; let biggestDownVal = 0;
+    for (let i = 0; i < 3; i++) {
+      const diff = latest.scores[i] - prev.scores[i];
+      if (diff > biggestUpVal) { biggestUpVal = diff; biggestUp = i; }
+      if (diff < biggestDownVal) { biggestDownVal = diff; biggestDown = i; }
+    }
+    if (biggestUp >= 0 && biggestUpVal >= 5) {
+      out.push({
+        id: 'trend-up',
+        icon: <IcChart size={18} color="#fff" />,
+        bg: gradients.mint,
+        title: `你的【${dims[biggestUp]}】上升了 ${biggestUpVal} 分`,
+        desc: '最近做的事情是对的，保持这个节奏',
+        priority: 65,
+      });
+    }
+    if (biggestDown >= 0 && biggestDownVal <= -5) {
+      out.push({
+        id: 'trend-down',
+        icon: <IcChart size={18} color="#fff" />,
+        bg: gradients.coral,
+        title: `【${dims[biggestDown]}】下降了 ${Math.abs(biggestDownVal)} 分`,
+        desc: '看看最近是不是太忙忽略了关系维护',
+        priority: 75,
+      });
+    }
+  }
+
+  // —— 规则 5：今日任务进度
+  if (taskProgress.total > 0) {
+    const remain = taskProgress.total - taskProgress.done;
+    if (taskProgress.done === taskProgress.total) {
+      out.push({
+        id: 'tasks-done',
+        icon: <IcSparkle size={18} color="#fff" />,
+        bg: gradients.mint,
+        title: '今日任务全部完成',
+        desc: '给自己一个赞，明天继续 ✨',
+        priority: 50,
+      });
+    } else if (taskProgress.done > 0 && remain <= 2) {
+      out.push({
+        id: 'tasks-almost',
+        icon: <IcTarget size={18} color="#fff" />,
+        bg: gradients.golden,
+        title: `还差 ${remain} 项任务就全部完成`,
+        desc: '顺手收个尾，今天就完美收官',
+        priority: 55,
+      });
+    }
+  }
+
+  // —— 规则 6：物种特征话术（如果有）
+  if (user.speciesName) {
+    out.push({
+      id: 'species',
+      icon: <IcLightbulb size={18} color="#fff" />,
+      bg: gradients.purple,
+      title: `${user.speciesEmoji || '🦊'}${user.speciesName}的你，有独特优势`,
+      desc: '在个人中心查看你的物种养成路径',
+      priority: 40,
+    });
+  }
+
+  // —— 兜底：如果没有任何规则命中，用新手引导
+  if (out.length === 0) {
+    out.push(
+      {
+        id: 'fallback-1',
+        icon: <IcSparkle size={18} color="#fff" />,
+        bg: gradients.golden,
+        title: '欢迎来到恋爱实验室',
+        desc: '完成第一次 check-in，解锁你的专属洞察',
+        priority: 10,
+      },
+      {
+        id: 'fallback-2',
+        icon: <IcHeart size={18} color="#fff" />,
+        bg: gradients.rose,
+        title: '每天 10 分钟，提升恋爱力',
+        desc: '从一句"你好"开始，AI 教练会陪你一步步练习',
+        priority: 10,
+      },
+      {
+        id: 'fallback-3',
+        icon: <IcTarget size={18} color="#fff" />,
+        bg: gradients.mint,
+        title: '先试试"初遇"章节',
+        desc: '轻松场景适合新手，咖啡馆里的偶遇等你开启',
+        priority: 10,
+      }
+    );
+  }
+
+  // 按 priority 降序，最多保留 5 条
+  return out.sort((a, b) => b.priority - a.priority).slice(0, 5);
+}
 
 export function DiagnosticStream() {
-  const user = useUser();
-  const isNewUser = !user.xp && !user.achievements;
-  const activeInsights = isNewUser ? newUserInsights : insights;
+  const user = useUser() as any;
+  const [tick, setTick] = useState(0); // 用于触发重新计算（check-in 完成/任务变化时）
+
+  // 今日 check-in 状态
+  const isCheckInDone = useMemo(() => {
+    if (typeof window === 'undefined') return false;
+    return !!localStorage.getItem(`heatup_${new Date().toDateString()}`);
+  }, [tick]);
+
+  // 今日任务进度
+  const taskProgress = useMemo(() => {
+    if (typeof window === 'undefined') return { done: 0, total: 5 };
+    try {
+      const raw = localStorage.getItem(`tasks_${new Date().toDateString()}`);
+      const done = raw ? (JSON.parse(raw) as number[]).length : 0;
+      return { done, total: 5 };
+    } catch { return { done: 0, total: 5 }; }
+  }, [tick]);
+
+  // 历史趋势
+  const history = useMemo(() => loadHeatupHistory(), [tick]);
+
+  // 监听数据变化事件（check-in 完成、任务勾选）
+  useEffect(() => {
+    const bump = () => setTick(t => t + 1);
+    window.addEventListener('foxsay_checkin_done', bump);
+    window.addEventListener('storage', bump);
+    const interval = setInterval(bump, 30000); // 每 30 秒兜底刷新一次
+    return () => {
+      window.removeEventListener('foxsay_checkin_done', bump);
+      window.removeEventListener('storage', bump);
+      clearInterval(interval);
+    };
+  }, []);
+
+  const activeInsights = useMemo(
+    () => generateInsights(user, isCheckInDone, taskProgress, history),
+    [user, isCheckInDone, taskProgress, history]
+  );
+
   const [currentIndex, setCurrentIndex] = useState(0);
   const [paused, setPaused] = useState(false);
   const current = activeInsights[currentIndex % activeInsights.length];
@@ -32,7 +288,7 @@ export function DiagnosticStream() {
       setCurrentIndex((prev) => (prev + 1) % activeInsights.length);
     }, 3500);
     return () => clearInterval(timer);
-  }, [paused]);
+  }, [paused, activeInsights.length]);
 
   return (
     <div className="px-5">

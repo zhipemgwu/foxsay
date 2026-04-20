@@ -5,7 +5,7 @@ import { ChevronLeft, ChevronRight, Check } from 'lucide-react';
 import { useUser } from '../context/UserContext';
 import { OnboardingChat } from './OnboardingChat';
 import { SpeciesReveal } from './SpeciesReveal';
-import { speciesAbilityHint } from '../data/onboardingChat';
+import { speciesAbilityHint, extractProfile } from '../data/onboardingChat';
 
 const speciesNameMap: Record<string, string> = {
   laosihu: '老司狐', haiwanghu: '海王狐', tiantianhu: '舔舔狐', zhuangsihu: '装死狐',
@@ -131,7 +131,7 @@ function StepTitle({ emoji, title, subtitle }: { emoji: string; title: string; s
 /* ═══════════════════════════════════════════════════════════
    数据定义
    ═══════════════════════════════════════════════════════════ */
-type AuthView = 'welcome' | 'gender' | 'age' | 'goals' | 'phone' | 'verify' | 'chat' | 'reveal';
+type AuthView = 'welcome' | 'quickProfile' | 'phone' | 'verify' | 'chat' | 'reveal';
 
 const genderOptions = [
   {
@@ -187,6 +187,10 @@ export function AuthScreen({ onComplete }: { onComplete: () => void }) {
   const otpRefs = useRef<(HTMLInputElement | null)[]>([]);
   const [revealData, setRevealData] = useState<{ speciesId: string; matchRate: number; tagsTopN: string[] } | null>(null);
   const [registered, setRegistered] = useState(false);
+  /* 区分「已有账号登录」和「新注册」 */
+  const [isLogin, setIsLogin] = useState(false);
+  /* 快速注册：标记哪个子步骤在 quickProfile 内处于活跃状态 */
+  const [qStep, setQStep] = useState<'gender' | 'age' | 'goals'>('gender');
 
   /* 手机号 344 格式化 */
   const formatPhone = (raw: string) => {
@@ -322,10 +326,10 @@ export function AuthScreen({ onComplete }: { onComplete: () => void }) {
                 {/* 按钮区 */}
                 <motion.div className="mt-auto pb-2 flex flex-col gap-3"
                   initial={{ opacity: 0, y: 16 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.35 }}>
-                  {/* 主按钮 — 开始鉴定 */}
+                  {/* 主按钮 — 快速开始（直达手机号登录，资料通过 AI 对话收集） */}
                   <motion.button
                     whileTap={{ scale: 0.97 }}
-                    onClick={() => setView('gender')}
+                    onClick={() => setView('phone')}
                     className="w-full flex items-center justify-center gap-2 relative overflow-hidden"
                     style={{
                       height: 58, borderRadius: 20,
@@ -333,14 +337,14 @@ export function AuthScreen({ onComplete }: { onComplete: () => void }) {
                       boxShadow: '0 12px 32px rgba(236,64,122,0.4), inset 0 1px 0 rgba(255,255,255,0.3)',
                       color: '#fff', fontSize: 16, fontWeight: 700, letterSpacing: '1px',
                     }}>
-                    <span>开始恋爱物种鉴定 🦊</span>
+                    <span>30秒快速开始 🚀</span>
                     <ChevronRight size={20} color="#fff" />
                   </motion.button>
 
                   {/* 已有账号登录 */}
                   <motion.button
                     whileTap={{ scale: 0.97 }}
-                    onClick={() => setView('phone')}
+                    onClick={() => { setIsLogin(true); setView('phone'); }}
                     className="w-full flex items-center justify-center gap-1.5"
                     style={{ height: 44, color: 'rgba(245,239,232,0.45)', fontSize: 13, fontWeight: 500 }}>
                     已有账号？直接登录
@@ -355,222 +359,186 @@ export function AuthScreen({ onComplete }: { onComplete: () => void }) {
             </motion.div>
           )}
 
-          {/* ═══════════════════════════ Step 1: 性别 ═══════════════════════════ */}
-          {view === 'gender' && (
-            <motion.div key="gender" className="flex-1 flex flex-col"
+          {/* ═══════════════════════════ Quick Profile：性别+年龄+目标 合并 ═══════════════════════════ */}
+          {view === 'quickProfile' && (
+            <motion.div key="quickProfile" className="flex-1 flex flex-col"
               initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}
               transition={{ duration: 0.3 }}>
-              <StepProgress current={0} total={3} />
+              <StepProgress current={qStep === 'gender' ? 0 : qStep === 'age' ? 1 : 2} total={3} />
               <ProfileBuildCard gender={gender} age={age} goals={selectedGoals} />
               <div className="px-6 mb-1 flex items-center justify-between">
-                <div />
-                <motion.button whileTap={{ scale: 0.95 }} onClick={() => { updateUser({ gender, age, goals: selectedGoals }); onComplete(); }}>
-                  <span style={{ color: 'rgba(245,239,232,0.4)', fontSize: 13 }}>跳过鉴定</span>
-                </motion.button>
-              </div>
-
-              <div className="flex-1 flex flex-col px-6">
-                <StepTitle emoji="💫" title="你是？" subtitle="选择你的身份，开启专属恋爱之旅" />
-
-                {/* 两列大卡片 */}
-                <div className="flex gap-4 flex-1" style={{ maxHeight: 280 }}>
-                  {genderOptions.map((g, idx) => {
-                    const active = gender === g.key;
-                    return (
-                      <motion.button
-                        key={g.key}
-                        className="flex-1 flex flex-col items-center justify-center gap-3 rounded-3xl relative overflow-hidden"
-                        style={{
-                          background: active ? g.bg : '#352f42',
-                          border: `2px solid ${active ? g.activeBorder : 'rgba(245,239,232,0.05)'}`,
-                          boxShadow: active ? `0 8px 32px ${g.glow}, inset 0 1px 0 rgba(255,255,255,0.06)` : 'inset 0 1px 0 rgba(255,255,255,0.02)',
-                          transition: 'all 0.3s ease',
-                        }}
-                        whileTap={{ scale: 0.96 }}
-                        onClick={() => setGender(g.key)}
-                        initial={{ opacity: 0, y: 30 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: 0.1 + idx * 0.08 }}
-                      >
-                        {/* 选中光晕 */}
-                        {active && (
-                          <motion.div className="absolute inset-0 pointer-events-none"
-                            initial={{ opacity: 0 }} animate={{ opacity: 1 }}
-                            style={{ background: `radial-gradient(circle at 50% 40%, ${g.glow} 0%, transparent 70%)` }} />
-                        )}
-
-                        <motion.span
-                          style={{ fontSize: 56, filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.2))' }}
-                          animate={active ? { scale: [1, 1.1, 1], rotate: [0, 6, -6, 0] } : { scale: 1 }}
-                          transition={{ duration: 0.6 }}
-                        >
-                          {g.emoji}
-                        </motion.span>
-                        <span style={{ fontSize: 16, fontWeight: 700, letterSpacing: '0.5px', color: active ? '#f5efe8' : 'rgba(245,239,232,0.45)' }}>
-                          {g.label}
-                        </span>
-
-                        {active && (
-                          <motion.div className="absolute top-3 right-3 w-7 h-7 rounded-full flex items-center justify-center"
-                            style={{ background: g.gradient }}
-                            initial={{ scale: 0, rotate: -90 }} animate={{ scale: 1, rotate: 0 }}
-                            transition={{ type: 'spring', stiffness: 300 }}>
-                            <Check size={14} color="#fff" strokeWidth={3} />
-                          </motion.div>
-                        )}
-                      </motion.button>
-                    );
-                  })}
-                </div>
-
-                <div className="mt-8">
-                  <PrimaryButton enabled={!!gender} onClick={() => setView('age')}>继续</PrimaryButton>
-                </div>
-              </div>
-            </motion.div>
-          )}
-
-          {/* ═══════════════════════════ Step 2: 年龄 ═══════════════════════════ */}
-          {view === 'age' && (
-            <motion.div key="age" className="flex-1 flex flex-col"
-              initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}
-              transition={{ duration: 0.3 }}>
-              <StepProgress current={1} total={3} />
-              <ProfileBuildCard gender={gender} age={age} goals={selectedGoals} />
-              <div className="px-6 mb-1">
-                <motion.button className="flex items-center gap-1" whileTap={{ scale: 0.9, x: -4 }} onClick={() => setView('gender')}>
-                  <ChevronLeft size={20} color="rgba(245,239,232,0.45)" />
-                  <span style={{ color: 'rgba(245,239,232,0.45)', fontSize: 14 }}>返回</span>
-                </motion.button>
-              </div>
-
-              <div className="flex-1 flex flex-col px-6">
-                <StepTitle emoji="🎂" title="你的年龄？" subtitle="帮你匹配同频的恋爱课程" />
-
-                <div className="grid grid-cols-3 gap-3">
-                  {ageOptions.map((a, idx) => {
-                    const active = age === a.id;
-                    return (
-                      <motion.button
-                        key={a.id}
-                        className="flex flex-col items-center gap-2 py-5 rounded-2xl relative overflow-hidden"
-                        style={{
-                          background: active ? `${a.color}14` : '#352f42',
-                          border: `1.5px solid ${active ? a.color : 'rgba(245,239,232,0.05)'}`,
-                          boxShadow: active ? `0 4px 20px ${a.glow}` : 'none',
-                          transition: 'all 0.25s ease',
-                        }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => setAge(a.id)}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: idx * 0.05 }}
-                      >
-                        <motion.span
-                          style={{ fontSize: 34, filter: active ? `drop-shadow(0 2px 8px ${a.glow})` : 'none' }}
-                          animate={active ? { scale: [1, 1.15, 1] } : {}}
-                          transition={{ duration: 0.3 }}
-                        >
-                          {a.emoji}
-                        </motion.span>
-                        <span style={{ fontSize: 15, fontWeight: 700, color: active ? a.color : 'rgba(245,239,232,0.55)' }}>
-                          {a.label}
-                        </span>
-                        <span style={{ fontSize: 11, fontWeight: 500, color: active ? 'rgba(245,239,232,0.65)' : 'rgba(245,239,232,0.3)' }}>
-                          {a.tag}
-                        </span>
-
-                        {active && (
-                          <motion.div className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center"
-                            style={{ background: a.color }}
-                            initial={{ scale: 0 }} animate={{ scale: 1 }}
-                            transition={{ type: 'spring', stiffness: 300 }}>
-                            <Check size={10} color="#fff" strokeWidth={3} />
-                          </motion.div>
-                        )}
-                      </motion.button>
-                    );
-                  })}
-                </div>
-
-                <div className="mt-8">
-                  <PrimaryButton enabled={!!age} onClick={() => setView('goals')}>继续</PrimaryButton>
-                </div>
-              </div>
-            </motion.div>
-          )}
-
-          {/* ═══════════════════════════ Step 3: 目标 ═══════════════════════════ */}
-          {view === 'goals' && (
-            <motion.div key="goals" className="flex-1 flex flex-col"
-              initial={{ opacity: 0, x: 30 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -30 }}
-              transition={{ duration: 0.3 }}>
-              <StepProgress current={2} total={3} />
-              <ProfileBuildCard gender={gender} age={age} goals={selectedGoals} />
-              <div className="px-6 mb-1">
-                <motion.button className="flex items-center gap-1" whileTap={{ scale: 0.9, x: -4 }} onClick={() => setView('age')}>
-                  <ChevronLeft size={20} color="rgba(245,239,232,0.45)" />
-                  <span style={{ color: 'rgba(245,239,232,0.45)', fontSize: 14 }}>返回</span>
-                </motion.button>
-              </div>
-
-              <div className="flex-1 flex flex-col px-6">
-                <StepTitle emoji="🎯" title="你想提升什么？" subtitle="选择你最想突破的方向，可多选" />
-
-                <div className="grid grid-cols-2 gap-3">
-                  {goalOptions.map((g, idx) => {
-                    const active = selectedGoals.includes(g.id);
-                    return (
-                      <motion.button
-                        key={g.id}
-                        className="flex flex-col items-center gap-2 py-5 rounded-2xl relative overflow-hidden"
-                        style={{
-                          background: active ? 'rgba(255,138,128,0.1)' : '#352f42',
-                          border: `1.5px solid ${active ? 'rgba(255,138,128,0.45)' : 'rgba(245,239,232,0.05)'}`,
-                          boxShadow: active ? '0 4px 20px rgba(255,138,128,0.2)' : 'none',
-                          transition: 'all 0.25s ease',
-                        }}
-                        whileTap={{ scale: 0.95 }}
-                        onClick={() => toggleGoal(g.id)}
-                        initial={{ opacity: 0, y: 20 }}
-                        animate={{ opacity: 1, y: 0 }}
-                        transition={{ delay: idx * 0.05 }}
-                      >
-                        <motion.span
-                          style={{ fontSize: 36, filter: active ? 'drop-shadow(0 2px 8px rgba(255,138,128,0.3))' : 'none' }}
-                          animate={active ? { scale: [1, 1.15, 1] } : {}}
-                          transition={{ duration: 0.3 }}
-                        >
-                          {g.emoji}
-                        </motion.span>
-                        <span style={{ fontSize: 14, fontWeight: 700, color: active ? '#FF8A80' : 'rgba(245,239,232,0.55)' }}>
-                          {g.label}
-                        </span>
-                        <span style={{ fontSize: 11, color: active ? 'rgba(245,239,232,0.55)' : 'rgba(245,239,232,0.28)' }}>
-                          {g.desc}
-                        </span>
-
-                        {active && (
-                          <motion.div className="absolute top-2.5 right-2.5 w-5 h-5 rounded-full flex items-center justify-center"
-                            style={{ background: gradients.coral }}
-                            initial={{ scale: 0 }} animate={{ scale: 1 }}
-                            transition={{ type: 'spring', stiffness: 300 }}>
-                            <Check size={10} color="#fff" strokeWidth={3} />
-                          </motion.div>
-                        )}
-                      </motion.button>
-                    );
-                  })}
-                </div>
-
-                <div className="mt-8">
-                  <PrimaryButton enabled={selectedGoals.length > 0} onClick={() => {
-                    updateUser({ gender, age, goals: selectedGoals });
-                    setView('chat');
+                <motion.button className="flex items-center gap-1" whileTap={{ scale: 0.9, x: -4 }}
+                  onClick={() => {
+                    if (qStep === 'gender') setView('welcome');
+                    else if (qStep === 'age') setQStep('gender');
+                    else setQStep('age');
                   }}>
-                    开始 AI 鉴定
-                  </PrimaryButton>
-                </div>
+                  <ChevronLeft size={20} color="rgba(245,239,232,0.45)" />
+                  <span style={{ color: 'rgba(245,239,232,0.45)', fontSize: 14 }}>返回</span>
+                </motion.button>
+                <motion.button whileTap={{ scale: 0.95 }} onClick={() => {
+                  resetUserForNewAccount({ gender, age, goals: selectedGoals });
+                  onComplete();
+                }}>
+                  <span style={{ color: 'rgba(245,239,232,0.4)', fontSize: 13 }}>跳过，先逛逛</span>
+                </motion.button>
+              </div>
+
+              <div className="flex-1 flex flex-col px-6">
+                <AnimatePresence mode="wait">
+                  {/* ── 子步骤 1: 性别 ── */}
+                  {qStep === 'gender' && (
+                    <motion.div key="q-gender" className="flex-1 flex flex-col"
+                      initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
+                      transition={{ duration: 0.2 }}>
+                      <StepTitle emoji="💫" title="你是？" subtitle="选择你的身份，开启专属恋爱之旅" />
+                      <div className="flex gap-4 flex-1" style={{ maxHeight: 220 }}>
+                        {genderOptions.map((g, idx) => {
+                          const active = gender === g.key;
+                          return (
+                            <motion.button
+                              key={g.key}
+                              className="flex-1 flex flex-col items-center justify-center gap-3 rounded-3xl relative overflow-hidden"
+                              style={{
+                                background: active ? g.bg : '#352f42',
+                                border: `2px solid ${active ? g.activeBorder : 'rgba(245,239,232,0.05)'}`,
+                                boxShadow: active ? `0 8px 32px ${g.glow}, inset 0 1px 0 rgba(255,255,255,0.06)` : 'inset 0 1px 0 rgba(255,255,255,0.02)',
+                                transition: 'all 0.3s ease',
+                              }}
+                              whileTap={{ scale: 0.96 }}
+                              onClick={() => { setGender(g.key); setTimeout(() => setQStep('age'), 300); }}
+                              initial={{ opacity: 0, y: 30 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: 0.1 + idx * 0.08 }}
+                            >
+                              {active && (
+                                <motion.div className="absolute inset-0 pointer-events-none"
+                                  initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+                                  style={{ background: `radial-gradient(circle at 50% 40%, ${g.glow} 0%, transparent 70%)` }} />
+                              )}
+                              <motion.span
+                                style={{ fontSize: 48, filter: 'drop-shadow(0 4px 12px rgba(0,0,0,0.2))' }}
+                                animate={active ? { scale: [1, 1.1, 1], rotate: [0, 6, -6, 0] } : { scale: 1 }}
+                                transition={{ duration: 0.6 }}
+                              >
+                                {g.emoji}
+                              </motion.span>
+                              <span style={{ fontSize: 16, fontWeight: 700, color: active ? '#f5efe8' : 'rgba(245,239,232,0.45)' }}>
+                                {g.label}
+                              </span>
+                              {active && (
+                                <motion.div className="absolute top-3 right-3 w-7 h-7 rounded-full flex items-center justify-center"
+                                  style={{ background: g.gradient }}
+                                  initial={{ scale: 0, rotate: -90 }} animate={{ scale: 1, rotate: 0 }}
+                                  transition={{ type: 'spring', stiffness: 300 }}>
+                                  <Check size={14} color="#fff" strokeWidth={3} />
+                                </motion.div>
+                              )}
+                            </motion.button>
+                          );
+                        })}
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* ── 子步骤 2: 年龄 ── */}
+                  {qStep === 'age' && (
+                    <motion.div key="q-age" className="flex-1 flex flex-col"
+                      initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
+                      transition={{ duration: 0.2 }}>
+                      <StepTitle emoji="🎂" title="你的年龄？" subtitle="帮你匹配同频的恋爱课程" />
+                      <div className="grid grid-cols-3 gap-3">
+                        {ageOptions.map((a, idx) => {
+                          const active = age === a.id;
+                          return (
+                            <motion.button
+                              key={a.id}
+                              className="flex flex-col items-center gap-2 py-4 rounded-2xl relative overflow-hidden"
+                              style={{
+                                background: active ? `${a.color}14` : '#352f42',
+                                border: `1.5px solid ${active ? a.color : 'rgba(245,239,232,0.05)'}`,
+                                boxShadow: active ? `0 4px 20px ${a.glow}` : 'none',
+                                transition: 'all 0.25s ease',
+                              }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => { setAge(a.id); setTimeout(() => setQStep('goals'), 300); }}
+                              initial={{ opacity: 0, y: 20 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: idx * 0.04 }}
+                            >
+                              <motion.span style={{ fontSize: 30 }}>{a.emoji}</motion.span>
+                              <span style={{ fontSize: 14, fontWeight: 700, color: active ? a.color : 'rgba(245,239,232,0.55)' }}>
+                                {a.label}
+                              </span>
+                              <span style={{ fontSize: 10, color: active ? 'rgba(245,239,232,0.65)' : 'rgba(245,239,232,0.3)' }}>
+                                {a.tag}
+                              </span>
+                              {active && (
+                                <motion.div className="absolute top-2 right-2 w-5 h-5 rounded-full flex items-center justify-center"
+                                  style={{ background: a.color }}
+                                  initial={{ scale: 0 }} animate={{ scale: 1 }}
+                                  transition={{ type: 'spring', stiffness: 300 }}>
+                                  <Check size={10} color="#fff" strokeWidth={3} />
+                                </motion.div>
+                              )}
+                            </motion.button>
+                          );
+                        })}
+                      </div>
+                    </motion.div>
+                  )}
+
+                  {/* ── 子步骤 3: 目标 ── */}
+                  {qStep === 'goals' && (
+                    <motion.div key="q-goals" className="flex-1 flex flex-col"
+                      initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} exit={{ opacity: 0, x: -20 }}
+                      transition={{ duration: 0.2 }}>
+                      <StepTitle emoji="🎯" title="你想提升什么？" subtitle="选择你最想突破的方向，可多选" />
+                      <div className="grid grid-cols-3 gap-2.5">
+                        {goalOptions.map((g, idx) => {
+                          const active = selectedGoals.includes(g.id);
+                          return (
+                            <motion.button
+                              key={g.id}
+                              className="flex flex-col items-center gap-1.5 py-4 rounded-2xl relative overflow-hidden"
+                              style={{
+                                background: active ? 'rgba(255,138,128,0.1)' : '#352f42',
+                                border: `1.5px solid ${active ? 'rgba(255,138,128,0.45)' : 'rgba(245,239,232,0.05)'}`,
+                                transition: 'all 0.25s ease',
+                              }}
+                              whileTap={{ scale: 0.95 }}
+                              onClick={() => toggleGoal(g.id)}
+                              initial={{ opacity: 0, y: 20 }}
+                              animate={{ opacity: 1, y: 0 }}
+                              transition={{ delay: idx * 0.04 }}
+                            >
+                              <span style={{ fontSize: 28 }}>{g.emoji}</span>
+                              <span style={{ fontSize: 12, fontWeight: 700, color: active ? '#FF8A80' : 'rgba(245,239,232,0.55)' }}>
+                                {g.label}
+                              </span>
+                              {active && (
+                                <motion.div className="absolute top-1.5 right-1.5 w-4 h-4 rounded-full flex items-center justify-center"
+                                  style={{ background: gradients.coral }}
+                                  initial={{ scale: 0 }} animate={{ scale: 1 }}
+                                  transition={{ type: 'spring', stiffness: 300 }}>
+                                  <Check size={8} color="#fff" strokeWidth={3} />
+                                </motion.div>
+                              )}
+                            </motion.button>
+                          );
+                        })}
+                      </div>
+                      <div className="mt-6">
+                        <PrimaryButton enabled={selectedGoals.length > 0} onClick={() => {
+                          resetUserForNewAccount({ gender, age, goals: selectedGoals });
+                          setView('phone');
+                        }}>
+                          注册账号
+                        </PrimaryButton>
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </div>
             </motion.div>
           )}
@@ -684,11 +652,13 @@ export function AuthScreen({ onComplete }: { onComplete: () => void }) {
               <OnboardingChat
                 onFinish={(result) => {
                   const ab = speciesAbilityHint[result.speciesId] || speciesAbilityHint.laosihu;
+                  // 从聊天答案中解析 gender/age/goals（资料收集已融入 AI 对话）
+                  const profile = extractProfile(result.answers);
                   // 鉴定完成 = 最终提交 “新账号数据包”，在重置后写入鉴定结果 + 之前采集的选项
                   resetUserForNewAccount({
-                    gender,
-                    age,
-                    goals: selectedGoals,
+                    gender: profile.gender ?? gender,
+                    age: profile.age ?? age,
+                    goals: profile.goals.length ? profile.goals : selectedGoals,
                     speciesId: result.speciesId,
                     speciesName: speciesNameMap[result.speciesId] || '老司狐',
                     speciesEmoji: '🦊',
@@ -713,7 +683,7 @@ export function AuthScreen({ onComplete }: { onComplete: () => void }) {
                 speciesId={revealData.speciesId}
                 matchRate={revealData.matchRate}
                 tagsTopN={revealData.tagsTopN}
-                locked={!registered}
+                locked={false}
                 onEnter={onComplete}
                 onRegister={() => setView('phone')}
                 onSkip={onComplete}
@@ -829,15 +799,12 @@ export function AuthScreen({ onComplete }: { onComplete: () => void }) {
 
                 <div className="mt-auto mb-8">
                   <PrimaryButton icon={<Check size={20} color="#fff" strokeWidth={3} />} enabled={otpComplete} onClick={() => {
-                    if (revealData) {
-                      // 从鉴定揭晓页来的 → 注册后解锁完整报告
-                      updateUser({ phone: rawPhone });
-                      setRegistered(true);
-                      setView('reveal');
-                    } else {
-                      // 老用户直接登录 → 进入主应用
-                      updateUser({ phone: rawPhone });
+                    updateUser({ phone: rawPhone });
+                    if (isLogin) {
                       onComplete();
+                    } else {
+                      setRegistered(true);
+                      setView('chat');
                     }
                   }}>
                     确认验证
