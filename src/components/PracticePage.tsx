@@ -1550,39 +1550,6 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
             </div>
           </motion.div>
 
-          {/* 推荐导师卡片列表 */}
-          <div className="flex items-center gap-2 mb-2">
-            <span style={{ color: 'rgba(245,239,232,0.5)', fontSize: '12px' }}>认证导师 · 点击查看详情</span>
-          </div>
-          <div className="flex gap-3 overflow-x-auto pb-1" style={{ scrollbarWidth: 'none' }}>
-            {coaches.map((c, i) => (
-              <motion.div
-                key={c.id}
-                className="flex-shrink-0 cursor-pointer"
-                style={{ width: 140 }}
-                initial={{ opacity: 0, x: 10 }} animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: 0.35 + i * 0.06 }}
-                onClick={() => openProfile({ name: c.name, avatarIdx: i })}
-              >
-                <div className="p-3 flex flex-col items-center text-center" style={{ background: '#453a60', borderRadius: 14 }}>
-                  <div className="relative mb-2">
-                    <div className="w-12 h-12 rounded-full overflow-hidden" style={{ border: '2px solid rgba(155,126,222,0.4)' }}>
-                      <img src={c.avatar} alt={c.name} className="w-full h-full object-cover" />
-                    </div>
-                    <div className="absolute -bottom-0.5 -right-0.5 w-3.5 h-3.5 rounded-full border-2"
-                      style={{ background: c.online ? '#4ECDC4' : 'rgba(245,239,232,0.3)', borderColor: '#453a60' }} />
-                  </div>
-                  <span style={{ color: '#f5efe8', fontSize: '13px', fontWeight: 600, marginBottom: 2 }}>{c.name}</span>
-                  <span style={{ color: 'rgba(245,239,232,0.5)', fontSize: '10px', marginBottom: 4 }}>{c.specialty}</span>
-                  <div className="flex items-center gap-1">
-                    <IcStar size={9} color="#FFD93D" />
-                    <span style={{ color: 'rgba(245,239,232,0.6)', fontSize: '11px', fontWeight: 600 }}>{c.rating}</span>
-                    <span style={{ color: 'rgba(245,239,232,0.35)', fontSize: '10px' }}>·{c.sessions}次</span>
-                  </div>
-                </div>
-              </motion.div>
-            ))}
-          </div>
         </div>
 
       </div>
