@@ -20,6 +20,7 @@ export interface PartnerInfo {
   age: number;
   signature: string;     // 个性签名 / 一句话介绍
   traits: string[];      // 3 个特性标签
+  kid?: string;          // 可选：对应的角色卡 KID（R001..R030），用于聊天 prompt 拉取完整人设
 }
 
 export interface ImmersiveChapter {

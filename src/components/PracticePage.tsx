@@ -29,6 +29,8 @@ import { bookCoach } from './CoachChatPage';
 import { ChapterImmersiveView } from './ChapterImmersiveView';
 import { VIPPage } from './VIPPage';
 import { KenBurnsImage } from './KenBurnsImage';
+import { chatStream, type ChatMessage } from '../services/ai';
+import { getAllRoleKids, roleCardToPartnerInfo, buildRolePersonaPrompt } from '../services/roleCards';
 
 /* ---------- 故事系统 ---------- */
 
@@ -205,32 +207,27 @@ function getPartnerInfoByImg(img: string): { img: string; name: string; age: num
   return { img, name, age, signature, traits };
 }
 
-/** 每关候选搭档池（5 个完整人设，稳定分配） */
-function getPartnerCandidates(levelId: number, chapter: number, idxInChapter: number): { img: string; name: string; age: number; signature: string; traits: string[] }[] {
-  const imgs: string[] = [];
-  for (let k = 0; k < 5; k++) {
-    const img = pickRoleImage(chapter, idxInChapter, levelId * 131 + k * 977);
-    if (!imgs.includes(img)) imgs.push(img);
-  }
-  let salt = 5;
-  while (imgs.length < 5 && salt < 30) {
-    const img = pickRoleImage(chapter + salt, idxInChapter, levelId + salt * 89);
-    if (!imgs.includes(img)) imgs.push(img);
-    salt++;
-  }
-  // 同关内强制保证姓名不重复（避免两个“林夏”）
+/** 每关候选搭档池（5 个完整人设，稳定分配）—— 绑定到真实角色卡 R001..R030 */
+function getPartnerCandidates(levelId: number, _chapter: number, _idxInChapter: number): { kid: string; img: string; name: string; age: number; signature: string; traits: string[] }[] {
+  const allKids = getAllRoleKids();            // ["R001", ..., "R030"]
+  if (allKids.length === 0) return [];
+  // 按 levelId 稳定挑 5 个不重复的 kid
+  const picked: string[] = [];
   const used = new Set<string>();
-  return imgs.map((img, i) => {
-    let info = getPartnerInfoByImg(img);
-    let salt2 = 1;
-    while (used.has(info.name) && salt2 < 20) {
-      const altName = _partnerNames[Math.abs(info.name.length * 2654435761 + i * 777 + salt2 * 991) % _partnerNames.length];
-      info = { ...info, name: altName };
-      salt2++;
+  for (let k = 0; picked.length < 5 && k < allKids.length * 3; k++) {
+    const h = Math.abs((levelId * 131) ^ (k * 2654435761));
+    const kid = allKids[h % allKids.length];
+    if (!used.has(kid)) {
+      used.add(kid);
+      picked.push(kid);
     }
-    used.add(info.name);
-    return info;
-  });
+  }
+  const out: { kid: string; img: string; name: string; age: number; signature: string; traits: string[] }[] = [];
+  for (const kid of picked) {
+    const info = roleCardToPartnerInfo(kid);
+    if (info) out.push(info);
+  }
+  return out;
 }
 
 /** 每大章节的独立进度（已通关的节数，单独计算不串联） */
@@ -422,6 +419,7 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
   const [showChat, setShowChat] = useState(false);                // AI对话页
   const [chatTarget, setChatTarget] = useState<string>('');       // 当前对话场景ID
   const [chatTitle, setChatTitle] = useState('');                  // 当前对话标题
+  const [chatPartner, setChatPartner] = useState<{ kid?: string; img: string; name: string; age: number; signature: string; traits: string[] } | null>(null); // 当前聊天搭档人设（可带 kid → 绑定真实角色卡）
   const [messages, setMessages] = useState<{ role: string; text: string }[]>([]); // 对话消息列表
   const [chatInput, setChatInput] = useState('');                  // 输入框内容
   const [showMatchModal, setShowMatchModal] = useState(false);    // 互动匹配弹窗
@@ -446,7 +444,7 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
   ); // 小关卡沉浸页
   const cameFromHomeRef = useRef(!!pendingAction); // 是否从首页推荐进入
   // 已锁定的搭档（按小关卡 id 记录，进入该关直接使用）
-  const [levelPartners, setLevelPartners] = useState<Record<number, { img: string; name: string; age: number; signature: string; traits: string[] }>>({});
+  const [levelPartners, setLevelPartners] = useState<Record<number, { kid?: string; img: string; name: string; age: number; signature: string; traits: string[] }>>({});
 
 
   /* ---------- 关卡列表计算 ---------- */
@@ -523,9 +521,14 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
    * 后端对接时：POST /api/practice/start { scenarioId }
    * 返回初始对话消息和场景配置
    */
-  const startChat = (dialogueKey: string, title: string) => {
+  const startChat = (
+    dialogueKey: string,
+    title: string,
+    partner?: { kid?: string; img: string; name: string; age: number; signature: string; traits: string[] } | null
+  ) => {
     setChatTarget(dialogueKey);
     setChatTitle(title);
+    setChatPartner(partner ?? null);
     setMessages(aiDialogues[dialogueKey] || [
       { role: 'ai', text: '（你们终于坐下来了，对方看着你，等你先开口）' },
     ]);
@@ -533,30 +536,107 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
     setActivePractice(null);
   };
 
+  /** 清理 AI 回复中的动作/表情旁白（圆括号或方括号内容）——让对话更像真人 */
+  const stripRolePlayMarkers = (text: string): string => {
+    return text
+      .replace(/[（(][^（()）]*?(?:稍显|微笑|皱眉|点头|叹气|低头|抬头|思索|犹豫|停顿|沉默|略带|深呼吸|摇头|歪头|眯眼|看着|注视|摸|握|靠|侧|转身|眨眼|撇嘴|抿嘴|动作|表情|语气|神情|脸色|脸上|眼神)[^（()）]*?[)）]/g, '')
+      .replace(/[\[【][^\[\]【】]*?(?:动作|旁白|内心|内心独白|stage)[^\[\]【】]*?[\]】]/gi, '')
+      .replace(/\n{3,}/g, '\n\n')
+      .trim();
+  };
+
   /**
-   * @API 发送消息并获取AI回复
-   * 后端对接时：POST /api/practice/chat { scenarioId, message, history }
-   * 返回：{ reply: string, score?: number, feedback?: string, tips?: string[] }
-   * 当前为前端 Mock 延迟回复
+   * 发送消息 — 调用 DeepSeek 流式接口
+   * 后端 /api/chat（vite 代理到 localhost:3001）
    */
+  const abortRef = useRef<AbortController | null>(null);
   const sendMessage = () => {
     if (!chatInput.trim()) return;
     const userMsg = chatInput.trim();
-    setMessages(prev => [...prev, { role: 'user', text: userMsg }]);
+    const nextMessages = [...messages, { role: 'user', text: userMsg }];
+    setMessages([...nextMessages, { role: 'ai', text: '' }]);
     setChatInput('');
 
-    // 模拟AI回复（后端对接时替换为接口调用）
-    setTimeout(() => {
-      const scoreFeedbacks = [
-        { score: 85, text: '👏 表达不错！你的语气很自然，让人感觉很舒服。建议下一步可以问一个开放式问题。\n\n📊 本轮评分：85分' },
-        { score: 78, text: '💡 你展示了真诚的兴趣！试着加入一些个人经历的分享，增加亲密感。\n\n📊 本轮评分：78分' },
-        { score: 92, text: '✨ 很好的回应！你的共情能力很强，继续保持这种倾听的姿态。\n\n📊 本轮评分：92分' },
-        { score: 70, text: '🔍 回应稍微简短了一些。试试展开你的想法，给对方更多可以接话的点。\n\n📊 本轮评分：70分' },
-        { score: 88, text: '🎯 精准的话题转换！你很自然的引导了对话方向，这是高级技巧。\n\n📊 本轮评分：88分' },
-      ];
-      const fb = scoreFeedbacks[Math.floor(Math.random() * scoreFeedbacks.length)];
-      setMessages(prev => [...prev, { role: 'ai', text: fb.text }]);
-    }, 800);
+    // 构造 system prompt：从当前场景的 system 消息 + title 提取情境
+    const sceneSystem = messages.find(m => m.role === 'system')?.text || '';
+    const sceneHint = sceneSystem.replace(/^📍\s*场景：/, '').replace(/^🆘\s*/, '');
+
+    // 搭档人设段（优先使用真实角色卡；无 kid 时回退到简版标签）
+    let partnerBlock = '';
+    if (chatPartner) {
+      if (chatPartner.kid) {
+        partnerBlock = buildRolePersonaPrompt(chatPartner.kid);
+      }
+      if (!partnerBlock) {
+        partnerBlock = [
+          `你扮演的人物档案：`,
+          `- 姓名：${chatPartner.name}`,
+          `- 年龄：${chatPartner.age}`,
+          `- 个性标签：${chatPartner.traits.join('、')}`,
+          `- 个人签名：${chatPartner.signature}`,
+          `请严格按照上述性格、年龄、签名所透露的气质说话，不同标签不同语气：例如"傲娇"不会直接承认喜欢、"毒舌"会用挖苦式关心、"慢热"前期话少回复短、"话痨"回复会自然地展开多聊几句。`,
+        ].join('\n');
+      }
+    }
+
+    const systemPrompt = [
+      `你正在和用户进行恋爱场景的角色扮演。场景：${chatTitle || '自由练习'}。`,
+      sceneHint ? `背景：${sceneHint}` : '',
+      partnerBlock,
+      [
+        `【对话硬性规则 · 必须严格遵守】`,
+        `1. 你是真人聊天，不是剧本演员。绝对不要输出任何动作、表情、神态、心理的旁白描写。`,
+        `2. 严禁使用圆括号（）或方括号【】包裹的动作描述，例如"（微笑）""（稍显犹豫但保持微笑）""（低头思索）"一律不允许。`,
+        `3. 严禁出现"评分""分""提示""建议""你可以..."这种上帝视角元信息。你不是导师、不是系统，只是场景中的那个人。`,
+        `4. 直接用第一人称说话，像真实微信对话一样，口语化、短句为主。每次回复 1-3 句即可。`,
+        `5. 表情可以用 emoji 或"哈哈""嗯"这种语气词，但不要写"(笑)"。`,
+      ].join('\n'),
+    ].filter(Boolean).join('\n\n');
+
+    // 把已有消息转成 OpenAI 格式（跳过 system 和空 ai）
+    const apiMessages: ChatMessage[] = [
+      { role: 'system', content: systemPrompt },
+      ...nextMessages
+        .filter(m => m.role !== 'system' && m.text.trim())
+        .map(m => ({
+          role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
+          content: m.text,
+        })),
+    ];
+
+    abortRef.current?.abort();
+    abortRef.current = chatStream(
+      apiMessages,
+      (chunk) => {
+        setMessages(prev => {
+          const copy = [...prev];
+          const last = copy[copy.length - 1];
+          if (last && last.role === 'ai') copy[copy.length - 1] = { ...last, text: last.text + chunk };
+          return copy;
+        });
+      },
+      () => {
+        // 流结束后兜底过滤一次括号旁白，防止模型偶尔突破 prompt 约束
+        setMessages(prev => {
+          const copy = [...prev];
+          const last = copy[copy.length - 1];
+          if (last && last.role === 'ai') {
+            const cleaned = stripRolePlayMarkers(last.text);
+            if (cleaned && cleaned !== last.text) copy[copy.length - 1] = { ...last, text: cleaned };
+          }
+          return copy;
+        });
+        abortRef.current = null;
+      },
+      (err) => {
+        setMessages(prev => {
+          const copy = [...prev];
+          copy[copy.length - 1] = { role: 'ai', text: `（AI 连接失败：${err.message}）` };
+          return copy;
+        });
+        abortRef.current = null;
+      }
+    );
   };
 
   /* ====== 互动匹配 — 角色扮演场景池 ====== */
@@ -703,7 +783,11 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
             className="w-full text-left overflow-hidden"
             style={{ borderRadius: 20, background: '#453a60' }}
             whileTap={{ scale: 0.98 }}
-            onClick={() => setActivePractice(todayRecommend)}
+            onClick={() => {
+              // 与首页"今日推荐"一致：直接打开该关卡的沉浸式预览（而不是弹窗）
+              cameFromHomeRef.current = true;
+              setLevelImmersive({ chapterId: todayRecommend.chapter, index: todayRecommend.idxInChapter });
+            }}
           >
             {/* 封面图区域 */}
             <div className="relative" style={{ height: 180 }}>
@@ -1353,7 +1437,7 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
                   className="w-full py-3.5 flex items-center justify-center gap-2"
                   style={{ background: gradients.coral, borderRadius: 14, color: '#fff', fontSize: '15px', fontWeight: 600 }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={() => startChat(String(activePractice.id), activePractice.title)}
+                  onClick={() => startChat(String(activePractice.id), activePractice.title, levelPartners[activePractice.id] ?? null)}
                 >
                   <IcSparkle size={16} color="#fff" /> 开始阅读故事
                 </motion.button>
@@ -1954,7 +2038,7 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
           const chapterLevels = currentLevels.filter(l => l.chapter === chapterId);
           const firstPlayable = chapterLevels.find(l => !l.completed && !l.vip) ?? chapterLevels.find(l => !l.vip);
           if (firstPlayable) {
-            startChat(String(firstPlayable.id), firstPlayable.title);
+            startChat(String(firstPlayable.id), firstPlayable.title, levelPartners[firstPlayable.id] ?? null);
           } else {
             // 全锁：滚动到该章节封面
             setTimeout(() => {
@@ -1993,7 +2077,7 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
         onStart={(levelId) => {
           const lv = currentLevels.find(l => l.id === levelId);
           setLevelImmersive(null);
-          if (lv) startChat(String(lv.id), lv.title);
+          if (lv) startChat(String(lv.id), lv.title, levelPartners[lv.id] ?? null);
         }}
         onOpenVIP={() => setShowVIP(true)}
       />
