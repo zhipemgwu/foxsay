@@ -18,7 +18,7 @@ import { ChevronRight, ChevronLeft, Lock, X, Send, Users, Zap } from 'lucide-rea
 import {
   IconBubble, IcChat, IcTarget, IcMask, IcWave, IcLetter, IcDove,
   IcGift, IcHeartSpark, IcRobot, IcPen, IcTrophy, IcStar, IcSparkle,
-  IcHeart, IcFire, IcShield, IcRadar, gradients,
+  IcHeart, IcFire, IcShield, IcRadar, IcCrown, gradients,
 } from './CuteIcons';
 import { useUser } from '../context/UserContext';
 import { useProfileModal } from './ProfileModals';
@@ -432,6 +432,8 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
   const [chatTarget, setChatTarget] = useState<string>('');       // 当前对话场景ID
   const [chatTitle, setChatTitle] = useState('');                  // 当前对话标题
   const [chatPartner, setChatPartner] = useState<{ kid?: string; img: string; name: string; age: number; signature: string; traits: string[] } | null>(null); // 当前聊天搭档人设（可带 kid → 绑定真实角色卡）
+  const [chatCoverImg, setChatCoverImg] = useState<string | null>(null);  // 关卡封面图（没选搭档时做AI头像兜底）
+  const [attemptGate, setAttemptGate] = useState<{ reason: string } | null>(null); // 次数上限弹层
   const [messages, setMessages] = useState<{ role: string; text: string; innerOS?: string; mood?: string; delta?: number }[]>([]); // 对话消息列表（带 meta 装饰）
   const [chatInput, setChatInput] = useState('');                  // 输入框内容
   /* ---------- 关卡五件套运行时状态 ---------- */
@@ -554,7 +556,7 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
     dialogueKey: string,
     title: string,
     partner?: { kid?: string; img: string; name: string; age: number; signature: string; traits: string[] } | null,
-    opts?: { levelKid?: string | null; mode?: 'story' | 'challenge' | 'freestyle' }
+    opts?: { levelKid?: string | null; mode?: 'story' | 'challenge' | 'freestyle'; coverImage?: string | null }
   ) => {
     const mode = opts?.mode ?? (opts?.levelKid ? 'story' : 'freestyle');
     const levelKid = opts?.levelKid ?? null;
@@ -564,7 +566,7 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
     if (levelKid) {
       const res = beginAttempt(levelKid, tier);
       if (!res.allowed) {
-        alert(res.reason || '今日次数已用完');
+        setAttemptGate({ reason: res.reason || '今日次数已用完，明天再来或升级会员获得更多次数。' });
         return;
       }
       setAttemptBadge({ used: res.triesUsed, max: peekAttempts(levelKid, tier).maxPerDay, willGrantXP: res.willGrantXP });
@@ -575,6 +577,7 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
     setChatTarget(dialogueKey);
     setChatTitle(title);
     setChatPartner(partner ?? null);
+    setChatCoverImg(opts?.coverImage ?? null);
     setChatLevelKid(levelKid);
     setChatMode(mode);
 
@@ -1640,7 +1643,7 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
                   onClick={() => {
                     const id = activePractice.id;
                     const levelKid = practiceMode === 'story' && id >= 1 && id <= 30 ? 'L' + String(id).padStart(3, '0') : null;
-                    startChat(String(id), activePractice.title, levelPartners[id] ?? null, { levelKid, mode: practiceMode });
+                    startChat(String(id), activePractice.title, levelPartners[id] ?? null, { levelKid, mode: practiceMode, coverImage: (activePractice as any).image || (activePractice as any).coverImage || null });
                   }}
                 >
                   <IcSparkle size={16} color="#fff" /> 开始阅读故事
@@ -1750,6 +1753,7 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
                 const showInnerOS = !isUser && (msg as any).innerOS && user.subTier === 'proplus';
                 const isEmptyAi = !isUser && !msg.text;
                 const userAvatarSrc = (user as any).avatar || '/avatars/face5.webp';
+                const aiAvatarSrc = chatPartner?.img || chatCoverImg || null;
                 return (
                   <div key={i}>
                   <motion.div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-1`}
@@ -1759,8 +1763,8 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
                         width: 36, height: 36, borderRadius: 4, overflow: 'hidden',
                         background: '#d6d3cd', display: 'flex', alignItems: 'center', justifyContent: 'center',
                       }}>
-                        {chatPartner?.img ? (
-                          <img src={chatPartner.img} alt={chatPartner.name} className="w-full h-full" style={{ objectFit: 'cover' }} />
+                        {aiAvatarSrc ? (
+                          <img src={aiAvatarSrc} alt={chatPartner?.name || 'AI'} className="w-full h-full" style={{ objectFit: 'cover' }} />
                         ) : (
                           <IconBubble size={36} bg={gradients.coral}><IcRobot size={18} color="#fff" /></IconBubble>
                         )}
@@ -1915,7 +1919,7 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
                   onRetry={() => {
                     setShowSummary(false);
                     if (chatLevelKid) {
-                      startChat(chatTarget, chatTitle, chatPartner, { levelKid: chatLevelKid, mode: chatMode });
+                      startChat(chatTarget, chatTitle, chatPartner, { levelKid: chatLevelKid, mode: chatMode, coverImage: chatCoverImg });
                     } else {
                       setShowChat(false);
                     }
@@ -2386,7 +2390,7 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
           const firstPlayable = chapterLevels.find(l => !l.completed && !l.vip) ?? chapterLevels.find(l => !l.vip);
           if (firstPlayable) {
             const kid = practiceMode === 'story' && firstPlayable.id >= 1 && firstPlayable.id <= 30 ? 'L' + String(firstPlayable.id).padStart(3, '0') : null;
-            startChat(String(firstPlayable.id), firstPlayable.title, levelPartners[firstPlayable.id] ?? null, { levelKid: kid, mode: practiceMode });
+            startChat(String(firstPlayable.id), firstPlayable.title, levelPartners[firstPlayable.id] ?? null, { levelKid: kid, mode: practiceMode, coverImage: firstPlayable.image || null });
           } else {
             // 全锁：滚动到该章节封面
             setTimeout(() => {
@@ -2427,7 +2431,7 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
           setLevelImmersive(null);
           if (lv) {
             const kid = practiceMode === 'story' && lv.id >= 1 && lv.id <= 30 ? 'L' + String(lv.id).padStart(3, '0') : null;
-            startChat(String(lv.id), lv.title, levelPartners[lv.id] ?? null, { levelKid: kid, mode: practiceMode });
+            startChat(String(lv.id), lv.title, levelPartners[lv.id] ?? null, { levelKid: kid, mode: practiceMode, coverImage: lv.image || null });
           }
         }}
         onOpenVIP={() => setShowVIP(true)}
@@ -2436,6 +2440,44 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
       {/* VIP 订阅弹层 */}
       <AnimatePresence>
         {showVIP && <VIPPage onClose={() => setShowVIP(false)} />}
+
+        {/* 次数上限弹层 —— 替代 alert */}
+        <AnimatePresence>
+          {attemptGate && (
+            <motion.div className="fixed inset-0 z-[9999] flex items-end sm:items-center justify-center px-5"
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+              <div className="absolute inset-0" style={{ background: 'rgba(0,0,0,0.55)' }} onClick={() => setAttemptGate(null)} />
+              <motion.div className="relative w-full overflow-hidden"
+                style={{ maxWidth: 340, background: '#352f45', borderRadius: 20, border: '1px solid rgba(255,217,61,0.18)', boxShadow: '0 18px 48px rgba(0,0,0,0.5)' }}
+                initial={{ y: 20, scale: 0.96, opacity: 0 }} animate={{ y: 0, scale: 1, opacity: 1 }} exit={{ y: 20, opacity: 0 }}
+                transition={{ type: 'spring', damping: 22, stiffness: 260 }}>
+                {/* 顶部金紫装饰 */}
+                <div style={{ height: 90, background: 'linear-gradient(135deg, rgba(255,217,61,0.18), rgba(155,126,222,0.22))', position: 'relative' }}>
+                  <div className="absolute left-1/2 -translate-x-1/2" style={{ top: 18, width: 56, height: 56, borderRadius: '50%', background: 'linear-gradient(135deg,#FFD93D,#FF8A80)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 6px 20px rgba(255,138,128,0.35)' }}>
+                    <IcSparkle size={24} color="#fff" />
+                  </div>
+                </div>
+                <div className="px-5 pt-4 pb-5 text-center">
+                  <h3 style={{ color: '#f5efe8', fontSize: 17, fontWeight: 700, margin: 0 }}>今日次数已用完</h3>
+                  <p style={{ color: 'rgba(245,239,232,0.72)', fontSize: 13, lineHeight: 1.6, margin: '10px 0 18px' }}>
+                    {attemptGate.reason}
+                  </p>
+                  <div className="flex gap-2">
+                    <motion.button whileTap={{ scale: 0.96 }} onClick={() => setAttemptGate(null)}
+                      className="flex-1 py-3" style={{ background: 'rgba(245,239,232,0.08)', color: 'rgba(245,239,232,0.7)', borderRadius: 12, fontSize: 14, fontWeight: 600 }}>
+                      关闭
+                    </motion.button>
+                    <motion.button whileTap={{ scale: 0.96 }} onClick={() => { setAttemptGate(null); setShowVIP(true); }}
+                      className="flex-1 py-3 flex items-center justify-center gap-1" style={{ background: 'linear-gradient(135deg,#FFD93D 0%,#FF8A80 100%)', color: '#3b2e1a', borderRadius: 12, fontSize: 14, fontWeight: 700, boxShadow: '0 6px 16px rgba(255,138,128,0.35)' }}>
+                      <IcCrown size={13} color="#3b2e1a" />
+                      升级会员
+                    </motion.button>
+                  </div>
+                </div>
+              </motion.div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </AnimatePresence>
 
     </>
