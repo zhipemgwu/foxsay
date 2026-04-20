@@ -1,0 +1,1688 @@
+﻿<!DOCTYPE html>
+<html><head><meta charset="UTF-8"><title>一站式恋爱宝典系统逻辑版本1.0</title>
+<style>
+body { font-family: "Microsoft YaHei","微软雅黑","PingFang SC",sans-serif; font-size: 11pt; line-height: 1.6; color:#222; }
+h1 { font-size: 22pt; color:#2a2a8a; border-bottom:2px solid #6a5acd; padding-bottom:4px; }
+h2 { font-size: 17pt; color:#4a3aa8; margin-top:18pt; border-bottom:1px solid #ccc; padding-bottom:2px; }
+h3 { font-size: 14pt; color:#5a3aa8; margin-top:14pt; }
+h4 { font-size: 12pt; color:#7a3aa8; }
+table { border-collapse: collapse; margin:8pt 0; width: 100%; }
+th,td { border:1px solid #999; padding:5pt 8pt; font-size:10.5pt; vertical-align: top; }
+th { background:#EEE8FA; }
+code { background:#f3f0fa; padding:1pt 4pt; border-radius:3px; font-family: "Consolas","Cascadia Mono",monospace; font-size:10pt; color:#b33771; }
+pre { background:#1e1e2e; color:#d4d4d4; padding:10pt; border-radius:5px; font-family:"Consolas",monospace; font-size:10pt; overflow-x:auto; }
+pre code { background:none; color:inherit; padding:0; }
+blockquote { border-left:4px solid #7a3aa8; background:#f6f0fc; margin:6pt 0; padding:6pt 10pt; color:#555; }
+ul, ol { margin: 4pt 0 4pt 18pt; }
+li { margin-bottom: 2pt; }
+hr { border:none; border-top:1px solid #ccc; margin:14pt 0; }
+a { color:#5a3aa8; }
+</style></head>
+<body>
+<h1>FoxSay 后端系统逻辑总纲</h1>
+<blockquote>
+<p>版本 v1.0 · 2026-04-17
+目标：为后端开发提供<strong>可直接落地</strong>的数据模型、算法公式、触发时机、接口结构。
+原则：参考行业头部产品（Keep / Soul / 小红书 / 爆鸡 / Duolingo）的量化评分、标签推荐、热度排行、等级经验、社交图谱做法。
+范围：除<strong>登录/注册/鉴权</strong>以外的所有业务模块。</p>
+</blockquote>
+<hr>
+<h2>目录</h2>
+<ul>
+<li><a href="#part-0-%E7%B3%BB%E7%BB%9F%E9%80%9A%E7%94%A8%E5%9F%BA%E7%A1%80%E8%AE%BE%E6%96%BD">Part 0. 系统通用基础设施</a></li>
+<li><a href="#part-1-%E7%94%A8%E6%88%B7%E4%B8%AD%E6%9E%A2%E8%B4%A6%E6%88%B7--%E7%AD%89%E7%BA%A7--xp--%E8%83%BD%E5%8A%9B%E5%85%AD%E7%BB%B4">Part 1. 用户中枢：账户 / 等级 / XP / 能力六维</a></li>
+<li><a href="#part-2-%E8%83%BD%E5%8A%9B%E9%9B%B7%E8%BE%BE%E5%85%AD%E7%BB%B4%E8%AE%A1%E5%88%86">Part 2. 能力雷达：嘴替/心软/抖包袱/树洞/救场/整活 六维计分</a></li>
+<li><a href="#part-3-%E6%A0%87%E7%AD%BE%E7%B3%BB%E7%BB%9F">Part 3. 标签系统与&quot;标签 → 能力维度&quot;映射</a></li>
+<li><a href="#part-4-%E4%BB%8A%E6%97%A5%E5%9C%BA%E6%99%AF">Part 4. 今日场景（HeroCard/TodayScene）—— 热门徽章 / 评分 / 参与数</a></li>
+<li><a href="#part-5-ai-%E6%8F%90%E5%8D%87%E5%BB%BA%E8%AE%AE">Part 5. AI 提升建议 —— 基于能力短板的智能推荐</a></li>
+<li><a href="#part-6-%E5%85%B3%E5%8D%A1%E7%B3%BB%E7%BB%9F">Part 6. 关卡系统（剧情 30 + 人物挑战 30）</a></li>
+<li><a href="#part-7-%E6%AF%8F%E6%97%A5%E4%BB%BB%E5%8A%A1--%E6%89%93%E5%8D%A1%E6%97%A5%E5%8E%86">Part 7. 每日任务（TodayTaskList）+ 打卡日历</a></li>
+<li><a href="#part-8-%E6%81%8B%E7%88%B1%E6%B8%A9%E5%BA%A6%E8%AE%A1">Part 8. 恋爱温度计 HeatUpCard（Daily Check-in）</a></li>
+<li><a href="#part-9-%E7%89%A9%E7%A7%8D%E9%89%B4%E5%AE%9A">Part 9. 物种鉴定 DiagnosticPage</a></li>
+<li><a href="#part-10-%E5%AF%BC%E5%B8%88%E7%B3%BB%E7%BB%9F">Part 10. 导师系统：资料 / 评分 / 预约 / 私信</a></li>
+<li><a href="#part-11-%E7%A4%BE%E5%8C%BA">Part 11. 社区：专栏 / 讨论帖 / 匿名树洞 / 评论</a></li>
+<li><a href="#part-12-%E4%B8%AA%E4%BA%BA%E4%B8%BB%E9%A1%B5--%E7%A4%BE%E4%BA%A4%E5%9B%BE%E8%B0%B1">Part 12. 个人主页 / 社交图谱 / 头像框 / 皮肤</a></li>
+<li><a href="#part-13-vip-%E4%BC%9A%E5%91%98">Part 13. VIP 会员（Lite / Pro / Pro+）</a></li>
+<li><a href="#part-14-%E5%B7%A5%E5%85%B7%E6%A8%A1%E5%9D%97">Part 14. 工具模块：聊天翻译 / 约会锦囊 / 避雷针 / 朋友圈助手</a></li>
+<li><a href="#part-15-%E6%88%90%E5%B0%B1%E7%B3%BB%E7%BB%9F">Part 15. 成就系统</a></li>
+<li><a href="#part-16-%E6%90%9C%E7%B4%A2--feed-%E6%8E%92%E5%BA%8F">Part 16. 搜索 / 热搜 / Feed 排序</a></li>
+<li><a href="#part-17-%E9%80%9A%E7%9F%A5%E4%B8%AD%E5%BF%83">Part 17. 通知中心</a></li>
+<li><a href="#part-18-%E4%BA%8B%E4%BB%B6%E6%80%BB%E7%BA%BF%E4%B8%8E%E5%AE%9A%E6%97%B6%E4%BB%BB%E5%8A%A1">Part 18. 事件总线与定时任务</a></li>
+<li><a href="#%E9%99%84%E5%BD%95-a-er-%E5%9B%BE">附录 A. 完整数据库实体关系图（ER）</a></li>
+<li><a href="#%E9%99%84%E5%BD%95-b-rest-api-%E4%B8%80%E8%A7%88">附录 B. REST API 一览</a></li>
+</ul>
+<hr>
+<h2>Part 0. 系统通用基础设施</h2>
+<h3>0.1 基础服务</h3>
+<table>
+<thead>
+<tr>
+<th>服务</th>
+<th>作用</th>
+<th>技术建议</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>MySQL 主库</td>
+<td>业务主数据</td>
+<td>事务一致性要求高</td>
+</tr>
+<tr>
+<td>Redis</td>
+<td>热度榜、计数、会话、防刷</td>
+<td>ZSet 排行榜 + Hash 计数</td>
+</tr>
+<tr>
+<td>MongoDB</td>
+<td>AI 对话、诊断 raw 数据</td>
+<td>非结构化</td>
+</tr>
+<tr>
+<td>Elasticsearch</td>
+<td>社区 &amp; 搜索</td>
+<td>分词 + 评分</td>
+</tr>
+<tr>
+<td>OSS / S3</td>
+<td>头像、聊天截图</td>
+<td>-</td>
+</tr>
+<tr>
+<td>消息队列（RocketMQ/Kafka）</td>
+<td>异步事件</td>
+<td>见 Part 18</td>
+</tr>
+<tr>
+<td>调度平台（XXL-Job）</td>
+<td>每日结算 / 周榜</td>
+<td>Cron</td>
+</tr>
+</tbody></table>
+<h3>0.2 通用约定</h3>
+<ul>
+<li><strong>时间统一 UTC+8</strong>，字段名 <code>created_at</code> / <code>updated_at</code> / <code>deleted_at</code>（软删）</li>
+<li><strong>ID</strong>：用户/内容主键用 <code>BIGINT</code> 雪花 ID；业务编号（如关卡）可用 <code>INT</code> 自增</li>
+<li><strong>XP / 能力值</strong>：统一 <code>INT(11)</code>，最大 <code>99_999</code></li>
+<li><strong>权重/系数</strong>：DB 不写死，存进 <code>config_system</code>（Redis 缓存），运营可后台调</li>
+<li><strong>所有用户操作</strong>落一条 <code>user_action_log(user_id, action_type, target_id, ext_json, created_at)</code>，后续推荐/风控全靠它</li>
+<li><strong>防刷</strong>：同一 <code>(user_id, action_type, target_id)</code> 当日计数 ≤ 阈值</li>
+</ul>
+<hr>
+<h2>Part 1. 用户中枢：账户 / 等级 / XP / 能力六维</h2>
+<h3>1.1 核心表 <code>user</code></h3>
+<pre><code class="language-sql">user (
+  id             BIGINT PK,
+  phone          VARCHAR UNIQUE,
+  nickname       VARCHAR(32),
+  gender         TINYINT,            -- 0 未填 / 1 男 / 2 女 / 3 其他
+  age            TINYINT,
+  avatar_url     VARCHAR,
+  avatar_frame   VARCHAR(32) DEFAULT &#39;default&#39;,
+  skin_id        VARCHAR(32) DEFAULT &#39;classic&#39;,
+  species_id     VARCHAR(32),        -- 恋爱物种（见 Part 9）
+  signature      VARCHAR(100),
+  level          SMALLINT DEFAULT 1,
+  xp             INT DEFAULT 0,              -- 总经验
+  xp_to_next     INT DEFAULT 100,            -- 当前等级→下级需多少
+  vip_tier       TINYINT DEFAULT 0,          -- 0 普通 / 1 Lite / 2 Pro / 3 Pro+
+  vip_expire_at  DATETIME,
+  followers      INT DEFAULT 0,              -- 冗余计数
+  following      INT DEFAULT 0,
+  streak_days    SMALLINT DEFAULT 0,         -- 当前连续打卡
+  max_streak     SMALLINT DEFAULT 0,
+  last_checkin   DATE,
+  created_at, updated_at, deleted_at
+)
+</code></pre>
+<h3>1.2 等级公式（类 RPG 曲线）</h3>
+<pre><code>Lv n → Lv n+1 所需 XP = 80 + n * 40
+  Lv1→Lv2 : 120
+  Lv2→Lv3 : 160
+  …
+  Lv12→Lv13: 560
+  Lv20→Lv21: 880
+</code></pre>
+<p>实现：</p>
+<pre><code class="language-python">def xp_needed(level):
+    return 80 + level * 40
+</code></pre>
+<p>每次 XP 变更用事务：<code>UPDATE user SET xp = xp + Δ</code> → 触发器 / 业务层检查是否升级 → 发「升级」通知。</p>
+<h3>1.3 XP 发放规则（全系统只在此处定义）</h3>
+<table>
+<thead>
+<tr>
+<th>行为</th>
+<th>XP</th>
+<th>冷却</th>
+<th>备注</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>完成 Daily Check-in</td>
+<td>+15</td>
+<td>每日 1 次</td>
+<td>Part 8</td>
+</tr>
+<tr>
+<td>完成今日场景练习</td>
+<td>+50</td>
+<td>每日 3 次封顶</td>
+<td>Part 4</td>
+</tr>
+<tr>
+<td>完成关卡（剧情）</td>
+<td>+30 / +50 / +80</td>
+<td>章节递增</td>
+<td>Part 6</td>
+</tr>
+<tr>
+<td>完成关卡（人物挑战）</td>
+<td>+40 / +60 / +100</td>
+<td>组别递增</td>
+<td>Part 6</td>
+</tr>
+<tr>
+<td>完成每日任务（1条）</td>
+<td>+10 ~ +50</td>
+<td>见 Part 7</td>
+<td>全部完成额外 +30</td>
+</tr>
+<tr>
+<td>发布社区帖子</td>
+<td>+10</td>
+<td>每日 3 次</td>
+<td>-</td>
+</tr>
+<tr>
+<td>帖子被点赞（被动）</td>
+<td>+2 / 赞</td>
+<td>每日上限 +100</td>
+<td>-</td>
+</tr>
+<tr>
+<td>帖子被收藏（被动）</td>
+<td>+5 / 次</td>
+<td>每日上限 +50</td>
+<td>-</td>
+</tr>
+<tr>
+<td>完成避雷针/翻译等工具</td>
+<td>+5</td>
+<td>每日各 2 次</td>
+<td>-</td>
+</tr>
+<tr>
+<td>预约导师指导</td>
+<td>0（付费）</td>
+<td>-</td>
+<td>-</td>
+</tr>
+<tr>
+<td>被关注（被动）</td>
+<td>+3</td>
+<td>每日 +30 封顶</td>
+<td>-</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>关键约束</strong>：XP 绝不在前端计算后提交。前端只发&quot;完成事件&quot;，后端按 action_type 查表加分。</p>
+</blockquote>
+<h3>1.4 能力六维（UserAbility）</h3>
+<pre><code class="language-sql">user_ability (
+  user_id              BIGINT PK,
+  mouth_score          SMALLINT DEFAULT 50,  -- 嘴替指数
+  heart_score          SMALLINT DEFAULT 50,  -- 心软指数
+  humor_score          SMALLINT DEFAULT 50,  -- 抖包袱值
+  listen_score         SMALLINT DEFAULT 50,  -- 树洞指数
+  rescue_score         SMALLINT DEFAULT 50,  -- 救场指数
+  vibe_score           SMALLINT DEFAULT 50,  -- 整活指数
+  updated_at           DATETIME
+)
+
+user_ability_weekly (
+  user_id   BIGINT,
+  week_no   INT,           -- ISO 周
+  6 维快照,
+  PK (user_id, week_no)
+)
+</code></pre>
+<ul>
+<li>初始值来自 <strong>物种鉴定</strong>（Part 9），之后由行为持续调整</li>
+<li>单次调整 <code>Δ ≤ 3</code>（防止剧烈波动）</li>
+<li>详细计分规则 → Part 2</li>
+</ul>
+<hr>
+<h2>Part 2. 能力雷达六维计分</h2>
+<p>这是<strong>整个系统的&quot;能力货币&quot;</strong>。AI 推荐、关卡门槛、成就解锁都看它。</p>
+<h3>2.1 六维定义与对标</h3>
+<table>
+<thead>
+<tr>
+<th>维度</th>
+<th>英文字段</th>
+<th>对标能力</th>
+<th>参考行业</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>嘴替指数</td>
+<td>mouth_score</td>
+<td>口才/段子/秒回</td>
+<td>即兴评论能力</td>
+</tr>
+<tr>
+<td>心软指数</td>
+<td>heart_score</td>
+<td>情感温度/亲密度</td>
+<td>共情力</td>
+</tr>
+<tr>
+<td>抖包袱值</td>
+<td>humor_score</td>
+<td>幽默/调侃</td>
+<td>社交润滑</td>
+</tr>
+<tr>
+<td>树洞指数</td>
+<td>listen_score</td>
+<td>倾听/深度</td>
+<td>共情+耐心</td>
+</tr>
+<tr>
+<td>救场指数</td>
+<td>rescue_score</td>
+<td>危机化解</td>
+<td>情绪处理</td>
+</tr>
+<tr>
+<td>整活指数</td>
+<td>vibe_score</td>
+<td>氛围制造</td>
+<td>约会场景策划</td>
+</tr>
+</tbody></table>
+<h3>2.2 每个行为如何影响维度（Action × Dimension 矩阵）</h3>
+<blockquote>
+<p>下表是<strong>核心映射表</strong>，后端写死一张 <code>ability_delta_rule</code>：</p>
+</blockquote>
+<pre><code>ability_delta_rule (
+  action_type VARCHAR,
+  dim         VARCHAR,     -- mouth/heart/humor/listen/rescue/vibe
+  base_delta  DECIMAL(3,1), -- 单次增量（可以是 0.5）
+  score_bonus DECIMAL(3,1), -- AI 评分 &gt; 4.5 的额外奖励
+  tag_match   JSON          -- 命中该标签时放大倍数 {&quot;开场白&quot;:1.2, &quot;共情&quot;:1.5}
+)
+</code></pre>
+<p>示例填充：</p>
+<table>
+<thead>
+<tr>
+<th>action_type</th>
+<th>mouth</th>
+<th>heart</th>
+<th>humor</th>
+<th>listen</th>
+<th>rescue</th>
+<th>vibe</th>
+<th>说明</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>scene_practice_chat</td>
+<td>1.0</td>
+<td>0.5</td>
+<td>0.5</td>
+<td>0.5</td>
+<td>0</td>
+<td>0.5</td>
+<td>场景对话通用</td>
+</tr>
+<tr>
+<td>level_pass_story</td>
+<td>1.5</td>
+<td>1.0</td>
+<td>0.5</td>
+<td>1.0</td>
+<td>0</td>
+<td>1.0</td>
+<td>剧情通关</td>
+</tr>
+<tr>
+<td>level_pass_character</td>
+<td>1.0</td>
+<td>1.5</td>
+<td>1.0</td>
+<td>1.5</td>
+<td>2.0</td>
+<td>1.0</td>
+<td>人物挑战</td>
+</tr>
+<tr>
+<td>redflag_report_generated</td>
+<td>0</td>
+<td>1.0</td>
+<td>0</td>
+<td>0</td>
+<td>2.0</td>
+<td>0</td>
+<td>避雷针识别危险</td>
+</tr>
+<tr>
+<td>translator_used</td>
+<td>1.0</td>
+<td>0</td>
+<td>0</td>
+<td>1.5</td>
+<td>0.5</td>
+<td>0</td>
+<td>聊天翻译（看懂潜台词=树洞+嘴替）</td>
+</tr>
+<tr>
+<td>dateplanner_generated</td>
+<td>0.5</td>
+<td>0.5</td>
+<td>1.0</td>
+<td>0</td>
+<td>0</td>
+<td>2.0</td>
+<td>策划=整活主维度</td>
+</tr>
+<tr>
+<td>community_post_published</td>
+<td>0.5</td>
+<td>0.5</td>
+<td>1.5</td>
+<td>0</td>
+<td>0</td>
+<td>0.5</td>
+<td>发帖=抖包袱</td>
+</tr>
+<tr>
+<td>community_comment_liked</td>
+<td>0.5</td>
+<td>1.0</td>
+<td>0.5</td>
+<td>0.5</td>
+<td>0</td>
+<td>0</td>
+<td>被点赞=社交认可</td>
+</tr>
+<tr>
+<td>tree_hole_posted</td>
+<td>0</td>
+<td>2.0</td>
+<td>0</td>
+<td>2.0</td>
+<td>0.5</td>
+<td>0</td>
+<td>匿名倾诉=树洞+心软</td>
+</tr>
+<tr>
+<td>heatup_checkin</td>
+<td>0.3</td>
+<td>0.3</td>
+<td>0.3</td>
+<td>0.3</td>
+<td>0.3</td>
+<td>0.3</td>
+<td>日常微增</td>
+</tr>
+<tr>
+<td>diagnostic_complete</td>
+<td>由诊断结果直接 SET，不是增量</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>-</td>
+<td>首次定基线</td>
+</tr>
+</tbody></table>
+<h3>2.3 标签加权（Tag Match）</h3>
+<p>当 action 关联的 <strong>内容/关卡带有标签</strong>时，按 <code>tag_match.mapping</code> 放大该维度 <code>base_delta</code>：</p>
+<p>例如用户完成 <code>scene_practice_chat</code>，关卡标签=<code>[&quot;深入话题&quot;,&quot;共情力&quot;]</code>：</p>
+<ul>
+<li>&quot;深入话题&quot; → listen × 1.5</li>
+<li>&quot;共情力&quot; → heart × 1.5
+则 <code>Δlisten = 0.5 × 1.5 = 0.75</code>，<code>Δheart = 0.5 × 1.5 = 0.75</code></li>
+</ul>
+<h3>2.4 AI 评分加成</h3>
+<p>每次场景对话结束，AI 返回 <code>ai_score ∈ [0, 5.0]</code>：</p>
+<pre><code>final_delta = base_delta × tag_multiplier × (1 + (ai_score - 3.5) * 0.1)
+</code></pre>
+<p>即 AI 给 5 分 → 放大 15%；给 2 分 → 缩减 15%。</p>
+<h3>2.5 每日/每周封顶（防刷）</h3>
+<ul>
+<li>单维度<strong>单日涨幅上限 = 5 分</strong></li>
+<li>单维度<strong>单周涨幅上限 = 20 分</strong></li>
+<li>超过部分进入&quot;溢出池&quot;，次日逐步释放（Keep 的做法）</li>
+</ul>
+<h3>2.6 周报生成（每周一 00:05 Cron）</h3>
+<pre><code>this_week = 当前 user_ability 快照
+last_week = user_ability_weekly (week_no = 上周)
+for each dim:
+    delta = this_week - last_week
+生成周报 → 发通知 → 更新雷达图
+</code></pre>
+<hr>
+<h2>Part 3. 标签系统</h2>
+<h3>3.1 三类标签</h3>
+<table>
+<thead>
+<tr>
+<th>类型</th>
+<th>用途</th>
+<th>示例</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>content_tag</code></td>
+<td>场景/关卡/文章/帖子打标</td>
+<td><code>自然开场</code>, <code>深入话题</code>, <code>肢体语言</code></td>
+</tr>
+<tr>
+<td><code>ability_tag</code></td>
+<td>能力维度（Part 2 六维）</td>
+<td><code>嘴替</code>, <code>心软</code>, <code>抖包袱</code></td>
+</tr>
+<tr>
+<td><code>user_interest_tag</code></td>
+<td>用户选择的兴趣（诊断/设置）</td>
+<td><code>想脱单</code>, <code>想挽回</code>, <code>社恐</code></td>
+</tr>
+</tbody></table>
+<h3>3.2 标签 → 能力维度映射表 <code>content_tag_map</code></h3>
+<p><strong>这是全系统推荐的核心表</strong>，运营可在后台维护：</p>
+<table>
+<thead>
+<tr>
+<th>content_tag</th>
+<th>主要影响维度 (权重)</th>
+<th>次要维度 (权重)</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>自然开场</td>
+<td>mouth (1.5)</td>
+<td>vibe (0.8)</td>
+</tr>
+<tr>
+<td>深入话题</td>
+<td>listen (1.5)</td>
+<td>mouth (1.0)</td>
+</tr>
+<tr>
+<td>肢体语言</td>
+<td>rescue (1.2)</td>
+<td>heart (0.8)</td>
+</tr>
+<tr>
+<td>兴趣共鸣</td>
+<td>mouth (1.0)</td>
+<td>listen (1.2)</td>
+</tr>
+<tr>
+<td>文化话题</td>
+<td>mouth (1.2)</td>
+<td>listen (1.0)</td>
+</tr>
+<tr>
+<td>运动话题</td>
+<td>vibe (1.2)</td>
+<td>mouth (0.8)</td>
+</tr>
+<tr>
+<td>邀约技巧</td>
+<td>rescue (1.3)</td>
+<td>mouth (1.0)</td>
+</tr>
+<tr>
+<td>审美表达</td>
+<td>humor (1.0)</td>
+<td>vibe (1.3)</td>
+</tr>
+<tr>
+<td>感受分享</td>
+<td>heart (1.5)</td>
+<td>listen (1.0)</td>
+</tr>
+<tr>
+<td>深度连接</td>
+<td>listen (1.5)</td>
+<td>heart (1.3)</td>
+</tr>
+<tr>
+<td>边界感</td>
+<td>rescue (1.3)</td>
+<td>listen (1.0)</td>
+</tr>
+<tr>
+<td>温暖表达</td>
+<td>heart (1.5)</td>
+<td>mouth (0.8)</td>
+</tr>
+<tr>
+<td>共情力</td>
+<td>heart (1.8)</td>
+<td>listen (1.2)</td>
+</tr>
+<tr>
+<td>氛围感</td>
+<td>vibe (1.5)</td>
+<td>humor (1.0)</td>
+</tr>
+<tr>
+<td>话题延展</td>
+<td>mouth (1.3)</td>
+<td>listen (1.0)</td>
+</tr>
+<tr>
+<td>开场白</td>
+<td>mouth (1.5)</td>
+<td>humor (0.8)</td>
+</tr>
+</tbody></table>
+<blockquote>
+<p><strong>用法</strong>：推荐引擎拿到&quot;用户弱项维度&quot;→ 反查此表&quot;哪些 tag 的主权重在此维度&quot;→ 出推荐。详见 Part 5。</p>
+</blockquote>
+<hr>
+<h2>Part 4. 今日场景</h2>
+<h3>4.1 数据表</h3>
+<pre><code class="language-sql">scene (
+  id              BIGINT PK,
+  code            VARCHAR(32) UNIQUE,  -- coffee_shop, park_stroll…
+  title           VARCHAR(64),         -- 公园午后漫步
+  subtitle        VARCHAR(128),
+  cover_url       VARCHAR,
+  duration_min    SMALLINT,            -- 约 10 分钟
+  tags            JSON,                -- [&quot;自然开场&quot;,&quot;深入话题&quot;,&quot;肢体语言&quot;]
+  difficulty      TINYINT,             -- 1 新手 / 2 进阶 / 3 挑战
+  ai_script_id    BIGINT,              -- 指向 MongoDB 的对话脚本
+  is_vip_only     TINYINT DEFAULT 0,
+  status          TINYINT DEFAULT 1,   -- 0 下线 / 1 上线
+  published_at    DATETIME,
+  created_at, updated_at
+)
+
+scene_stat (
+  scene_id        BIGINT PK,
+  total_plays     INT DEFAULT 0,        -- 总参与人数（去重）
+  plays_7d        INT DEFAULT 0,        -- 近 7 日
+  plays_today     INT DEFAULT 0,
+  rating_sum      INT DEFAULT 0,        -- AI 评分累计
+  rating_count    INT DEFAULT 0,
+  user_rating_sum INT DEFAULT 0,        -- 用户手动打分累计
+  user_rating_cnt INT DEFAULT 0,
+  collect_count   INT DEFAULT 0,
+  updated_at      DATETIME
+)
+</code></pre>
+<h3>4.2 评分计算（前端显示的 4.95 怎么来）</h3>
+<p><strong>混合评分 = AI 自动评 + 用户打分加权</strong>，参考豆瓣/大众点评：</p>
+<pre><code>ai_avg   = rating_sum / rating_count                       (AI 给每次完成一个 0-5 分)
+user_avg = user_rating_sum / user_rating_cnt               (用户完成后可选打分)
+
+display_rating = (ai_avg * 0.4 + user_avg * 0.6 * W_user)
+  其中 W_user = user_rating_cnt / (user_rating_cnt + 50)   -- 贝叶斯平滑
+  当用户打分人数少时，AI 评分权重更大
+</code></pre>
+<p><strong>前端展示</strong>：<code>toFixed(2)</code>；&lt;10 次完成时显示 <code>—</code>（避免样本太少）。</p>
+<h3>4.3 &quot;热门&quot; / &quot;新上线&quot; 徽章判定</h3>
+<p><strong>按优先级 OR 条件</strong>，一次查询全部徽章：</p>
+<pre><code class="language-sql">SELECT scene_id,
+  CASE
+    WHEN DATEDIFF(NOW(), published_at) &lt;= 7 THEN &#39;新上线&#39;
+    WHEN plays_7d_rank &lt;= 5 THEN &#39;热门&#39;
+    WHEN display_rating &gt;= 4.9 AND rating_count &gt;= 1000 THEN &#39;口碑神作&#39;
+    WHEN collect_count &gt;= 5000 THEN &#39;高收藏&#39;
+    ELSE NULL
+  END AS badge
+FROM scene_stat_view
+</code></pre>
+<p>&quot;热门&quot;的精确定义：</p>
+<blockquote>
+<p><strong>过去 7 天参与数</strong> ZSet 排名 Top 5，且 <code>plays_7d ≥ 500</code>。
+Redis: <code>ZADD scene:hot:7d  plays_7d scene_id</code>，每天 Cron 刷新。</p>
+</blockquote>
+<h3>4.4 &quot;2340 人参与&quot;</h3>
+<p>= <code>scene_stat.total_plays</code>（去重：一个 user_id 对同一 scene 只计 1 次）
+实现：用户第一次提交完成 → <code>INSERT INTO scene_play(user_id, scene_id) ON DUPLICATE KEY UPDATE updated_at=NOW()</code>，INSERT 命中时 total_plays++。</p>
+<h3>4.5 &quot;每日更新&quot;选场景的算法</h3>
+<p>每日 00:00 Cron 生成 <code>daily_scene_feed</code>（给所有用户共享）：</p>
+<pre><code>候选池 = 全部上线场景
+排序 =
+  w1 * norm(plays_7d)           -- 热度 0.3
++ w2 * norm(display_rating)     -- 评分 0.3
++ w3 * freshness_score          -- 新鲜度 0.2 （上线 ≤14 天=1, &gt;30 天=0.3）
++ w4 * diversity_penalty        -- 多样性 0.1 （昨日同类型扣分）
++ w5 * user_gap_score           -- 能力匹配 0.1 （详见 Part 5）
+</code></pre>
+<p>取 Top 7 作为&quot;本周池&quot;，再按日轮播。</p>
+<h3>4.6 用户打分入口</h3>
+<p>场景结束页加一个星星打分（1–5）→ POST <code>/scene/{id}/rate</code> → 写 <code>scene_rating(user_id, scene_id, stars, text)</code> + 更新 <code>scene_stat.user_rating_*</code>。</p>
+<hr>
+<h2>Part 5. AI 提升建议</h2>
+<h3>5.1 推荐原理（整个 App 最重要的智能模块之一）</h3>
+<blockquote>
+<p>核心思路：<strong>找出用户能力六维的&quot;短板&quot;，反查 content_tag_map，推荐相应标签的关卡/场景/文章</strong>。
+参考 Duolingo 的技能树 + Keep 的训练推荐。</p>
+</blockquote>
+<h3>5.2 Step-by-step 算法</h3>
+<pre><code class="language-python">def gen_ai_suggestions(user_id, n=2):
+    # 1. 取用户六维 &amp; 全站平均
+    me     = query_user_ability(user_id)
+    avg    = query_global_ability_avg()   # 全站所有用户均值（缓存）
+
+    # 2. 算 &quot;差值&quot;（百分位），越负越弱
+    gap = {dim: me[dim] - avg[dim] for dim in DIMS}
+
+    # 3. 找出最弱的 3 个维度
+    weakest_3 = sorted(gap.items(), key=lambda x: x[1])[:3]
+
+    # 4. 对每个弱项 dim，反查 content_tag_map 找主权重 ≥1.3 的 tag
+    candidate_tags = []
+    for dim, _ in weakest_3:
+        tags = query_tags_by_primary_dim(dim, min_weight=1.3)
+        candidate_tags.extend(tags)
+
+    # 5. 用 candidate_tags 查可推荐内容（场景/关卡/文章）
+    items = search_content_by_tags(
+        tags=candidate_tags,
+        exclude=user_completed_ids(user_id, within_days=14),
+        sort_by=&#39;recommend_score&#39;
+    )
+
+    # 6. 多样性去重：同一 tag 最多出 1 条
+    items = deduplicate_by_primary_tag(items)[:n]
+
+    # 7. 生成文案
+    return [build_suggestion_card(item, matched_dim) for item in items]
+</code></pre>
+<h3>5.3 推荐卡片的文案模板</h3>
+<table>
+<thead>
+<tr>
+<th>弱项维度</th>
+<th>卡片标题</th>
+<th>描述模板</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>heart</td>
+<td>提升安全感表达</td>
+<td>练习在对话中传递稳定和可靠的感觉</td>
+</tr>
+<tr>
+<td>vibe</td>
+<td>观察力专项训练</td>
+<td>学习解读微表情和肢体语言</td>
+</tr>
+<tr>
+<td>mouth</td>
+<td>话术库扩展</td>
+<td>收集 20 个有趣的深度话题</td>
+</tr>
+<tr>
+<td>listen</td>
+<td>深度倾听训练</td>
+<td>学会在对方说话时接住情绪</td>
+</tr>
+<tr>
+<td>humor</td>
+<td>幽默破冰练习</td>
+<td>让对话不再冷场</td>
+</tr>
+<tr>
+<td>rescue</td>
+<td>矛盾化解专题</td>
+<td>面对冷战和吵架的沟通技巧</td>
+</tr>
+</tbody></table>
+<h3>5.4 API</h3>
+<pre><code>GET /home/ai_suggestions?n=2
+→ 200 OK
+{
+  &quot;suggestions&quot;:[
+    {
+      &quot;card_id&quot;:&quot;SUG_001&quot;,
+      &quot;title&quot;:&quot;提升安全感表达&quot;,
+      &quot;description&quot;:&quot;练习在对话中传递稳定和可靠的感觉&quot;,
+      &quot;icon&quot;:&quot;shield&quot;,
+      &quot;target&quot;:{ &quot;type&quot;:&quot;scene&quot;, &quot;id&quot;: 12 },     -- 点击&quot;去练习&quot;的落地
+      &quot;matched_dim&quot;:&quot;heart&quot;,
+      &quot;matched_tags&quot;:[&quot;温暖表达&quot;,&quot;感受分享&quot;]
+    }
+  ],
+  &quot;generated_at&quot;:&quot;2026-04-17T09:00:00+08:00&quot;,
+  &quot;expire_in&quot;: 86400
+}
+</code></pre>
+<ul>
+<li><strong>每天 00:05 Cron 预生成</strong>，结果写 Redis <code>user:{id}:ai_suggestions</code>，TTL 24h</li>
+<li>用户在 6 维任一维度变动 ≥3 时，强制失效缓存，下次请求实时重算</li>
+</ul>
+<h3>5.5 冷启动（新用户无能力数据）</h3>
+<ul>
+<li>走&quot;诊断页&quot;引导先做物种鉴定（Part 9）→ 直接 SET 六维初值</li>
+<li>未做诊断时，默认推 3 个新手友好的场景（duration≤8min, difficulty=1, rating≥4.8）</li>
+</ul>
+<hr>
+<h2>Part 6. 关卡系统</h2>
+<h3>6.1 数据表</h3>
+<pre><code class="language-sql">level (
+  id               INT PK,
+  series           VARCHAR(16),         -- &#39;story&#39; / &#39;character&#39;
+  chapter_no       TINYINT,             -- 第几章 1-5
+  stage_no         TINYINT,             -- 章内第几关 1-6
+  title            VARCHAR(64),
+  story            TEXT,
+  unlock_condition JSON,                -- {&quot;prev_level&quot;:N} 或 {&quot;ability&quot;:{&quot;mouth&quot;:60}}
+  xp_reward        INT,
+  ability_reward   JSON,                -- {&quot;mouth&quot;:2, &quot;heart&quot;:1}  通关额外加能力分
+  tags             JSON,
+  ai_script_id     BIGINT
+)
+
+user_level_progress (
+  user_id     BIGINT,
+  level_id    INT,
+  status      TINYINT,    -- 0 未开 / 1 通关 / 2 满分通关
+  best_score  TINYINT,    -- 0-100
+  first_pass_at DATETIME,
+  last_play_at DATETIME,
+  PK(user_id, level_id)
+)
+</code></pre>
+<h3>6.2 解锁规则</h3>
+<ul>
+<li>同章内：<code>stage_no==1</code> 默认解锁；<code>stage_no==N (&gt;1)</code> 需前一关 <code>status≥1</code></li>
+<li>跨章：需要上一章通关 4 关以上 (<code>count(status&gt;=1) &gt;= 4</code>)</li>
+<li>部分关卡追加能力门槛：<code>ability_reward.unlock_ability</code>，如&quot;第 3 章暧昧第 5 关&quot;需 <code>heart&gt;=60</code></li>
+</ul>
+<h3>6.3 分数计算</h3>
+<p>单关结束时 AI 给出 <code>ai_score ∈ [0, 5]</code>：</p>
+<pre><code>level_final_score = round(ai_score * 20)         # 映射到 0-100
+满分定义：level_final_score &gt;= 90
+</code></pre>
+<p>XP 发放：按 <code>level.xp_reward</code>，<strong>再次通关只给 30%</strong>（防刷）。</p>
+<h3>6.4 人物挑战第 5 组&quot;危险的人&quot;特殊逻辑</h3>
+<ul>
+<li>必须完成避雷针工具使用 ≥ 3 次（精神操纵识别训练）</li>
+<li>通关后自动给 <code>rescue_score += 3</code></li>
+<li>解锁&quot;救场指数&quot;专属成就</li>
+</ul>
+<hr>
+<h2>Part 7. 每日任务 + 打卡日历</h2>
+<h3>7.1 每日任务生成 <code>daily_task_feed</code></h3>
+<p><strong>每日 00:00 对所有活跃用户（近 7 日登录）预生成</strong>，放 Redis：</p>
+<pre><code>候选模板池 30 条，标注 dim / 难度 / XP
+算法：
+  1. 拿用户六维找最弱 2 维
+  2. 从候选池挑 2 条带这 2 个 dim 的任务
+  3. 加 1 条&quot;今日场景练习&quot;（固定）
+  4. 加 1 条&quot;回顾恋商周报&quot;（周一特化）
+  5. 加 1 条随机填充任务
+共 5 条，各任务有独立 XP 值 10–50
+</code></pre>
+<h3>7.2 完成结算</h3>
+<pre><code>POST /task/{task_id}/complete
+→ 后端校验当日该任务是否完成
+→ 加 XP、加能力分、写 user_action_log
+→ 若 5 条全完成 → 额外 +30 XP + 解锁「全勤」成就
+</code></pre>
+<h3>7.3 打卡日历</h3>
+<pre><code class="language-sql">user_checkin (
+  user_id    BIGINT,
+  checkin_date DATE,
+  source     VARCHAR(16),   -- &#39;auto&#39;(完成check-in触发) / &#39;manual&#39;(手动点打卡)
+  reward_xp  INT,
+  PK(user_id, checkin_date)
+)
+</code></pre>
+<p><strong>当日打卡判定</strong>：当日有任何一条 <code>user_checkin</code> 记录即可。
+<strong>连续天数</strong> <code>streak_days</code>：</p>
+<pre><code>每次打卡后：
+  if 昨天有 checkin:  streak_days += 1
+  else: streak_days = 1
+更新 user.streak_days, 若 &gt; max_streak 更新 max_streak
+</code></pre>
+<h3>7.4 手动打卡（新增）</h3>
+<ul>
+<li>端上点&quot;打卡&quot;按钮 → POST <code>/checkin/manual</code></li>
+<li>后端：<ul>
+<li>校验当日是否已打卡 → 是则 409</li>
+<li>写入 <code>user_checkin(source=&#39;manual&#39;, reward_xp=5)</code></li>
+<li>user.xp += 5</li>
+<li>可能触发「7/30/100 天连续」成就</li>
+</ul>
+</li>
+</ul>
+<hr>
+<h2>Part 8. 恋爱温度计 HeatUpCard</h2>
+<h3>8.1 流程</h3>
+<pre><code>每日 1 次 3 题问卷
+→ POST /heatup/submit {q1:&quot;甜蜜满满&quot;, q2:&quot;每天都聊&quot;, q3:&quot;表达心意&quot;}
+→ 后端生成报告 (3 块：温度 / 亲密度 / 成长方向)
+→ 存 user_heatup_report 表
+→ user.xp += 15
+→ 自动触发 user_checkin (source=auto)
+→ 发布事件 heatup_completed
+</code></pre>
+<h3>8.2 温度计算</h3>
+<pre><code>温度 = 35 + Σ(qi_score)
+  问题 1 选项得分: [满分10, 2, -3, -5, -8]  -- &quot;甜蜜满满&quot;→+10
+  问题 2:         [10, 5, 0, -5, -10]
+  问题 3:         [5, 3, 3, 3, -5]         -- 只要愿意提升就加分
+  最终 clamp [0, 100]
+</code></pre>
+<h3>8.3 亲密度等级</h3>
+<ul>
+<li>80-100 → 🔥 炽热</li>
+<li>60-79 → ☀️ 温暖</li>
+<li>40-59 → 🌤️ 平稳</li>
+<li>20-39 → ❄️ 降温</li>
+<li>0-19 → 🧊 冰点</li>
+</ul>
+<hr>
+<h2>Part 9. 物种鉴定 DiagnosticPage</h2>
+<h3>9.1 12 物种 ID 与阵营</h3>
+<pre><code>species 表：
+id: crazy_kelpie (海王狐), sweet_licker (舔舔狐), veteran (老司狐),
+    ghost (装死狐), coward (怂怂狐), plant (植物狐),
+    clown (小丑狐), waste (恋废狐), kneeler (跪族狐),
+    grass (草泥狐), green_tea (绿茶狐), schemer (心机狐)
+
+camp: `crazy` / `ghost` / `clown` / `evil`   (4 阵营，每阵营 3 种)
+</code></pre>
+<h3>9.2 鉴定问卷</h3>
+<ul>
+<li>15-20 题选择题</li>
+<li>每个选项对 12 物种打分向量 <code>scores[species_id]</code></li>
+<li>完成后 <code>winner = argmax(Σscores)</code></li>
+</ul>
+<h3>9.3 能力基线映射</h3>
+<p>每个物种预设 6 维基线，作为用户首次写入 <code>user_ability</code>：</p>
+<table>
+<thead>
+<tr>
+<th>物种</th>
+<th>mouth</th>
+<th>heart</th>
+<th>humor</th>
+<th>listen</th>
+<th>rescue</th>
+<th>vibe</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>海王狐</td>
+<td>80</td>
+<td>45</td>
+<td>75</td>
+<td>40</td>
+<td>70</td>
+<td>85</td>
+</tr>
+<tr>
+<td>舔舔狐</td>
+<td>70</td>
+<td>85</td>
+<td>50</td>
+<td>60</td>
+<td>50</td>
+<td>55</td>
+</tr>
+<tr>
+<td>老司狐</td>
+<td>85</td>
+<td>55</td>
+<td>80</td>
+<td>55</td>
+<td>75</td>
+<td>80</td>
+</tr>
+<tr>
+<td>装死狐</td>
+<td>40</td>
+<td>55</td>
+<td>45</td>
+<td>65</td>
+<td>35</td>
+<td>40</td>
+</tr>
+<tr>
+<td>怂怂狐</td>
+<td>35</td>
+<td>70</td>
+<td>40</td>
+<td>70</td>
+<td>30</td>
+<td>35</td>
+</tr>
+<tr>
+<td>植物狐</td>
+<td>45</td>
+<td>60</td>
+<td>50</td>
+<td>75</td>
+<td>40</td>
+<td>45</td>
+</tr>
+<tr>
+<td>小丑狐</td>
+<td>75</td>
+<td>65</td>
+<td>85</td>
+<td>50</td>
+<td>45</td>
+<td>80</td>
+</tr>
+<tr>
+<td>恋废狐</td>
+<td>50</td>
+<td>50</td>
+<td>50</td>
+<td>50</td>
+<td>50</td>
+<td>50</td>
+</tr>
+<tr>
+<td>跪族狐</td>
+<td>55</td>
+<td>90</td>
+<td>45</td>
+<td>70</td>
+<td>40</td>
+<td>50</td>
+</tr>
+<tr>
+<td>草泥狐</td>
+<td>60</td>
+<td>55</td>
+<td>65</td>
+<td>55</td>
+<td>55</td>
+<td>70</td>
+</tr>
+<tr>
+<td>绿茶狐</td>
+<td>75</td>
+<td>60</td>
+<td>70</td>
+<td>65</td>
+<td>70</td>
+<td>75</td>
+</tr>
+<tr>
+<td>心机狐</td>
+<td>80</td>
+<td>50</td>
+<td>65</td>
+<td>70</td>
+<td>80</td>
+<td>70</td>
+</tr>
+</tbody></table>
+<h3>9.4 重测</h3>
+<ul>
+<li>每月可重测 1 次；重测结果与当前 6 维做 <strong>加权平均 (旧 0.4 + 新 0.6)</strong>，不覆盖</li>
+</ul>
+<hr>
+<h2>Part 10. 导师系统</h2>
+<h3>10.1 表</h3>
+<pre><code class="language-sql">coach (
+  id           INT PK,
+  name         VARCHAR(32),  -- 汪俊豪/余水/占方剑/窦国立
+  avatar_url   VARCHAR,
+  title        VARCHAR(64),  -- 国家二级心理咨询师
+  specialties  JSON,          -- [&quot;情感沟通&quot;,&quot;共情训练&quot;,...]
+  articles     INT DEFAULT 0,
+  followers    INT DEFAULT 0,
+  rating_avg   DECIMAL(3,2), -- 4.90
+  rating_count INT DEFAULT 0,
+  online       TINYINT,
+  price_1v1    INT DEFAULT 299,    -- 分，即 ¥299
+  status       TINYINT DEFAULT 1
+)
+
+coach_booking (
+  id           BIGINT PK,
+  user_id      BIGINT,
+  coach_id     INT,
+  booking_time DATETIME,   -- 咨询时间
+  status       TINYINT,    -- 0 待开始 / 1 进行中 / 2 完成 / 3 取消
+  paid_amount  INT,
+  created_at
+)
+
+coach_chat_msg (
+  id         BIGINT PK,
+  booking_id BIGINT,
+  user_id    BIGINT,
+  coach_id   INT,
+  sender     TINYINT,     -- 1 user / 2 coach / 3 system
+  content    TEXT,
+  read       TINYINT,
+  created_at DATETIME
+)
+</code></pre>
+<h3>10.2 导师评分</h3>
+<ul>
+<li>用户每次咨询结束强制 1-5 星打分 + 可选评价</li>
+<li><code>coach.rating_avg</code> 用贝叶斯平均：</li>
+</ul>
+<pre><code>rating_avg = (rating_sum + GLOBAL_AVG * K) / (rating_count + K)
+K = 20  -- 先验样本数
+</code></pre>
+<ul>
+<li>防刷：同一 booking_id 只能评 1 次</li>
+</ul>
+<h3>10.3 预约流程</h3>
+<pre><code>POST /coach/{id}/book
+→ 后端：
+   1. 校验用户余额/支付
+   2. 生成 booking(booking_time = now + 10min, status=0, paid=299)
+   3. 自动发送 system 消息到 coach_chat_msg
+   4. 发布事件 coach_booked
+   5. 前端写 localStorage（当前做法）未来改为拉接口
+→ 响应 200 { booking_id, booking_time }
+</code></pre>
+<h3>10.4 在线状态</h3>
+<ul>
+<li>导师端每 30s 心跳更新 <code>coach.online</code></li>
+<li>12h 无心跳自动置 0</li>
+</ul>
+<h3>10.5 粉丝 &amp; 关注</h3>
+<pre><code class="language-sql">follow_rel (
+  follower_id  BIGINT,        -- 用户
+  followee_id  BIGINT,        -- 用户或导师（用 entity_type 区分）
+  entity_type  TINYINT,       -- 1 user / 2 coach
+  created_at,
+  PK(follower_id, followee_id, entity_type)
+)
+</code></pre>
+<p>关注/取关 → 更新 <code>user.following</code> / <code>coach.followers</code> 冗余字段（异步）。</p>
+<hr>
+<h2>Part 11. 社区</h2>
+<h3>11.1 板块</h3>
+<table>
+<thead>
+<tr>
+<th>板块</th>
+<th>表前缀</th>
+<th>特点</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>专栏（Column）</td>
+<td><code>post</code> (type=column)</td>
+<td>只有认证导师能发，可付费</td>
+</tr>
+<tr>
+<td>讨论（Discuss）</td>
+<td><code>post</code> (type=discuss)</td>
+<td>全体用户可发</td>
+</tr>
+<tr>
+<td>匿名树洞（Tree Hole）</td>
+<td><code>tree_hole</code></td>
+<td>单独表，不关联真实昵称</td>
+</tr>
+</tbody></table>
+<h3>11.2 帖子表</h3>
+<pre><code class="language-sql">post (
+  id           BIGINT PK,
+  type         TINYINT,             -- 1 column / 2 discuss
+  author_id    BIGINT,
+  title        VARCHAR(128),
+  content      MEDIUMTEXT,
+  cover_url    VARCHAR,
+  tags         JSON,
+  price        INT DEFAULT 0,       -- 0 免费 / 990 = ¥9.9 / 1290 = ¥12.9
+  like_count   INT DEFAULT 0,
+  comment_count INT DEFAULT 0,
+  collect_count INT DEFAULT 0,
+  view_count   INT DEFAULT 0,
+  share_count  INT DEFAULT 0,
+  hot_score    DECIMAL(10,2),       -- 计算字段，见 11.4
+  status       TINYINT DEFAULT 1,
+  published_at DATETIME,
+  created_at, updated_at
+)
+
+tree_hole (
+  id         BIGINT PK,
+  user_id    BIGINT,          -- 匿名化展示时替换成动物
+  animal     VARCHAR(16),     -- &quot;小鹿&quot;,&quot;狐狸&quot;,&quot;小熊&quot;...
+  emotion    VARCHAR(16),     -- 情绪标签（见 4 色体系）
+  content    TEXT,
+  like_count INT DEFAULT 0,
+  reply_count INT DEFAULT 0,
+  created_at DATETIME
+)
+</code></pre>
+<h3>11.3 评论</h3>
+<pre><code class="language-sql">comment (
+  id          BIGINT PK,
+  post_id     BIGINT,
+  parent_id   BIGINT DEFAULT 0,   -- 二级评论 &gt; 0
+  user_id     BIGINT,
+  content     TEXT,
+  like_count  INT,
+  created_at
+)
+</code></pre>
+<p>二级嵌套即可（UI 不做三层）。<code>parent_id != 0</code> 时 push 通知被回复者。</p>
+<h3>11.4 Hot Score（社区 Feed 排序）</h3>
+<p><strong>Reddit 公式 + 时间衰减</strong>（参考小红书）：</p>
+<pre><code>hot_score = log10(max(like*3 + comment*5 + collect*8 + view*0.1, 1))
+          + (published_at_ts - 2026-01-01_ts) / 45000
+          - penalty_if_reported * 3
+每 30min 算一次，写回 post.hot_score，ORDER BY DESC
+</code></pre>
+<h3>11.5 付费文章</h3>
+<ul>
+<li><code>price &gt; 0</code> → 显示锁 + &quot;解锁 ¥9.9&quot;</li>
+<li>购买后写 <code>post_purchase(user_id, post_id, amount, paid_at)</code></li>
+<li>作者（导师）分成 70%，平台 30%</li>
+</ul>
+<h3>11.6 树洞匿名动物</h3>
+<ul>
+<li>用户每次发树洞，服务端随机 pick 一个 <code>animal</code></li>
+<li>24h 内同 user 保持同一 animal，次日重置（参考一些树洞产品）</li>
+</ul>
+<hr>
+<h2>Part 12. 个人主页 &amp; 社交图谱</h2>
+<h3>12.1 关注 / 被关注（见 10.5）</h3>
+<h3>12.2 头像框 &amp; 皮肤商店</h3>
+<pre><code class="language-sql">cosmetic (
+  id            VARCHAR(32) PK,   -- &#39;flame&#39;, &#39;ocean&#39;, &#39;classic_theme&#39;…
+  type          TINYINT,          -- 1 头像框 / 2 皮肤
+  name          VARCHAR(32),
+  price_coin    INT DEFAULT 0,    -- 金币价，0=默认解锁
+  unlock_method VARCHAR(64),      -- &#39;default&#39; / &#39;vip_pro_plus&#39; / &#39;level&gt;=15&#39; / &#39;event_2026_spring&#39;
+  preview_url   VARCHAR
+)
+
+user_cosmetic (
+  user_id     BIGINT,
+  cosmetic_id VARCHAR(32),
+  unlocked_at DATETIME,
+  PK(user_id, cosmetic_id)
+)
+</code></pre>
+<p>切换写 <code>user.avatar_frame</code> / <code>user.skin_id</code>。Pro+ VIP 解锁 <code>rainbow</code> 框。</p>
+<h3>12.3 动态（Moments）</h3>
+<ul>
+<li>用户所有行为（完成关卡、打卡、解锁成就、发帖）产生的可见记录</li>
+<li>表 <code>user_moment(id, user_id, type, target_id, ext_json, visibility, created_at)</code></li>
+<li><code>visibility</code> = public / friends / self</li>
+<li>个人主页拉 <code>user_moment WHERE user_id=? ORDER BY created_at DESC LIMIT 20</code></li>
+</ul>
+<h3>12.4 好友推荐</h3>
+<p>算法：</p>
+<pre><code>candidates = 与我关注者重合度高 + 物种相近 + 同样活跃 - 已关注 - 已拉黑
+score = 0.4*共同关注 + 0.3*物种相似度 + 0.2*能力互补 + 0.1*最近活跃
+</code></pre>
+<p>每日 Cron 预算，写 Redis <code>user:{id}:friend_rec</code>，TTL 24h。</p>
+<hr>
+<h2>Part 13. VIP 会员</h2>
+<h3>13.1 档位</h3>
+<table>
+<thead>
+<tr>
+<th>Tier</th>
+<th>Code</th>
+<th>月价</th>
+<th>年价</th>
+<th>核心权益</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>1</td>
+<td>Lite</td>
+<td>¥8</td>
+<td>¥68</td>
+<td>解锁雷达图部分、10次/日AI</td>
+</tr>
+<tr>
+<td>2</td>
+<td>Pro</td>
+<td>¥20</td>
+<td>¥128</td>
+<td>50次/日AI、雷达图全、建议、彩虹框以外头像框全开</td>
+</tr>
+<tr>
+<td>3</td>
+<td>Pro+</td>
+<td>¥35</td>
+<td>¥198</td>
+<td>无限AI、完全特权、专属彩虹头像框、免排队</td>
+</tr>
+</tbody></table>
+<h3>13.2 权益校验中间件</h3>
+<p>所有 API 请求在 RBAC 之后加 <code>@require_vip(tier)</code> 装饰器：</p>
+<pre><code class="language-python">@require_vip(min_tier=2)
+def get_full_radar(): ...
+</code></pre>
+<ul>
+<li>无权限 → 402 <code>PAYMENT_REQUIRED</code></li>
+<li>端上展示升级弹窗</li>
+</ul>
+<h3>13.3 开通流程</h3>
+<pre><code>POST /vip/purchase {tier, duration_months}
+→ 生成订单 order(status=waiting)
+→ 对接支付（微信/支付宝 Mock）
+→ 支付回调 → user.vip_tier = tier, vip_expire_at = max(now, old_expire) + months*30d
+→ 发通知 + 发&quot;VIP 欢迎礼包&quot;（AI 次数 + 头像框）
+</code></pre>
+<h3>13.4 到期处理</h3>
+<p>每日 Cron 扫 <code>vip_expire_at &lt; NOW() AND vip_tier &gt; 0</code> → 降级为 0 + 发到期通知 + 提示续费优惠券。</p>
+<hr>
+<h2>Part 14. 工具模块</h2>
+<h3>14.1 聊天翻译机 ChatTranslator</h3>
+<pre><code>POST /tool/translator
+body: { text, image_url?, relation_stage, style_preference:[&quot;温柔&quot;,&quot;幽默&quot;,&quot;高情商&quot;] }
+→ 调 AI (GPT-4 / 自研) 生成:
+   subtext: &quot;TA 其实在...&quot;,
+   replies: [{style:&quot;温柔&quot;, text:&quot;...&quot;}, ...]
+→ 扣 VIP 次数配额
+→ 写 translator_history(user_id, text, ai_result_json)
+→ user_ability: listen += 0.75, mouth += 0.5
+</code></pre>
+<h3>14.2 约会锦囊 DatePlanner</h3>
+<pre><code>POST /tool/dateplan
+body: { relation, other_tags:[...], scene, budget, time_slot }
+→ AI 生成规划 JSON
+→ 写 dateplan_history
+→ user_ability: vibe += 1.0
+</code></pre>
+<h3>14.3 避雷针 RedFlagDetector</h3>
+<h4>渣值计算（重要算法）</h4>
+<pre><code>前端勾选的 20 项行为各有权重：
+  红色 x 8 项： 14 pts
+  黄色 x 8 项： 7  pts
+  绿色 x 4 项： 3  pts
+
+raw_score = Σ(选中行为权重)
+capped    = min(raw_score, 100)
+
+红绿灯档位：
+  capped ≥ 60 → 🔴 红灯
+  30 ≤ capped &lt; 60 → 🟡 黄灯
+  capped &lt; 30 → 🟢 绿灯
+</code></pre>
+<h4>模式匹配</h4>
+<p>行为 → 操控模式的映射表 <code>redflag_pattern_map</code>：</p>
+<table>
+<thead>
+<tr>
+<th>模式</th>
+<th>触发条件（命中 ≥ 2 项）</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>PUA</td>
+<td>[&quot;总说你想多了&quot;,&quot;贬低我&quot;,&quot;忽冷忽热&quot;]</td>
+</tr>
+<tr>
+<td>面包屑</td>
+<td>[&quot;只聊暧昧不确定&quot;,&quot;许诺不兑现&quot;,&quot;从不主动约&quot;]</td>
+</tr>
+<tr>
+<td>Love Bombing</td>
+<td>[&quot;很快说爱你&quot;,&quot;很快冷下来&quot;,&quot;情绪起伏大&quot;]</td>
+</tr>
+<tr>
+<td>回避型</td>
+<td>[&quot;冷暴力消失&quot;,&quot;遇事回避&quot;,&quot;社交媒体不提我&quot;]</td>
+</tr>
+<tr>
+<td>养鱼</td>
+<td>[&quot;暧昧多人&quot;,&quot;只在深夜联系&quot;,&quot;从不带我见朋友&quot;]</td>
+</tr>
+<tr>
+<td>情绪寄生</td>
+<td>[&quot;有事才找我&quot;,&quot;只聊自己的烦恼&quot;,&quot;从不问我近况&quot;]</td>
+</tr>
+</tbody></table>
+<p>返回命中模式 + 对应话术/止损建议。</p>
+<h4>能力奖励</h4>
+<p>一次完整报告生成 → <code>rescue_score += 2</code>（单日封顶 4）。</p>
+<h3>14.4 朋友圈助手 MomentsAssistant</h3>
+<p>三个子功能同前端 UI：</p>
+<ul>
+<li>文案生成：GPT 按 {scene, style} 返回 3-4 条</li>
+<li>人设诊断：4 题选择题 → 总分映射 S/A/B/C</li>
+<li>发圈策略：从策略库按 target 查预设周计划</li>
+</ul>
+<hr>
+<h2>Part 15. 成就系统</h2>
+<h3>15.1 表</h3>
+<pre><code class="language-sql">achievement (
+  id            VARCHAR(32) PK,    -- &#39;streak_7&#39;, &#39;level_full&#39;…
+  name          VARCHAR(64),
+  description   VARCHAR(128),
+  icon          VARCHAR,
+  category      VARCHAR(16),       -- &#39;streak&#39;,&#39;ability&#39;,&#39;social&#39;,&#39;vip&#39;,&#39;season&#39;
+  condition     JSON,              -- {&quot;type&quot;:&quot;streak&quot;,&quot;value&quot;:7}
+  reward_xp     INT,
+  reward_cosmetic VARCHAR,
+  is_hidden     TINYINT,
+  sort          INT
+)
+
+user_achievement (
+  user_id        BIGINT,
+  achievement_id VARCHAR(32),
+  unlocked_at    DATETIME,
+  PK(user_id, achievement_id)
+)
+</code></pre>
+<h3>15.2 成就触发时机</h3>
+<p>事件驱动（见 Part 18）：</p>
+<pre><code>on event &#39;checkin_done&#39;:
+    if streak_days == 7 → unlock &#39;streak_7&#39;
+    if streak_days == 30 → unlock &#39;streak_30&#39;
+    if streak_days == 100 → unlock &#39;streak_100&#39;
+on event &#39;ability_updated&#39;:
+    if all 6 dims &gt;= 80 → unlock &#39;all_rounded&#39;
+    if any dim &gt;= 95 → unlock &#39;master_{dim}&#39;
+on event &#39;level_pass&#39;:
+    count += 1; at 10 → &#39;practice_10&#39;; at 50 → &#39;practice_50&#39;
+on event &#39;post_liked&#39;:
+    if post.like_count crosses 100 → unlock &#39;viral_author&#39;
+</code></pre>
+<hr>
+<h2>Part 16. 搜索 / Feed 排序</h2>
+<h3>16.1 搜索架构</h3>
+<ul>
+<li>ES 索引三份：<code>scene_idx</code>, <code>post_idx</code>, <code>coach_idx</code></li>
+<li>查询时 <code>multi_match</code> 搜 <code>title^3, subtitle^2, tags^5, content^1</code></li>
+<li>加权：<code>function_score</code> = base × (1 + log(play_count)) × freshness</li>
+</ul>
+<h3>16.2 热搜词</h3>
+<pre><code>hot_search_keyword (
+  keyword    VARCHAR(32) PK,
+  weight     INT,
+  expire_at  DATETIME
+)
+</code></pre>
+<p>每 15min Cron 从 <code>user_search_log</code> 聚合 TOP 10 写进去。</p>
+<h3>16.3 个人近期搜索</h3>
+<p><code>user_search_log(user_id, keyword, created_at)</code>，前端按 user 拉最近 5 条。</p>
+<hr>
+<h2>Part 17. 通知中心</h2>
+<h3>17.1 表</h3>
+<pre><code class="language-sql">notification (
+  id          BIGINT PK,
+  user_id     BIGINT,
+  type        VARCHAR(32),   -- &#39;level_up&#39;, &#39;coach_booked&#39;, &#39;comment_reply&#39;…
+  title       VARCHAR(64),
+  body        TEXT,
+  link        VARCHAR(128),  -- foxsay://coach/chat/3
+  is_read     TINYINT,
+  priority    TINYINT,       -- 0 普通 / 1 重要 / 2 紧急
+  created_at  DATETIME
+)
+</code></pre>
+<h3>17.2 触发源</h3>
+<table>
+<thead>
+<tr>
+<th>事件</th>
+<th>通知</th>
+<th>优先级</th>
+</tr>
+</thead>
+<tbody><tr>
+<td>升级</td>
+<td>&quot;恭喜升级至 Lv.N（恋爱学徒）&quot;</td>
+<td>1</td>
+</tr>
+<tr>
+<td>预约成功</td>
+<td>&quot;{coach}老师已确认, HH:MM 开始...&quot;</td>
+<td>1</td>
+</tr>
+<tr>
+<td>导师回复</td>
+<td>&quot;{coach}给你发了新消息&quot;</td>
+<td>1</td>
+</tr>
+<tr>
+<td>周报生成</td>
+<td>&quot;本周恋商周报出炉！&quot;</td>
+<td>0</td>
+</tr>
+<tr>
+<td>成就解锁</td>
+<td>&quot;连续 7 天，解锁「恒心初现」&quot;</td>
+<td>0</td>
+</tr>
+<tr>
+<td>被评论</td>
+<td>&quot;{user} 回复了你的帖子&quot;</td>
+<td>0</td>
+</tr>
+<tr>
+<td>被关注</td>
+<td>&quot;{user} 关注了你&quot;</td>
+<td>0</td>
+</tr>
+<tr>
+<td>VIP 到期</td>
+<td>&quot;你的 Pro 会员今天到期&quot;</td>
+<td>1</td>
+</tr>
+</tbody></table>
+<h3>17.3 推送通道</h3>
+<ul>
+<li>站内：存 <code>notification</code> + WebSocket 实时</li>
+<li>手机 Push：APNs/FCM（需用户开通）</li>
+</ul>
+<hr>
+<h2>Part 18. 事件总线与定时任务</h2>
+<h3>18.1 Event 列表（写入消息队列）</h3>
+<pre><code>user.signup
+user.login
+user.ability_updated
+user.level_up
+user.xp_changed
+
+checkin.done
+task.completed
+scene.completed
+level.passed
+
+coach.booked
+coach.message_sent
+coach.session_completed
+
+community.post_published
+community.post_liked
+community.comment_added
+
+vip.purchased
+vip.expired
+
+tool.translator_used
+tool.dateplan_generated
+tool.redflag_reported
+</code></pre>
+<h3>18.2 消费者</h3>
+<ul>
+<li><strong>AbilityService</strong>：订阅 <code>scene.completed / level.passed / tool.* / tree_hole.posted</code> → 按 Part 2 更新 <code>user_ability</code></li>
+<li><strong>AchievementService</strong>：订阅几乎所有 → 检查 <code>achievement.condition</code></li>
+<li><strong>NotificationService</strong>：订阅 <code>coach.* / level_up / achievement.*</code> 等</li>
+<li><strong>XPService</strong>：订阅 <code>*.completed/liked</code> → 加 XP → 检查升级 → 发 <code>level_up</code></li>
+</ul>
+<h3>18.3 Cron 列表</h3>
+<table>
+<thead>
+<tr>
+<th>名称</th>
+<th>频率</th>
+<th>动作</th>
+</tr>
+</thead>
+<tbody><tr>
+<td><code>daily_feed_refresh</code></td>
+<td>每日 00:00</td>
+<td>刷新今日场景池 / 日任务 / AI 建议</td>
+</tr>
+<tr>
+<td><code>weekly_report</code></td>
+<td>每周一 00:05</td>
+<td>生成恋商周报、快照雷达</td>
+</tr>
+<tr>
+<td><code>hot_score_refresh</code></td>
+<td>每 30min</td>
+<td>重算社区帖子 hot_score</td>
+</tr>
+<tr>
+<td><code>scene_hot_rank</code></td>
+<td>每日 01:00</td>
+<td>7 日参与度 ZSet 刷新</td>
+</tr>
+<tr>
+<td><code>vip_expire_scan</code></td>
+<td>每日 02:00</td>
+<td>VIP 到期降级</td>
+</tr>
+<tr>
+<td><code>coach_offline_scan</code></td>
+<td>每 10min</td>
+<td>无心跳导师离线</td>
+</tr>
+<tr>
+<td><code>search_hot_refresh</code></td>
+<td>每 15min</td>
+<td>热搜榜</td>
+</tr>
+<tr>
+<td><code>friend_rec_refresh</code></td>
+<td>每日 03:00</td>
+<td>好友推荐</td>
+</tr>
+<tr>
+<td><code>achievement_retry</code></td>
+<td>每 6h</td>
+<td>补偿扫描（防止事件丢失）</td>
+</tr>
+</tbody></table>
+<hr>
+<h2>附录 A. ER 图</h2>
+<pre><code>user ──&lt; user_ability
+user ──&lt; user_level_progress &gt;── level
+user ──&lt; user_checkin
+user ──&lt; user_moment
+user ──&lt; user_achievement &gt;── achievement
+user ──&lt; follow_rel &gt;── user/coach
+user ──&lt; coach_booking &gt;── coach
+  coach_booking ──&lt; coach_chat_msg
+user ──&lt; post &gt;── comment
+user ──&lt; tree_hole
+user ──&lt; user_cosmetic &gt;── cosmetic
+user ──&lt; notification
+user ──&lt; user_search_log
+post ──&lt; post_purchase
+scene ──&lt; scene_play (user)
+scene ──&lt; scene_rating (user)
+content_tag_map (content_tag → ability_dim, weight)
+ability_delta_rule (action_type × dim → delta)
+</code></pre>
+<hr>
+<h2>附录 B. REST API 一览（节选）</h2>
+<h3>B.1 首页</h3>
+<pre><code>GET  /home/greeting                    -&gt; 问候 + 等级信息
+GET  /home/today_scene                 -&gt; 今日场景推荐（1-2 张）
+GET  /home/ai_suggestions?n=2          -&gt; AI 提升建议
+GET  /home/task_list                   -&gt; 今日任务
+GET  /home/heatup/status               -&gt; 今日是否已 check-in
+POST /home/heatup/submit               -&gt; 提交 heatup 问卷
+</code></pre>
+<h3>B.2 练习</h3>
+<pre><code>GET  /scene                            -&gt; 场景列表
+GET  /scene/{id}                       -&gt; 详情 + ai_script
+POST /scene/{id}/start                 -&gt; 开始一局（返回 session_id）
+POST /scene/{id}/submit                -&gt; 提交一轮对话
+POST /scene/{id}/finish                -&gt; 结束 + 打分
+POST /scene/{id}/rate                  -&gt; 用户打分
+
+GET  /level?series=story&amp;chapter=2
+POST /level/{id}/play
+POST /level/{id}/finish
+</code></pre>
+<h3>B.3 能力 &amp; 雷达</h3>
+<pre><code>GET  /ability/me                       -&gt; 六维当前
+GET  /ability/me/history?weeks=5       -&gt; 五周趋势
+GET  /ability/leaderboard?dim=heart    -&gt; 单维排行榜（VIP）
+</code></pre>
+<h3>B.4 导师</h3>
+<pre><code>GET  /coach                            -&gt; 列表
+GET  /coach/{id}                       -&gt; 详情
+POST /coach/{id}/book                  -&gt; 预约
+GET  /coach/bookings                   -&gt; 我的预约
+GET  /coach/chat/{booking_id}          -&gt; 聊天记录
+POST /coach/chat/{booking_id}/send     -&gt; 发消息
+POST /coach/chat/{booking_id}/rate     -&gt; 咨询评分
+</code></pre>
+<h3>B.5 社区</h3>
+<pre><code>GET  /post?type=column&amp;tag=&amp;sort=hot
+GET  /post/{id}
+POST /post
+POST /post/{id}/like
+POST /post/{id}/collect
+POST /post/{id}/comment
+POST /post/{id}/purchase
+GET  /tree_hole
+POST /tree_hole
+</code></pre>
+<h3>B.6 工具</h3>
+<pre><code>POST /tool/translator
+POST /tool/dateplan
+POST /tool/redflag
+POST /tool/moments/copy
+POST /tool/moments/diagnose
+</code></pre>
+<h3>B.7 打卡/任务</h3>
+<pre><code>POST /checkin/manual
+POST /task/{id}/complete
+GET  /checkin/calendar?month=2026-04
+</code></pre>
+<h3>B.8 VIP</h3>
+<pre><code>GET  /vip/plans
+POST /vip/purchase
+GET  /vip/me
+</code></pre>
+<h3>B.9 个人中心</h3>
+<pre><code>GET  /user/me
+PATCH /user/me  (nickname / avatar / skin / frame)
+GET  /user/me/moments
+GET  /user/me/achievements
+GET  /user/me/notifications
+POST /user/me/notification/{id}/read
+POST /follow     { target_id, target_type }
+DELETE /follow   { target_id, target_type }
+</code></pre>
+<h3>B.10 搜索</h3>
+<pre><code>GET /search?q=&amp;type=scene
+GET /search/hot
+GET /search/history
+</code></pre>
+<hr>
+<h2>最后：几个需要后端特别注意的全局一致性约束</h2>
+<ol>
+<li><strong>所有涉及 XP / 能力分的加法</strong> 只能在 <code>XPService</code> / <code>AbilityService</code> 内单点计算，禁止散落在各业务服务。</li>
+<li><strong>热门 / 评分 / 连续天数</strong> 永远以 DB 为准；前端缓存仅用于展示，每次进入对应页刷新。</li>
+<li><strong>幂等性</strong>：<code>POST /xx/finish</code> 必须带 <code>session_id</code>，重复提交返回第一次结果。</li>
+<li><strong>事务</strong>：XP + 能力 + 成就检查必须在一个事务或 Saga 内，失败回滚。</li>
+<li><strong>数据一致性</strong>：每周 Cron <code>data_consistency_check</code>：对比 <code>post.like_count</code> 与 <code>post_like_log</code> 行数，超过阈值报警。</li>
+<li><strong>风控</strong>：每天 <code>user_action_log</code> 按 <code>(user_id, action_type)</code> 聚合，超过模板配额自动禁用 XP 发放（可补偿人工恢复）。</li>
+</ol>
+<hr>
+<p><strong>END</strong> · 本文档作为后端开发基线规范。后续如功能迭代，任何&quot;新硬编码数字&quot;都需补进本文档或 <code>config_system</code> 表，避免魔法值散落代码库。</p>
+
+</body></html>

@@ -1,0 +1,177 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* 移除默认 focus ring，保留键盘用户可见焦点 */
+*:focus { outline: none; }
+button:focus-visible,
+a:focus-visible,
+[role="button"]:focus-visible,
+input:focus-visible,
+textarea:focus-visible,
+select:focus-visible {
+  outline: 2px solid #FFD93D;
+  outline-offset: 2px;
+  border-radius: 6px;
+}
+
+/* 减少动画首选项 */
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
+:root {
+  --color-base: #2b2535;
+  --color-card: #352f45;
+  --color-elevated: #453a60;
+  --color-text: #f5efe8;
+  --color-text-secondary: rgba(245,239,232,0.58);
+  --color-text-tertiary: rgba(245,239,232,0.38);
+  --color-accent: #FF8A80;
+  --color-border: rgba(245,239,232,0.08);
+}
+
+html, body, #root {
+  height: 100%;
+  width: 100%;
+  background: #2b2535;
+}
+
+body {
+  font-family: -apple-system, BlinkMacSystemFont, 'PingFang SC', 'SF Pro Display', 'Helvetica Neue', 'Microsoft YaHei', 'Noto Sans SC', system-ui, sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+/* 滚动条样式 */
+.scrollbar-none::-webkit-scrollbar {
+  display: none;
+}
+.scrollbar-none {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* 图标气泡呼吸发光动画 */
+@keyframes iconBubbleGlow {
+  0%, 100% { opacity: 0; transform: scale(0.92); }
+  50% { opacity: 0.35; transform: scale(1.05); }
+}
+.icon-bubble-glow {
+  animation: iconBubbleGlow 2.8s ease-in-out infinite;
+}
+
+/* 卡片按压反馈动画 */
+.card-interactive {
+  transition: transform 0.18s cubic-bezier(0.25, 0.46, 0.45, 0.94), box-shadow 0.18s ease;
+}
+.card-interactive:active {
+  transform: scale(0.975);
+  box-shadow: 0 2px 8px rgba(0,0,0,0.18), inset 0 0 0 1px rgba(255,138,128,0.18);
+}
+
+/* 头像呼吸光圈动画 */
+@keyframes avatarGlowRing {
+  0%, 100% { opacity: 0.4; transform: scale(1); }
+  50% { opacity: 0.8; transform: scale(1.08); }
+}
+.avatar-glow-ring {
+  animation: avatarGlowRing 3s ease-in-out infinite;
+}
+
+/* 按钮微光扫光动画 */
+@keyframes shimmer {
+  0% { left: -100%; }
+  100% { left: 200%; }
+}
+
+/* 骨架屏微光动画 */
+@keyframes skeletonShimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
+}
+.skeleton-bone {
+  background: linear-gradient(90deg, rgba(245,239,232,0.08) 25%, rgba(245,239,232,0.12) 50%, rgba(245,239,232,0.08) 75%) !important;
+  background-size: 200% 100% !important;
+  animation: skeletonShimmer 1.8s ease-in-out infinite;
+}
+
+/* 登录输入框占位符样式 */
+input::placeholder {
+  color: rgba(245,239,232,0.3) !important;
+}
+
+/* 平滑过渡动效 */
+@layer components {
+  .transition-smooth {
+    @apply transition-all duration-300 ease-out;
+  }
+
+  .hover-lift {
+    @apply hover:shadow-soft hover:-translate-y-1 transition-smooth;
+  }
+
+  .active-press {
+    @apply active:scale-95 transition-smooth;
+  }
+
+  /* 移动端容器 */
+  .mobile-container {
+    @apply w-full max-w-md mx-auto;
+    background: var(--color-base);
+  }
+
+  .safe-area {
+    @apply min-h-screen flex flex-col;
+  }
+}
+
+/* 页面过渡动效 */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes slideInRight {
+  from {
+    opacity: 0;
+    transform: translateX(20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(0);
+  }
+}
+
+.fade-in {
+  animation: fadeIn 0.3s ease-out;
+}
+
+.slide-in {
+  animation: slideInRight 0.3s ease-out;
+}
+
+/* 底部导航栏 */
+.bottom-nav {
+  background: linear-gradient(to top, rgba(43, 37, 53, 0.98), rgba(53, 47, 69, 0.95));
+  backdrop-filter: blur(10px);
+  border-top: 1px solid rgba(245, 239, 232, 0.06);
+}
