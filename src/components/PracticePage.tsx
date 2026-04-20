@@ -1748,6 +1748,8 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
                 }
                 const isUser = msg.role === 'user';
                 const showInnerOS = !isUser && (msg as any).innerOS && user.subTier === 'proplus';
+                const isEmptyAi = !isUser && !msg.text;
+                const userAvatarSrc = (user as any).avatar || '/avatars/face5.webp';
                 return (
                   <div key={i}>
                   <motion.div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-1`}
@@ -1757,7 +1759,11 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
                         width: 36, height: 36, borderRadius: 4, overflow: 'hidden',
                         background: '#d6d3cd', display: 'flex', alignItems: 'center', justifyContent: 'center',
                       }}>
-                        <IconBubble size={36} bg={gradients.coral}><IcRobot size={18} color="#fff" /></IconBubble>
+                        {chatPartner?.img ? (
+                          <img src={chatPartner.img} alt={chatPartner.name} className="w-full h-full" style={{ objectFit: 'cover' }} />
+                        ) : (
+                          <IconBubble size={36} bg={gradients.coral}><IcRobot size={18} color="#fff" /></IconBubble>
+                        )}
                       </div>
                     )}
                     <div className="relative" style={{
@@ -1770,6 +1776,7 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
                       lineHeight: 1.45,
                       whiteSpace: 'pre-wrap',
                       boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                      minHeight: isEmptyAi ? 20 : undefined,
                     }}>
                       {/* 气泡小尖角 */}
                       <span aria-hidden style={{
@@ -1779,15 +1786,23 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
                           : { left: -5, borderWidth: '5px 6px 5px 0', borderColor: 'transparent #ffffff transparent transparent' }),
                         borderStyle: 'solid', width: 0, height: 0,
                       }} />
-                      {msg.text}
+                      {isEmptyAi ? (
+                        <span className="inline-flex items-center gap-1" aria-label="对方正在输入">
+                          {[0, 1, 2].map(k => (
+                            <motion.span key={k}
+                              style={{ width: 6, height: 6, borderRadius: '50%', background: 'rgba(0,0,0,0.35)', display: 'inline-block' }}
+                              animate={{ opacity: [0.25, 1, 0.25], y: [0, -2, 0] }}
+                              transition={{ duration: 1.1, repeat: Infinity, delay: k * 0.18 }} />
+                          ))}
+                        </span>
+                      ) : msg.text}
                     </div>
                     {isUser && (
                       <div className="ml-2 flex-shrink-0" style={{
                         width: 36, height: 36, borderRadius: 4, overflow: 'hidden',
-                        background: 'linear-gradient(135deg,#FF8A80 0%,#ff6b9d 100%)',
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        background: '#d6d3cd', display: 'flex', alignItems: 'center', justifyContent: 'center',
                       }}>
-                        <span style={{ color: '#fff', fontSize: 14, fontWeight: 600 }}>我</span>
+                        <img src={userAvatarSrc} alt="我" className="w-full h-full" style={{ objectFit: 'cover' }} />
                       </div>
                     )}
                   </motion.div>
