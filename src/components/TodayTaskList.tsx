@@ -40,7 +40,7 @@ export function TodayTaskList() {
       {/* 标题 */}
       <div className="flex items-center justify-between mb-3">
         <div className="flex items-center gap-1.5">
-          <span style={{ color: '#f5efe8', fontSize: 15, fontWeight: 600 }}>今日任务</span>
+          <span style={{ color: '#f5efe8', fontSize: 15, fontWeight: 600 }}>每日挑战</span>
           <motion.div animate={{ rotate: [0, 15, -15, 0] }} transition={{ duration: 2, repeat: Infinity }}>
             <IcSparkle size={14} color="#4ECDC4" />
           </motion.div>
@@ -116,7 +116,7 @@ export function TodayTaskList() {
                 <span style={{ fontSize: 28, display: 'block', marginBottom: 6 }}>🎉</span>
               </motion.div>
               <span style={{ color: '#4ECDC4', fontSize: 14, fontWeight: 700, display: 'block', marginBottom: 4 }}>
-                今日任务全部完成！
+                每日挑战全部完成！
               </span>
               <span style={{ color: 'rgba(245,239,232,0.55)', fontSize: 12 }}>
                 累计获得 <span style={{ color: '#FFD93D', fontWeight: 700 }}>{defaultTasks.reduce((a, t) => a + t.xp, 0)} XP</span>

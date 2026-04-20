@@ -402,7 +402,7 @@ export function DatePlanner({ delay = 0 }: { delay?: number }) {
         <IconBubble size={42} bg={gradients.golden}><IcGift size={20} color="#fff" /></IconBubble>
         <div className="flex-1 min-w-0">
           <span style={{ color: '#f5efe8', fontSize: 13, fontWeight: 600, display: 'block' }}>约会锦囊</span>
-          <span style={{ color: 'rgba(245,239,232,0.5)', fontSize: 11 }}>准备 · 急救 · 复盘 全流程</span>
+          <span style={{ color: 'rgba(245,239,232,0.5)', fontSize: 11 }}>准备·急救·复盘</span>
         </div>
       </motion.button>
 

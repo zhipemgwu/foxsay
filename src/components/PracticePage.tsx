@@ -1106,30 +1106,7 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
           </motion.button>
         </motion.div>
 
-        {/* ====== 3. 快速工具箱（2×2宫格） ====== */}
-        <div className="grid grid-cols-2 gap-3 mb-5">
-          {/* 恋爱急诊室 — 仍使用 AI 对话 */}
-          <motion.button
-            className="flex items-center gap-3 p-4 text-left"
-            style={{ background: '#453a60', borderRadius: 14 }}
-            whileTap={{ scale: 0.95 }}
-            initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: 0.1 }}
-            onClick={() => startChat('sos', '恋爱急诊室')}
-          >
-            <IconBubble size={42} bg={gradients.rose}><IcShield size={20} color="#fff" /></IconBubble>
-            <div className="flex-1 min-w-0">
-              <span style={{ color: '#f5efe8', fontSize: 13, fontWeight: 600, display: 'block' }}>恋爱急诊室</span>
-              <span style={{ color: 'rgba(245,239,232,0.5)', fontSize: 11 }}>遇到问题马上问</span>
-            </div>
-          </motion.button>
-          {/* 聊天翻译机 */}
-          <ChatTranslator delay={0.14} />
-          {/* 恋爱避雷针 */}
-          <RedFlagDetector delay={0.18} />
-          {/* 约会锦囊 */}
-          <DatePlanner delay={0.22} />
-        </div>
+        {/* ====== 3. 快速工具箱已迁至首页「妙妙工具」 ====== */}
 
         {/* ====== 5. 关卡模式切换 + 章节标签 + 关卡列表 ====== */}
 
