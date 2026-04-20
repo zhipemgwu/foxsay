@@ -20,9 +20,7 @@ const menuItems = [
   { icon: <IcChat size={16} color="#fff" />, bg: gradients.mint, label: '导师私信' },
   { icon: <IcTrophy size={16} color="#fff" />, bg: gradients.coral, label: '我的成就' },
   { icon: <IcBook size={16} color="#fff" />, bg: gradients.purple, label: '学习记录' },
-  { icon: <IcCalendar size={16} color="#fff" />, bg: gradients.coral, label: '打卡日历' },
-  { icon: <IcHeart size={16} color="#fff" />, bg: gradients.purple, label: '我的收藏' },
-  { icon: <IcShield size={16} color="#fff" />, bg: gradients.golden, label: '导师咨询·企微' },
+  { icon: <IcShield size={16} color="#fff" />, bg: gradients.golden, label: '公众号' },
 ];
 
 const achievementDefs = [
@@ -65,7 +63,7 @@ const settingsGroups = [
   },
 ];
 
-type ModalType = 'achievements' | 'learning' | 'settings' | 'calendar' | 'collections' | 'privileges' | null;
+type ModalType = 'achievements' | 'learning' | 'settings' | 'privileges' | 'publicAccount' | null;
 
 export function ProfilePage({ onLogout }: { onLogout?: () => void }) {
   const user = useUser();
@@ -136,7 +134,6 @@ export function ProfilePage({ onLogout }: { onLogout?: () => void }) {
   const menuBadges: Record<string, string> = {
     '我的帖子': isNewUser ? '' : String(initialMyPosts.length),
     '我的成就': unlockedAchievements > 0 ? String(unlockedAchievements) : '',
-    '我的收藏': isNewUser ? '' : '8',
   };
   const activeLearningRecords = isNewUser ? [] : learningRecords;
   const activeCollections = isNewUser ? [] : [
@@ -162,7 +159,7 @@ export function ProfilePage({ onLogout }: { onLogout?: () => void }) {
   const frameColor = frameColorMap[user.avatarFrame] || frameColorMap.default;
 
   const menuActions: Record<string, ModalType> = {
-    '我的成就': 'achievements', '学习记录': 'learning', '打卡日历': 'calendar', '我的收藏': 'collections',
+    '我的成就': 'achievements', '学习记录': 'learning',
   };
 
   return (
@@ -261,11 +258,10 @@ export function ProfilePage({ onLogout }: { onLogout?: () => void }) {
                     </>
                   )}
                 </div>
-                {/* 第二行：关注 / 被关注 / 看过我 */}
+                {/* 第二行：关注 / 被关注 */}
                 <div className="flex items-center gap-3 mt-1.5">
                   <span style={{ color: 'rgba(245,239,232,0.5)', fontSize: 12 }}><span style={{ color: 'rgba(245,239,232,0.8)', fontWeight: 700 }}>{user.following ?? 0}</span> 关注</span>
                   <span style={{ color: 'rgba(245,239,232,0.5)', fontSize: 12 }}><span style={{ color: 'rgba(245,239,232,0.8)', fontWeight: 700 }}>{user.followers ?? 0}</span> 被关注</span>
-                  <span style={{ color: 'rgba(245,239,232,0.5)', fontSize: 12 }}><span style={{ color: 'rgba(245,239,232,0.8)', fontWeight: 700 }}>{(user as any).profileViews ?? 0}</span> 看过我</span>
                 </div>
               </div>
             </div>
@@ -443,7 +439,7 @@ export function ProfilePage({ onLogout }: { onLogout?: () => void }) {
               whileTap={{ scale: 0.98 }} onClick={() => {
                 if (item.label === '我的帖子') return setShowMyPosts(true);
                 if (item.label === '导师私信') return setShowCoachChat(true);
-                if (item.label === '导师咨询·企微') { window.open('https://work.weixin.qq.com/', '_blank'); return; }
+                if (item.label === '公众号') { setActiveModal('publicAccount'); return; }
                 setActiveModal(menuActions[item.label] || null);
               }}>
               <IconBubble size={36} bg={item.bg}>{item.icon}</IconBubble>
@@ -454,15 +450,6 @@ export function ProfilePage({ onLogout }: { onLogout?: () => void }) {
                     <span className="min-w-5 h-5 rounded-full flex items-center justify-center px-1" style={{ background: '#FF4444', fontSize: 11, fontWeight: 700, color: '#fff' }}>{unreadCount}</span>
                   </span>
                 )
-              ) : item.label === '打卡日历' ? (
-                <span style={{
-                  color: checkedIn ? '#FF8A80' : 'rgba(245,239,232,0.58)',
-                  fontSize: '12px',
-                  fontWeight: checkedIn ? 700 : 400,
-                  marginRight: 4,
-                }}>
-                  {checkedIn ? `🔥${streakDays}天` : '待打卡'}
-                </span>
               ) : (
                 menuBadges[item.label] && <span style={{ color: 'rgba(245,239,232,0.58)', fontSize: '12px', marginRight: 4 }}>{menuBadges[item.label]}</span>
               )}
@@ -484,7 +471,7 @@ export function ProfilePage({ onLogout }: { onLogout?: () => void }) {
               transition={{ type: 'spring', damping: 28, stiffness: 300 }}>
               <div className="flex items-center justify-between px-5 py-4" style={{ borderBottom: '1px solid rgba(245,239,232,0.10)' }}>
                 <span style={{ color: '#f5efe8', fontSize: '17px', fontWeight: 600 }}>
-                  {{ achievements: '我的成就', learning: '学习记录', settings: '设置', calendar: '打卡日历', collections: '我的收藏', privileges: '等级特权' }[activeModal]}
+                  {{ achievements: '我的成就', learning: '学习记录', settings: '设置', privileges: '等级特权', publicAccount: '公众号' }[activeModal]}
                 </span>
                 <motion.button whileTap={{ scale: 0.9 }} onClick={() => setActiveModal(null)}>
                   <X size={20} color="rgba(245,239,232,0.58)" />
@@ -583,152 +570,32 @@ export function ProfilePage({ onLogout }: { onLogout?: () => void }) {
                   </div>
                 )}
 
-                {activeModal === 'calendar' && (
-                  <div>
-                    <div className="text-center mb-4">
-                      <span style={{ color: '#f5efe8', fontSize: '16px', fontWeight: 600 }}>{`${new Date().getFullYear()}年${new Date().getMonth() + 1}月`}</span>
+                {activeModal === 'publicAccount' && (
+                  <div className="flex flex-col items-center text-center py-4">
+                    <div className="mb-4" style={{
+                      width: 200, height: 200, borderRadius: 16,
+                      background: '#fff', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      boxShadow: '0 10px 30px rgba(0,0,0,0.3)',
+                    }}>
+                      {/* 占位二维码 */}
+                      <div style={{
+                        width: 160, height: 160,
+                        background: 'repeating-conic-gradient(#111 0% 25%, #fff 0% 50%) 50% / 20px 20px',
+                        borderRadius: 8,
+                      }} />
                     </div>
-
-                    {/* 今日打卡按钮 / 已打卡状态 */}
-                    <motion.div
-                      className="relative mb-4 p-[1.5px] overflow-hidden"
-                      style={{
-                        borderRadius: 16,
-                        background: checkedIn
-                          ? 'linear-gradient(135deg, rgba(255,138,128,0.6), rgba(255,167,38,0.6))'
-                          : 'linear-gradient(135deg, #FF8A80, #FFA726)',
-                      }}
-                      animate={justChecked ? { scale: [1, 1.04, 1] } : {}}
-                      transition={{ duration: 0.5 }}>
-                      <div className="flex items-center justify-between px-4 py-3" style={{
-                        background: checkedIn ? 'rgba(69,58,96,0.92)' : '#453a60',
-                        borderRadius: 14.5,
-                      }}>
-                        <div className="flex items-center gap-3">
-                          <motion.div
-                            className="flex items-center justify-center"
-                            style={{
-                              width: 42, height: 42, borderRadius: 12,
-                              background: checkedIn
-                                ? 'linear-gradient(135deg, #FF8A80, #FFA726)'
-                                : 'rgba(255,138,128,0.18)',
-                              boxShadow: checkedIn ? '0 6px 18px rgba(255,138,128,0.45)' : 'none',
-                            }}
-                            animate={checkedIn ? { rotate: [0, -10, 10, -5, 0] } : {}}
-                            transition={{ duration: 0.6 }}>
-                            <IcFire size={22} color={checkedIn ? '#fff' : '#FF8A80'} />
-                          </motion.div>
-                          <div>
-                            <p style={{
-                              color: '#f5efe8', fontSize: 15, fontWeight: 700,
-                              letterSpacing: 0.2, marginBottom: 2,
-                            }}>
-                              {checkedIn ? '今日已打卡 🔥' : '今日还未打卡'}
-                            </p>
-                            <p style={{ color: 'rgba(245,239,232,0.55)', fontSize: 11 }}>
-                              {checkedIn
-                                ? `连续打卡 ${streakDays} 天 · 继续保持！`
-                                : '打卡领 +10 经验 · 连续打卡解锁成就'}
-                            </p>
-                          </div>
-                        </div>
-
-                        <motion.button
-                          className="flex-shrink-0 flex items-center justify-center"
-                          style={{
-                            width: checkedIn ? 44 : 74,
-                            height: 36,
-                            borderRadius: 18,
-                            background: checkedIn
-                              ? 'rgba(245,239,232,0.08)'
-                              : 'linear-gradient(135deg, #FF8A80, #FFA726)',
-                            border: checkedIn ? '1px solid rgba(245,239,232,0.15)' : 'none',
-                            color: checkedIn ? 'rgba(245,239,232,0.55)' : '#fff',
-                            fontSize: checkedIn ? 11 : 13,
-                            fontWeight: 800,
-                            letterSpacing: 0.5,
-                            boxShadow: checkedIn ? 'none' : '0 6px 18px rgba(255,138,128,0.45)',
-                            cursor: checkedIn ? 'default' : 'pointer',
-                          }}
-                          whileTap={!checkedIn ? { scale: 0.92 } : {}}
-                          whileHover={!checkedIn ? { scale: 1.04 } : {}}
-                          onClick={handleCheckIn}
-                          disabled={checkedIn}>
-                          {checkedIn ? '✓' : '打卡'}
-                        </motion.button>
-                      </div>
-
-                      {/* 打卡成功弹出的小粒子 */}
-                      <AnimatePresence>
-                        {justChecked && (
-                          <>
-                            {['🔥', '✨', '💫', '⭐', '🎉'].map((e, i) => (
-                              <motion.span
-                                key={i}
-                                className="absolute pointer-events-none"
-                                style={{ left: '50%', top: '50%', fontSize: 20 }}
-                                initial={{ opacity: 0, x: 0, y: 0, scale: 0.4 }}
-                                animate={{
-                                  opacity: [0, 1, 0],
-                                  x: (i - 2) * 40,
-                                  y: -50 - i * 6,
-                                  scale: [0.4, 1.2, 0.8],
-                                }}
-                                exit={{ opacity: 0 }}
-                                transition={{ duration: 1.2, delay: i * 0.05 }}>
-                                {e}
-                              </motion.span>
-                            ))}
-                          </>
-                        )}
-                      </AnimatePresence>
-                    </motion.div>
-
-                    <div className="grid grid-cols-7 gap-2">
-                      {['日', '一', '二', '三', '四', '五', '六'].map(d => (
-                        <div key={d} className="text-center py-1">
-                          <span style={{ color: 'rgba(245,239,232,0.5)', fontSize: '11px' }}>{d}</span>
-                        </div>
-                      ))}
-                      {Array.from({ length: monthStartWeekday }).map((_, i) => <div key={`e-${i}`} />)}
-                      {calendarDays.map((d) => (
-                        <div key={d.day} className="flex justify-center py-1">
-                          <div className="w-8 h-8 rounded-full flex items-center justify-center" style={{
-                            background: d.active ? gradients.coral : d.today ? 'rgba(255,138,128,0.18)' : 'transparent',
-                            border: d.today && !d.active ? '1.5px dashed rgba(255,138,128,0.4)' : 'none',
-                            boxShadow: d.today && d.active ? '0 0 0 2px rgba(255,138,128,0.3)' : 'none',
-                          }}>
-                            <span style={{ color: d.active ? '#fff' : d.today ? '#FF8A80' : 'rgba(245,239,232,0.58)', fontSize: '12px', fontWeight: d.active || d.today ? 600 : 400 }}>{d.day}</span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                    <div className="mt-5 p-4 flex items-center gap-3" style={{ background: '#453a60', borderRadius: 12 }}>
-                      <IconBubble size={40} bg={gradients.coral}><IcFire size={18} color="#fff" /></IconBubble>
-                      <div>
-                        <p style={{ color: '#f5efe8', fontSize: '15px', fontWeight: 600 }}>连续打卡 {streakDays} 天</p>
-                        <p style={{ color: 'rgba(245,239,232,0.5)', fontSize: '12px', marginTop: 2 }}>再坚持 {Math.max(1, 30 - streakDays)} 天解锁「恋爱达人」成就</p>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {activeModal === 'collections' && (
-                  <div className="flex flex-col gap-3">
-                    {activeCollections.length === 0 ? (
-                      <div className="py-10 text-center" style={{ color: 'rgba(245,239,232,0.4)', fontSize: 13 }}>还没有收藏内容，去发现更多精彩吧！</div>
-                    ) : activeCollections.map((item, i) => (
-                      <motion.button key={i} className="w-full flex items-center justify-between p-3 text-left" style={{ background: '#453a60', borderRadius: 12 }} whileTap={{ scale: 0.98 }}>
-                        <div>
-                          <p style={{ color: '#f5efe8', fontSize: '13px', fontWeight: 500, marginBottom: 2 }}>{item.title}</p>
-                          <div className="flex items-center gap-2">
-                            <span style={{ background: 'rgba(255,138,128,0.18)', color: '#FF8A80', fontSize: '10px', fontWeight: 600, padding: '1px 6px', borderRadius: 4 }}>{item.type}</span>
-                            <span style={{ color: 'rgba(245,239,232,0.55)', fontSize: '11px' }}>{item.time}</span>
-                          </div>
-                        </div>
-                        <ChevronRight size={14} color="rgba(245,239,232,0.55)" />
-                      </motion.button>
-                    ))}
+                    <p style={{ color: '#f5efe8', fontSize: 16, fontWeight: 700, marginBottom: 6 }}>扫码关注「老司狐 FoxSay」</p>
+                    <p style={{ color: 'rgba(245,239,232,0.6)', fontSize: 12, lineHeight: 1.6, maxWidth: 280 }}>
+                      关注公众号获取独家恋爱技巧、导师直播预告、新功能抢先体验。
+                    </p>
+                    <motion.button
+                      className="mt-5 px-6 py-2.5"
+                      style={{ background: gradients.golden, borderRadius: 10, color: '#2b2535', fontSize: 13, fontWeight: 700 }}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => { navigator.clipboard?.writeText('老司狐FoxSay'); }}
+                    >
+                      复制公众号名称
+                    </motion.button>
                   </div>
                 )}
 

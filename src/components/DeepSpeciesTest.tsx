@@ -250,6 +250,16 @@ export default function DeepSpeciesTest({ onClose }: { onClose: () => void }) {
           abilityScores: res.abilities,
         });
       }
+      // 测试完成自动打卡（foxsay_checkin_{date} + user.checkIn）
+      try {
+        const today = new Date();
+        const todayKey = `foxsay_checkin_${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+        if (localStorage.getItem(todayKey) !== '1') {
+          localStorage.setItem(todayKey, '1');
+          (user as any)?.checkIn?.();
+          window.dispatchEvent(new Event('foxsay_checkin_done'));
+        }
+      } catch { /* */ }
       // 保存到 localStorage
       try {
         localStorage.setItem('foxsay:deep_test_result', JSON.stringify(res));
