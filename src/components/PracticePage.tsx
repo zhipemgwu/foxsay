@@ -31,6 +31,18 @@ import { VIPPage } from './VIPPage';
 import { KenBurnsImage } from './KenBurnsImage';
 import { chatStream, type ChatMessage } from '../services/ai';
 import { getAllRoleKids, roleCardToPartnerInfo, buildRolePersonaPrompt } from '../services/roleCards';
+import {
+  getLevelCard, getMaxTurns, getMinTurnsForGoodEnding, getOpening,
+  buildLevelScenePrompt, getScoringDims, getEndings,
+} from '../services/levelCards';
+import {
+  type AffinityState, type AffinityDelta,
+  emptyAffinity, mainAffinity, applyDelta, initAffinity, persistOnEnd,
+} from '../services/affinity';
+import { parseChatMeta, stripMetaFragments, type ChatMeta } from '../services/chatMeta';
+import { beginAttempt, peekAttempts, type VipTier } from '../services/attemptLimit';
+import { scoreLevel, buildAffinityMetrics, xpRewardForStar, type HardMetrics } from '../services/levelScore';
+import { ChatSummary, type SummaryHighlight } from './ChatSummary';
 
 /* ---------- 故事系统 ---------- */
 
@@ -420,8 +432,23 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
   const [chatTarget, setChatTarget] = useState<string>('');       // 当前对话场景ID
   const [chatTitle, setChatTitle] = useState('');                  // 当前对话标题
   const [chatPartner, setChatPartner] = useState<{ kid?: string; img: string; name: string; age: number; signature: string; traits: string[] } | null>(null); // 当前聊天搭档人设（可带 kid → 绑定真实角色卡）
-  const [messages, setMessages] = useState<{ role: string; text: string }[]>([]); // 对话消息列表
+  const [messages, setMessages] = useState<{ role: string; text: string; innerOS?: string; mood?: string; delta?: number }[]>([]); // 对话消息列表（带 meta 装饰）
   const [chatInput, setChatInput] = useState('');                  // 输入框内容
+  /* ---------- 关卡五件套运行时状态 ---------- */
+  const [chatLevelKid, setChatLevelKid] = useState<string | null>(null);           // 当前关卡 kid（例：L003）。null = 自由/邂逅
+  const [chatMode, setChatMode] = useState<'story' | 'challenge' | 'freestyle'>('freestyle');
+  const [chatMaxTurns, setChatMaxTurns] = useState<number>(20);
+  const [chatMinTurnsGood, setChatMinTurnsGood] = useState<number>(8);
+  const [turnsUsed, setTurnsUsed] = useState<number>(0);
+  const [affinity, setAffinity] = useState<AffinityState>(emptyAffinity());
+  const [affinityHistory, setAffinityHistory] = useState<AffinityState[]>([]);
+  const [highlights, setHighlights] = useState<SummaryHighlight[]>([]);
+  const [regrets, setRegrets] = useState<SummaryHighlight[]>([]);
+  const [redflagHits, setRedflagHits] = useState<number>(0);
+  const [showSummary, setShowSummary] = useState<boolean>(false);
+  const [attemptBadge, setAttemptBadge] = useState<{ used: number; max: number; willGrantXP: boolean } | null>(null);
+  const [deltaPopup, setDeltaPopup] = useState<{ val: number; id: number } | null>(null);
+  const [openingChoices, setOpeningChoices] = useState<string[]>([]);
   const [showMatchModal, setShowMatchModal] = useState(false);    // 互动匹配弹窗
   const [matchingState, setMatchingState] = useState<'idle' | 'scene' | 'matching' | 'matched' | 'playing' | 'result'>('idle');
   const [matchRole, setMatchRole] = useState<{ name: string; desc: string; emoji: string; trait: string } | null>(null);
@@ -520,18 +547,69 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
    * @API 开始AI对话
    * 后端对接时：POST /api/practice/start { scenarioId }
    * 返回初始对话消息和场景配置
+   *
+   * 扩展：第四个参数 opts 指定关卡 kid 与模式，用于启用"五件套"
    */
   const startChat = (
     dialogueKey: string,
     title: string,
-    partner?: { kid?: string; img: string; name: string; age: number; signature: string; traits: string[] } | null
+    partner?: { kid?: string; img: string; name: string; age: number; signature: string; traits: string[] } | null,
+    opts?: { levelKid?: string | null; mode?: 'story' | 'challenge' | 'freestyle' }
   ) => {
+    const mode = opts?.mode ?? (opts?.levelKid ? 'story' : 'freestyle');
+    const levelKid = opts?.levelKid ?? null;
+
+    // ---- 次数闸门 ----
+    const tier: VipTier = user.subTier === 'proplus' ? 'proplus' : (user.subTier === 'pro' ? 'pro' : 'free');
+    if (levelKid) {
+      const res = beginAttempt(levelKid, tier);
+      if (!res.allowed) {
+        alert(res.reason || '今日次数已用完');
+        return;
+      }
+      setAttemptBadge({ used: res.triesUsed, max: peekAttempts(levelKid, tier).maxPerDay, willGrantXP: res.willGrantXP });
+    } else {
+      setAttemptBadge(null);
+    }
+
     setChatTarget(dialogueKey);
     setChatTitle(title);
     setChatPartner(partner ?? null);
-    setMessages(aiDialogues[dialogueKey] || [
-      { role: 'ai', text: '（你们终于坐下来了，对方看着你，等你先开口）' },
-    ]);
+    setChatLevelKid(levelKid);
+    setChatMode(mode);
+
+    // ---- 初始化轮数与好感 ----
+    const maxT = levelKid ? getMaxTurns(levelKid) : 20;
+    const minT = levelKid ? getMinTurnsForGoodEnding(levelKid) : 8;
+    setChatMaxTurns(maxT);
+    setChatMinTurnsGood(minT);
+    setTurnsUsed(0);
+    const initAff = initAffinity(mode === 'challenge' ? 'challenge' : 'story', partner?.kid);
+    setAffinity(initAff);
+    setAffinityHistory([initAff]);
+    setHighlights([]);
+    setRegrets([]);
+    setRedflagHits(0);
+    setShowSummary(false);
+
+    // ---- 开场白 ----
+    let initialMessages: { role: string; text: string }[] = [];
+    if (levelKid) {
+      const opening = getOpening(levelKid);
+      if (opening.message) {
+        initialMessages = [{ role: 'ai', text: opening.message }];
+      }
+      setOpeningChoices(opening.choices || []);
+    } else {
+      setOpeningChoices([]);
+    }
+    if (initialMessages.length === 0) {
+      initialMessages = aiDialogues[dialogueKey] || [
+        { role: 'ai', text: '（你们终于坐下来了，对方看着你，等你先开口）' },
+      ];
+    }
+    setMessages(initialMessages);
+
     setShowChat(true);
     setActivePractice(null);
   };
@@ -550,18 +628,25 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
    * 后端 /api/chat（vite 代理到 localhost:3001）
    */
   const abortRef = useRef<AbortController | null>(null);
-  const sendMessage = () => {
-    if (!chatInput.trim()) return;
-    const userMsg = chatInput.trim();
+  const sendMessage = (overrideText?: string) => {
+    const override = typeof overrideText === 'string' ? overrideText : undefined;
+    const text = (override ?? chatInput).trim();
+    if (!text) return;
+    if (showSummary) return; // 已结束
+
+    const userMsg = text;
     const nextMessages = [...messages, { role: 'user', text: userMsg }];
     setMessages([...nextMessages, { role: 'ai', text: '' }]);
-    setChatInput('');
+    if (!override) setChatInput('');
+    setOpeningChoices([]); // 用户一旦开口就撤掉预设选项
+    setTurnsUsed(t => t + 1);
 
-    // 构造 system prompt：从当前场景的 system 消息 + title 提取情境
+    // 构造 system prompt：场景（关卡卡） + 搭档人设 + 好感度实时指令 + JSON tail 规则
+    const scenePrompt = chatLevelKid ? buildLevelScenePrompt(chatLevelKid) : '';
     const sceneSystem = messages.find(m => m.role === 'system')?.text || '';
     const sceneHint = sceneSystem.replace(/^📍\s*场景：/, '').replace(/^🆘\s*/, '');
 
-    // 搭档人设段（优先使用真实角色卡；无 kid 时回退到简版标签）
+    // 搭档人设段
     let partnerBlock = '';
     if (chatPartner) {
       if (chatPartner.kid) {
@@ -574,26 +659,51 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
           `- 年龄：${chatPartner.age}`,
           `- 个性标签：${chatPartner.traits.join('、')}`,
           `- 个人签名：${chatPartner.signature}`,
-          `请严格按照上述性格、年龄、签名所透露的气质说话，不同标签不同语气：例如"傲娇"不会直接承认喜欢、"毒舌"会用挖苦式关心、"慢热"前期话少回复短、"话痨"回复会自然地展开多聊几句。`,
         ].join('\n');
       }
     }
 
+    // 轮数阶段提示
+    const remaining = Math.max(0, chatMaxTurns - (turnsUsed + 1));
+    const stage =
+      turnsUsed < 2 ? 'opening（刚见面，试探性开场）'
+      : remaining <= 2 ? 'closing（即将收尾，朝一个自然的结束靠拢）'
+      : remaining <= Math.floor(chatMaxTurns / 3) ? 'climax（情绪高点，可以更有戏剧性）'
+      : 'developing（正常推进，制造小冲突或小惊喜）';
+
+    // 好感维度实时状态
+    const affLine = `当前四维好感（0-100）：心动=${affinity.heart} / 信任=${affinity.trust} / 理解=${affinity.mind} / 暧昧=${affinity.spark}。主好感=${mainAffinity(affinity)}。`;
+
+    // 评分维度（引导 AI 在 meta 中体现）
+    const dims = chatLevelKid ? getScoringDims(chatLevelKid).map(d => d.name).join('、') : '自然度、情商、吸引力、分寸感';
+
     const systemPrompt = [
       `你正在和用户进行恋爱场景的角色扮演。场景：${chatTitle || '自由练习'}。`,
-      sceneHint ? `背景：${sceneHint}` : '',
+      scenePrompt,
+      sceneHint ? `补充背景：${sceneHint}` : '',
       partnerBlock,
+      affLine,
+      `当前剧情阶段：${stage}。已进行 ${turnsUsed + 1}/${chatMaxTurns} 轮，还剩 ${remaining} 轮。`,
       [
-        `【对话硬性规则 · 必须严格遵守】`,
+        `【硬性规则 · 必须严格遵守】`,
         `1. 你是真人聊天，不是剧本演员。绝对不要输出任何动作、表情、神态、心理的旁白描写。`,
-        `2. 严禁使用圆括号（）或方括号【】包裹的动作描述，例如"（微笑）""（稍显犹豫但保持微笑）""（低头思索）"一律不允许。`,
+        `2. 严禁使用圆括号（）或方括号【】包裹的动作描述，例如"（微笑）""（低头思索）"一律不允许。`,
         `3. 严禁出现"评分""分""提示""建议""你可以..."这种上帝视角元信息。你不是导师、不是系统，只是场景中的那个人。`,
         `4. 直接用第一人称说话，像真实微信对话一样，口语化、短句为主。每次回复 1-3 句即可。`,
         `5. 表情可以用 emoji 或"哈哈""嗯"这种语气词，但不要写"(笑)"。`,
+        `6. 根据用户刚才的那句话，基于你的性格和当前好感度，给出真实合理的反应。用户表现好则变暖；翻车则抽离/冷淡。`,
+        `7. 如果用户已经严重踩雷（如冒犯/油腻/骚扰），请在 meta 中将对应维度 delta 给到较大负值并考虑 suggest_end=true。`,
+      ].join('\n'),
+      [
+        `【输出格式 · 极其重要】`,
+        `在你的正文回复之后，必须**追加一个 JSON meta 块**，格式为：`,
+        `<meta>{"deltas":{"heart":<-10~+10整数>,"trust":<-10~+10整数>,"mind":<-10~+10整数>,"spark":<-10~+10整数>},"mood":"<当前情绪，如 开心/犹豫/尴尬/生气>","inner_os":"<对方此刻真实内心独白，一句话>","suggest_end":<true|false>}</meta>`,
+        `评分维度参考：${dims}。`,
+        `meta 必须是严格 JSON，不要换行在 JSON 内部，不要注释。正文和 meta 之间不要有其他标签。`,
       ].join('\n'),
     ].filter(Boolean).join('\n\n');
 
-    // 把已有消息转成 OpenAI 格式（跳过 system 和空 ai）
+    // API messages
     const apiMessages: ChatMessage[] = [
       { role: 'system', content: systemPrompt },
       ...nextMessages
@@ -611,18 +721,63 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
         setMessages(prev => {
           const copy = [...prev];
           const last = copy[copy.length - 1];
-          if (last && last.role === 'ai') copy[copy.length - 1] = { ...last, text: last.text + chunk };
+          if (last && last.role === 'ai') {
+            const raw = last.text + chunk;
+            // 流途中实时把 meta 片段从显示中过滤掉
+            copy[copy.length - 1] = { ...last, text: stripMetaFragments(raw) };
+            (copy[copy.length - 1] as any)._raw = raw; // 临时存完整文本
+          }
           return copy;
         });
       },
       () => {
-        // 流结束后兜底过滤一次括号旁白，防止模型偶尔突破 prompt 约束
+        // 流结束：解析 meta，更新 affinity，记录 highlight/regret，判断结束
         setMessages(prev => {
           const copy = [...prev];
-          const last = copy[copy.length - 1];
+          const last = copy[copy.length - 1] as any;
           if (last && last.role === 'ai') {
-            const cleaned = stripRolePlayMarkers(last.text);
-            if (cleaned && cleaned !== last.text) copy[copy.length - 1] = { ...last, text: cleaned };
+            const raw = last._raw || last.text;
+            const { cleanText, meta } = parseChatMeta(raw);
+            const finalText = stripRolePlayMarkers(cleanText);
+            const d = meta.deltas;
+            const newAff = applyDelta(affinity, d);
+            const deltaMain = mainAffinity(newAff) - mainAffinity(affinity);
+            copy[copy.length - 1] = {
+              role: 'ai',
+              text: finalText || '……',
+              innerOS: meta.inner_os,
+              mood: meta.mood,
+              delta: deltaMain,
+            };
+
+            // 更新 affinity state（异步但用 functional 保证顺序）
+            setAffinity(newAff);
+            setAffinityHistory(h => [...h, newAff]);
+
+            // 飞字动画
+            if (deltaMain !== 0) {
+              const id = Date.now();
+              setDeltaPopup({ val: deltaMain, id });
+              setTimeout(() => setDeltaPopup(p => (p && p.id === id ? null : p)), 1800);
+            }
+
+            // 回放记录
+            const userTurn = nextMessages[nextMessages.length - 1]?.text || '';
+            const snippet = (finalText || '').slice(0, 60);
+            if (deltaMain >= 4) {
+              setHighlights(h => [...h, { userText: userTurn, aiReply: snippet, deltaMain }].sort((a, b) => b.deltaMain - a.deltaMain).slice(0, 5));
+            } else if (deltaMain <= -4) {
+              setRegrets(r => [...r, { userText: userTurn, aiReply: snippet, deltaMain }].sort((a, b) => a.deltaMain - b.deltaMain).slice(0, 3));
+              setRedflagHits(n => n + 1);
+            }
+
+            // 结束判定
+            const hitMaxTurns = turnsUsed + 1 >= chatMaxTurns;
+            const tooLow = mainAffinity(newAff) < 20 && turnsUsed + 1 >= 4;
+            const aiSuggestEnd = !!meta.suggest_end && turnsUsed + 1 >= chatMinTurnsGood;
+            if (hitMaxTurns || tooLow || aiSuggestEnd) {
+              setTimeout(() => finalizeChat(newAff), 600);
+            }
           }
           return copy;
         });
@@ -637,6 +792,51 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
         abortRef.current = null;
       }
     );
+  };
+
+  /** 结算本次对话 */
+  const finalizeChat = (finalAffinity: AffinityState) => {
+    // 累积好感（仅 challenge 模式）
+    if (chatMode === 'challenge' && chatPartner?.kid) {
+      persistOnEnd('challenge', chatPartner.kid, finalAffinity);
+    }
+    // 准备 metrics & 评分
+    const userMsgs = messages.filter(m => m.role === 'user');
+    const avgLen = userMsgs.length ? userMsgs.reduce((s, m) => s + m.text.length, 0) / userMsgs.length : 0;
+    const affMetrics = buildAffinityMetrics(affinityHistory.length > 0 ? affinityHistory : [finalAffinity]);
+    const hard: HardMetrics = {
+      userMsgCount: userMsgs.length,
+      avgUserMsgLen: avgLen,
+      affinityStart: affMetrics.affinityStart,
+      affinityEnd: mainAffinity(finalAffinity),
+      affinityPeak: Math.max(affMetrics.affinityPeak, mainAffinity(finalAffinity)),
+      turnsUsed: turnsUsed,
+      maxTurns: chatMaxTurns,
+      minTurnsForGoodEnding: chatMinTurnsGood,
+      redflagHits,
+    };
+    // AI 主观分：按当前 4 维等比映射（近似值；真正实现应在 AI 回复中单独要求打分，此处用硬规则代替）
+    const aiDimScores: Record<string, number> = {};
+    if (chatLevelKid) {
+      for (const d of getScoringDims(chatLevelKid)) {
+        // 用主好感 + 该维度对应 4 维的加权近似
+        aiDimScores[d.name] = Math.round(mainAffinity(finalAffinity) * 0.6 + 40 * 0.4);
+      }
+    }
+    const scoring = chatLevelKid
+      ? scoreLevel({ levelKid: chatLevelKid, aiDimScores, metrics: hard })
+      : scoreLevel({ levelKid: 'L001', aiDimScores: {}, metrics: hard }); // fallback
+
+    setShowSummary(true);
+
+    // 保存 summary 到 ref 以供 UI 读取（已经用多个 state，直接组装渲染时读取即可）
+    (window as any).__foxsayLastScoring = scoring;
+
+    // 给 XP
+    if (attemptBadge?.willGrantXP) {
+      const xp = xpRewardForStar(scoring.star, chatMode === 'challenge' ? 'challenge' : 'story');
+      if (xp > 0) user.updateUser?.({ xp: (user.xp || 0) + xp });
+    }
   };
 
   /* ====== 互动匹配 — 角色扮演场景池 ====== */
@@ -1437,7 +1637,11 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
                   className="w-full py-3.5 flex items-center justify-center gap-2"
                   style={{ background: gradients.coral, borderRadius: 14, color: '#fff', fontSize: '15px', fontWeight: 600 }}
                   whileTap={{ scale: 0.98 }}
-                  onClick={() => startChat(String(activePractice.id), activePractice.title, levelPartners[activePractice.id] ?? null)}
+                  onClick={() => {
+                    const id = activePractice.id;
+                    const levelKid = practiceMode === 'story' && id >= 1 && id <= 30 ? 'L' + String(id).padStart(3, '0') : null;
+                    startChat(String(id), activePractice.title, levelPartners[id] ?? null, { levelKid, mode: practiceMode });
+                  }}
                 >
                   <IcSparkle size={16} color="#fff" /> 开始阅读故事
                 </motion.button>
@@ -1472,7 +1676,57 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
                 <div className="text-center">
                   <p style={{ color: '#1f1f1f', fontSize: '16px', fontWeight: 600, lineHeight: 1.1 }}>{chatTitle || 'Ta'}</p>
                 </div>
+                {chatLevelKid && (
+                  <motion.button
+                    className="absolute right-3"
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => finalizeChat(affinity)}
+                    style={{ color: '#EC407A', fontSize: 13, fontWeight: 600 }}
+                  >
+                    结束
+                  </motion.button>
+                )}
               </div>
+              {/* ---- 好感度 + 轮数条（仅关卡模式） ---- */}
+              {chatLevelKid && (
+                <div className="px-4 pb-2 pt-1">
+                  <div className="flex items-center gap-2">
+                    <div style={{ color: '#FF6B9D', fontSize: 11, fontWeight: 600, minWidth: 26 }}>♥{mainAffinity(affinity)}</div>
+                    <div className="relative flex-1" style={{ height: 6, background: 'rgba(0,0,0,0.08)', borderRadius: 3, overflow: 'visible' }}>
+                      <motion.div
+                        animate={{ width: `${mainAffinity(affinity)}%` }}
+                        transition={{ type: 'spring', damping: 20, stiffness: 200 }}
+                        style={{ position: 'absolute', left: 0, top: 0, bottom: 0, background: 'linear-gradient(90deg,#FF8A80,#EC407A)', borderRadius: 3 }}
+                      />
+                      <AnimatePresence>
+                        {deltaPopup && (
+                          <motion.div
+                            key={deltaPopup.id}
+                            initial={{ opacity: 0, y: 0 }}
+                            animate={{ opacity: 1, y: -18 }}
+                            exit={{ opacity: 0, y: -26 }}
+                            style={{
+                              position: 'absolute', right: 4, top: -12,
+                              color: deltaPopup.val >= 0 ? '#EC407A' : '#607D8B',
+                              fontSize: 12, fontWeight: 700, pointerEvents: 'none',
+                            }}
+                          >
+                            {deltaPopup.val >= 0 ? '+' : ''}{deltaPopup.val}
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
+                    </div>
+                    <div style={{ color: 'rgba(0,0,0,0.55)', fontSize: 11, minWidth: 40, textAlign: 'right' }}>
+                      {turnsUsed}/{chatMaxTurns}
+                    </div>
+                  </div>
+                  {attemptBadge && (
+                    <div className="mt-1 text-right" style={{ color: attemptBadge.willGrantXP ? '#07c160' : 'rgba(0,0,0,0.4)', fontSize: 10 }}>
+                      {attemptBadge.willGrantXP ? `第 ${attemptBadge.used} 次 · 本次计 XP` : `第 ${attemptBadge.used}/${attemptBadge.max} 次 · 练习模式`}
+                    </div>
+                  )}
+                </div>
+              )}
             </div>
 
             {/* 消息列表 */}
@@ -1493,8 +1747,10 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
                   );
                 }
                 const isUser = msg.role === 'user';
+                const showInnerOS = !isUser && (msg as any).innerOS && user.subTier === 'proplus';
                 return (
-                  <motion.div key={i} className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-3`}
+                  <div key={i}>
+                  <motion.div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-1`}
                     initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}>
                     {!isUser && (
                       <div className="mr-2 flex-shrink-0" style={{
@@ -1535,9 +1791,48 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
                       </div>
                     )}
                   </motion.div>
+                  {showInnerOS && (
+                    <motion.div
+                      initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
+                      className="flex justify-start mb-3"
+                      style={{ paddingLeft: 46 }}
+                    >
+                      <div style={{
+                        fontSize: 11, color: 'rgba(0,0,0,0.45)', fontStyle: 'italic',
+                        background: 'rgba(155,126,222,0.08)', padding: '3px 8px', borderRadius: 4,
+                        maxWidth: '70%', lineHeight: 1.4,
+                      }}>
+                        💭 {(msg as any).innerOS}
+                      </div>
+                    </motion.div>
+                  )}
+                  {!isUser && (msg as any).delta != null && (msg as any).delta !== 0 && !showInnerOS && <div className="mb-2" />}
+                  </div>
                 );
               })}
             </div>
+
+            {/* 预设开场回复 Chip（前 2 轮且有预设时显示） */}
+            {openingChoices.length > 0 && turnsUsed < 2 && (
+              <div className="px-3 pb-2" style={{ background: 'transparent' }}>
+                <div className="flex gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+                  {openingChoices.map((c, i) => (
+                    <motion.button
+                      key={i}
+                      whileTap={{ scale: 0.95 }}
+                      onClick={() => sendMessage(c)}
+                      style={{
+                        flexShrink: 0, background: '#fff', border: '1px solid rgba(236,64,122,0.3)',
+                        color: '#EC407A', fontSize: 12, padding: '6px 12px', borderRadius: 16,
+                        maxWidth: 240, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                      }}
+                    >
+                      {c}
+                    </motion.button>
+                  ))}
+                </div>
+              </div>
+            )}
 
             {/* 输入框（微信风浅色工具栏） */}
             <div style={{
@@ -1578,6 +1873,43 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
                 </motion.button>
               </div>
             </div>
+
+            {/* 关卡总结 */}
+            {showSummary && (() => {
+              const scoring = (window as any).__foxsayLastScoring;
+              if (!scoring) return null;
+              const ends = chatLevelKid ? getEndings(chatLevelKid) : null;
+              const endingInfo = ends?.[scoring.ending as 'good' | 'neutral' | 'bad'] || { title: scoring.ending === 'perfect' ? '完美' : (scoring.ending === 'good' ? '圆满' : (scoring.ending === 'bad' ? '失落' : '平淡')), description: '' };
+              const xp = attemptBadge?.willGrantXP ? xpRewardForStar(scoring.star, chatMode === 'challenge' ? 'challenge' : 'story') : 0;
+              const startAff = affinityHistory[0] || emptyAffinity();
+              return (
+                <ChatSummary
+                  open
+                  levelTitle={chatTitle}
+                  partnerName={chatPartner?.name}
+                  partnerImg={chatPartner?.img}
+                  affinityStart={startAff}
+                  affinityEnd={affinity}
+                  scoring={scoring}
+                  xpGranted={xp}
+                  abilityGained={scoring.star === 3 ? 1 : 0}
+                  ending={{ title: endingInfo.title || '对话结束', description: endingInfo.description || '' }}
+                  highlights={highlights}
+                  regrets={regrets}
+                  attemptInfo={attemptBadge ? { used: attemptBadge.used, max: attemptBadge.max, willGrantXPNext: false } : undefined}
+                  onRetry={() => {
+                    setShowSummary(false);
+                    if (chatLevelKid) {
+                      startChat(chatTarget, chatTitle, chatPartner, { levelKid: chatLevelKid, mode: chatMode });
+                    } else {
+                      setShowChat(false);
+                    }
+                  }}
+                  onNext={() => { setShowSummary(false); setShowChat(false); }}
+                  onClose={() => { setShowSummary(false); setShowChat(false); }}
+                />
+              );
+            })()}
           </motion.div>
         )}
       </AnimatePresence>
@@ -2038,7 +2370,8 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
           const chapterLevels = currentLevels.filter(l => l.chapter === chapterId);
           const firstPlayable = chapterLevels.find(l => !l.completed && !l.vip) ?? chapterLevels.find(l => !l.vip);
           if (firstPlayable) {
-            startChat(String(firstPlayable.id), firstPlayable.title, levelPartners[firstPlayable.id] ?? null);
+            const kid = practiceMode === 'story' && firstPlayable.id >= 1 && firstPlayable.id <= 30 ? 'L' + String(firstPlayable.id).padStart(3, '0') : null;
+            startChat(String(firstPlayable.id), firstPlayable.title, levelPartners[firstPlayable.id] ?? null, { levelKid: kid, mode: practiceMode });
           } else {
             // 全锁：滚动到该章节封面
             setTimeout(() => {
@@ -2077,7 +2410,10 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
         onStart={(levelId) => {
           const lv = currentLevels.find(l => l.id === levelId);
           setLevelImmersive(null);
-          if (lv) startChat(String(lv.id), lv.title, levelPartners[lv.id] ?? null);
+          if (lv) {
+            const kid = practiceMode === 'story' && lv.id >= 1 && lv.id <= 30 ? 'L' + String(lv.id).padStart(3, '0') : null;
+            startChat(String(lv.id), lv.title, levelPartners[lv.id] ?? null, { levelKid: kid, mode: practiceMode });
+          }
         }}
         onOpenVIP={() => setShowVIP(true)}
       />
