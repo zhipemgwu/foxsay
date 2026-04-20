@@ -412,7 +412,7 @@ const userProgress = {
  *  主组件
  * ======================================== */
 export function PracticePage({ pendingAction, onActionConsumed }: {
-  pendingAction?: { type: 'openLevel' | 'openChapter'; mode: 'story' | 'challenge'; chapterId: number; levelIndex?: number } | null;
+  pendingAction?: { type: 'openLevel' | 'openChapter' | 'openSos'; mode?: 'story' | 'challenge'; chapterId?: number; levelIndex?: number } | null;
   onActionConsumed?: () => void;
 }) {
   /* ---------- 状态管理 ---------- */
@@ -464,10 +464,10 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
   const [showRanking, setShowRanking] = useState(false);          // 排行榜弹窗
   const [bookingSuccess, setBookingSuccess] = useState<{ name: string; time: string } | null>(null); // 预约成功弹窗
   const [expandedChapter, setExpandedChapter] = useState<number | null>(() =>
-    pendingAction ? pendingAction.chapterId : null
+    pendingAction && pendingAction.chapterId != null ? pendingAction.chapterId : null
   );   // 当前展开的大章节 id（null = 全部收起）
   const [levelImmersive, setLevelImmersive] = useState<{ chapterId: number; index: number } | null>(() =>
-    pendingAction?.type === 'openLevel'
+    pendingAction?.type === 'openLevel' && pendingAction.chapterId != null
       ? { chapterId: pendingAction.chapterId, index: pendingAction.levelIndex ?? 0 }
       : null
   ); // 小关卡沉浸页
@@ -493,6 +493,8 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
         const el = document.querySelector(`[data-chapter-id="${pendingAction.chapterId}"]`);
         if (el && 'scrollIntoView' in el) (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 200);
+    } else if (pendingAction.type === 'openSos') {
+      setTimeout(() => startChat('sos', '恋爱急诊室'), 60);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 

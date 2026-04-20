@@ -8,6 +8,10 @@ import { Header } from './components/Header';
 import { GreetingSection } from './components/GreetingSection';
 import { TodayScene } from './components/TodayScene';
 import { DiagnosticStream } from './components/DiagnosticStream';
+import { ChatTranslator } from './components/ChatTranslator';
+import { RedFlagDetector } from './components/RedFlagDetector';
+import { DatePlanner } from './components/DatePlanner';
+import { IconBubble, IcShield, gradients } from './components/CuteIcons';
 import { TabBar } from './components/TabBar';
 const PracticePage = lazy(() => import('./components/PracticePage').then(m => ({ default: m.PracticePage })));
 const DiagnosticPage = lazy(() => import('./components/DiagnosticPage').then(m => ({ default: m.DiagnosticPage })));
@@ -198,9 +202,37 @@ function HomePage({ onPracticeAction }) {
       <TodayScene onPracticeAction={onPracticeAction} />
       <div style={{ height: 16 }} />
 
-      {/* 今日洞察 — 折叠展示 */}
-      <DiagnosticStream />
+      {/* 快速工具箱 （从练习页提前到首页） */}
+      <HomeQuickTools onPracticeAction={onPracticeAction} />
+      <div style={{ height: 16 }} />
+
+      {/* 今日洞察 — 暂隐藏 */}
+      {false && <DiagnosticStream />}
       <div style={{ height: 40 }} />
     </>
+  );
+}
+
+function HomeQuickTools({ onPracticeAction }) {
+  return (
+    <div className="grid grid-cols-2 gap-3">
+      {/* 恋爱急诊室 — 跳转到练习页并启动 SOS 对话 */}
+      <motion.button
+        className="flex items-center gap-3 p-4 text-left"
+        style={{ background: '#453a60', borderRadius: 14 }}
+        whileTap={{ scale: 0.95 }}
+        initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+        onClick={() => onPracticeAction?.({ type: 'openSos' })}
+      >
+        <IconBubble size={42} bg={gradients.rose}><IcShield size={20} color="#fff" /></IconBubble>
+        <div className="flex-1 min-w-0">
+          <span style={{ color: '#f5efe8', fontSize: 13, fontWeight: 600, display: 'block' }}>恋爱急诊室</span>
+          <span style={{ color: 'rgba(245,239,232,0.5)', fontSize: 11 }}>遇到问题马上问</span>
+        </div>
+      </motion.button>
+      <ChatTranslator delay={0.06} />
+      <RedFlagDetector delay={0.1} />
+      <DatePlanner delay={0.14} />
+    </div>
   );
 }
