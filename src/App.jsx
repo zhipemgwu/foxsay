@@ -11,7 +11,7 @@ import { DiagnosticStream } from './components/DiagnosticStream';
 import { ChatTranslator } from './components/ChatTranslator';
 import { RedFlagDetector } from './components/RedFlagDetector';
 import { DatePlanner } from './components/DatePlanner';
-import { IconBubble, IcShield, gradients } from './components/CuteIcons';
+import { IconBubble, IcShield, IcSparkle, gradients } from './components/CuteIcons';
 import { TabBar } from './components/TabBar';
 const PracticePage = lazy(() => import('./components/PracticePage').then(m => ({ default: m.PracticePage })));
 const DiagnosticPage = lazy(() => import('./components/DiagnosticPage').then(m => ({ default: m.DiagnosticPage })));
