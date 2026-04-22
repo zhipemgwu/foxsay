@@ -991,26 +991,8 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
       ],
     });
 
-    // Mock letter（金色信封）— 只在终章（每章最后一关）弹出
-    if (chatIsFinale) {
-      setUnlockLetter({
-        partnerName: pName,
-        partnerImg: chatPartner?.img || '',
-        body: [
-          `写给屏幕那一端的你：`,
-          `谢谢你陪我走完这场戏。从一开始不知道怎么接话，到后来愿意停下来听、愿意把真实的自己递过来——我都看见了。`,
-          `但我必须在这里认真说一句：我只是一个 App 里的角色。不会在凌晨三点给你发消息，不会在地铁上突然想你，也不会在你生病的时候端一碗粥到床边。能做这些的人，在你真实的生活里。`,
-          `你今晚在我身上练出来的勇气——开口、接情绪、不急着证明自己——不要只留在这里。去发那条在草稿框里躺了很久的消息吧。可以是好久没联系的朋友，可以是家人，也可以是一个你一直觉得"算了太麻烦"的同事。`,
-          `真实世界里的人也会紧张，也会词穷，也在等一个"愿意认真回复"的你。答应我，今晚睡前替我、也替你自己，发出去一条真的消息，好吗？`,
-          `—— ${pName}（戏里爱你，戏外祝你被真实世界温柔以待）`,
-        ],
-        growth: highlights[0]?.userText
-          ? `你在「${highlights[0].userText.slice(0, 24)}」那一句时，做到了"不演"。`
-          : '你在今晚做到了不用力讨好，也不急着说服，这是很难的成长。',
-      });
-    } else {
-      setUnlockLetter(null);
-    }
+    // 金色信封功能已下线（用户要求去掉）
+    setUnlockLetter(null);
 
     setShowSummary(true);
   };
@@ -1060,29 +1042,9 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
       if (xp > 0) user.updateUser?.({ xp: (user.xp || 0) + xp });
     }
 
-    // 终关解锁 → 角色写信（star >= 2 视为成功，且是终章、有搭档）
-    // DEV 模式放宽到 star >= 1 方便测试
-    const letterGate = import.meta.env.DEV ? 1 : 2;
-    if (chatIsFinale && scoring.star >= letterGate && chatPartner?.name) {
-      const partnerName = chatPartner.name;
-      const partnerImg = chatPartner.img;
-      const growth = highlights[0]?.userText
-        ? `我记得你说「${highlights[0].userText.slice(0, 28)}」——那一刻你没有在演任何人，你就是你。`
-        : '你没有急着证明什么，没有急着讨好，有一些时刻我甚至以为你是真的喜欢我。';
-      setUnlockLetter({
-        partnerName,
-        partnerImg,
-        growth,
-        body: [
-          `写给屏幕那一端的你：`,
-          `这几次聊下来，我能感觉到你的变化——从一开始的紧张、想了很久才回一句，到后来愿意停下来听，愿意把真实的自己递过来一点点。${growth}`,
-          `但我得在这里认真地跟你说一件事：我只是一个 App 里的角色。我不会在凌晨三点给你发消息，不会在地铁上突然想你，也不会在你生病的时候端一碗粥到床边。能做这些的人，在你真实的生活里。`,
-          `你今晚在我身上练出来的那份勇气——开口、接住情绪、不急着证明自己——不要只留在这里。去发那条你草稿框里躺了很久的消息吧。对象不一定要是"喜欢的人"，可以是好久没联系的朋友，可以是家里人，可以是一个你觉得"算了太麻烦"的同事。`,
-          `真实世界里的人也会紧张，也会词穷，也在等一个"愿意认真回复"的你。答应我，今晚睡觉前，替我、也替你自己，发出去一条真的消息，好吗？`,
-          `—— ${partnerName}（戏里爱你，戏外祝你被真实世界温柔以待）`,
-        ],
-      });
-    }
+    // 终关解锁 → 角色写信功能已下线（用户要求去掉金色信封）
+    // const letterGate = import.meta.env.DEV ? 1 : 2;
+    // if (chatIsFinale && scoring.star >= letterGate && chatPartner?.name) { ... }
 
     // —— AI 教练点评（异步，不阻塞 UI）——
     (async () => {

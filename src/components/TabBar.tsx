@@ -3,7 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 const tabs = [
   { label: '首页', icon: TabHome },
   { label: '成长', icon: TabAI },
-  { label: '练习', icon: TabHeart, isPrimary: true },
+  { label: '微练习', icon: TabHeart, isPrimary: true },
   { label: '订购', icon: TabCrown },
   { label: '我的', icon: TabUser },
 ];

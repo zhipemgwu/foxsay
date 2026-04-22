@@ -18,6 +18,7 @@ const DiagnosticPage = lazy(() => import('./components/DiagnosticPage').then(m =
 const CommunityPage = lazy(() => import('./components/CommunityPage').then(m => ({ default: m.CommunityPage })));
 const ProfilePage = lazy(() => import('./components/ProfilePage').then(m => ({ default: m.ProfilePage })));
 const OrderPage = lazy(() => import('./components/OrderPage').then(m => ({ default: m.OrderPage })));
+import { MicroPracticePage } from './components/MicroPracticePage';
 import { SplashScreen } from './components/SplashScreen';
 import { OnboardingScreen } from './components/OnboardingScreen';
 import { AuthScreen } from './components/AuthScreen';
@@ -46,16 +47,7 @@ export default function App() {
     return 'splash';
   });
   const [activeTab, setActiveTab] = useState(() => {
-    try {
-      const saved = localStorage.getItem('foxsay_stage');
-      if (saved === 'main') {
-        const jumped = localStorage.getItem('foxsay_newuser_jumped');
-        if (!jumped) {
-          const hasPractice = localStorage.getItem('foxsay_practice_history');
-          if (!hasPractice) return 2;
-        }
-      }
-    } catch {}
+    // 练习页已合并到首页，idx 0 即练习内容，无需跳转
     return 0;
   });
   const [homeLoading, setHomeLoading] = useState(true);
@@ -68,16 +60,8 @@ export default function App() {
     setStage('main');
     try {
       localStorage.setItem('foxsay_stage', 'main');
-      // 新用户首次进入直接跳练习页（与 setStage 同批，避免闪 HomePage）
-      const jumped = localStorage.getItem('foxsay_newuser_jumped');
-      if (!jumped) {
-        const hasPractice = localStorage.getItem('foxsay_practice_history');
-        if (!hasPractice) {
-          setActiveTab(2);
-          localStorage.setItem('foxsay_newuser_jumped', '1');
-        }
-      }
     } catch {}
+    // 练习内容已在首页（idx 0），不再需要新用户跳转
   }, []);
   const handleLogout = useCallback(() => {
     try { localStorage.clear(); } catch {}
@@ -86,29 +70,15 @@ export default function App() {
     setHomeLoading(true);
   }, []);
 
-  const goPractice = useCallback(() => setActiveTab(2), []);
+  const goPractice = useCallback(() => setActiveTab(0), []);
 
   const handlePracticeAction = useCallback((action) => {
     setPracticeAction(action);
     skipTabAnimRef.current = true;
-    setActiveTab(2);
+    setActiveTab(0);
   }, []);
 
-  // 刷新页面时的兜底：如果 goToMain 未触发但 stage 已是 main
-  useEffect(() => {
-    if (stage === 'main') {
-      try {
-        const jumped = localStorage.getItem('foxsay_newuser_jumped');
-        if (!jumped) {
-          const hasPractice = localStorage.getItem('foxsay_practice_history');
-          if (!hasPractice) {
-            setActiveTab(2);
-            localStorage.setItem('foxsay_newuser_jumped', '1');
-          }
-        }
-      } catch {}
-    }
-  }, [stage]);
+  // 练习内容已合并到首页（idx 0），无需兜底跳转
 
   useEffect(() => {
     if (stage === 'main' && homeLoading) {
@@ -160,9 +130,9 @@ export default function App() {
                   transition={{ duration: skipTabAnimRef.current ? 0 : 0.2, ease: [0.4, 0, 0.2, 1] }}
                   onAnimationComplete={() => { skipTabAnimRef.current = false; }}
                 >
-                  {activeTab === 0 && (homeLoading ? <HomeSkeletonLoader /> : <HomePage onPracticeAction={handlePracticeAction} />)}
+                  {activeTab === 0 && (homeLoading ? <HomeSkeletonLoader /> : <ErrorBoundary><Suspense fallback={<TabFallback />}><PracticePage pendingAction={practiceAction} onActionConsumed={() => setPracticeAction(null)} /></Suspense></ErrorBoundary>)}
                   {activeTab === 1 && <ErrorBoundary><Suspense fallback={<TabFallback />}><DiagnosticPage /></Suspense></ErrorBoundary>}
-                  {activeTab === 2 && <ErrorBoundary><Suspense fallback={<TabFallback />}><PracticePage pendingAction={practiceAction} onActionConsumed={() => setPracticeAction(null)} /></Suspense></ErrorBoundary>}
+                  {activeTab === 2 && <ErrorBoundary><MicroPracticePage onPracticeAction={handlePracticeAction} /></ErrorBoundary>}
                   {activeTab === 3 && <ErrorBoundary><Suspense fallback={<TabFallback />}><OrderPage /></Suspense></ErrorBoundary>}
                   {activeTab === 4 && <ErrorBoundary><Suspense fallback={<TabFallback />}><ProfilePage onLogout={handleLogout} onPracticeAction={handlePracticeAction} /></Suspense></ErrorBoundary>}
                 </motion.div>
@@ -177,36 +147,6 @@ export default function App() {
     </ProfileModalProvider>
     </SubscriptionProvider>
     </UserProvider>
-  );
-}
-
-function HomePage({ onPracticeAction }) {
-  return (
-    <>
-      {/* Unified top gradient covering Header → GreetingSection */}
-      <div className="relative">
-        <div className="absolute top-0 left-0 right-0 pointer-events-none" style={{
-          height: 420,
-          background: 'radial-gradient(ellipse 80% 50% at 50% 0%, rgba(255,138,128,0.22) 0%, rgba(155,126,222,0.10) 40%, transparent 100%)',
-        }} />
-        <Header />
-        <GreetingSection />
-      </div>
-
-      {/* 每日测评（独立 check-in） */}
-      <HeatUpCard />
-      {/* 今日任务（独立模块，始终显示） */}
-      <TodayTaskList />
-      <div style={{ height: 16 }} />
-
-      {/* 今日推荐 — 沉浸式故事/邂逅封面 */}
-      <TodayScene onPracticeAction={onPracticeAction} />
-      <div style={{ height: 16 }} />
-
-      {/* 今日洞察 — 暂隐藏 */}
-      {false && <DiagnosticStream />}
-      <div style={{ height: 40 }} />
-    </>
   );
 }
 
