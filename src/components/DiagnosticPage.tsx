@@ -1396,7 +1396,6 @@ export function DiagnosticPage() {
   const [showVIPPage, setShowVIPPage] = useState(false);
   const [showFullReport, setShowFullReport] = useState(false);
   const [shareImageUrl, setShareImageUrl] = useState<string | null>(null);
-  const [subTab, setSubTab] = useState(0); // 0=诊断 1=课程 2=训练
   const isVipActive = !!(user as any).isVip && ((user as any).isPro?.() ?? false);
   // 物种数据优先读取 UserContext（新用户鉴定结果），未鉴定时 fallback 到 laosihu
   const userSpecies = {
@@ -1600,31 +1599,6 @@ export function DiagnosticPage() {
         <p style={{ color: 'rgba(245,239,232,0.58)', fontSize: '14px', marginBottom: 4 }}>能力诊断</p>
         <h1 style={{ color: '#f5efe8', fontSize: '28px', fontWeight: 700, letterSpacing: '0.196px', lineHeight: 1.14, margin: 0, marginBottom: 16 }}>你的恋爱力</h1>
 
-        {/* ═══ 子Tab切换 ═══ */}
-        <div className="flex gap-1 mb-5 p-1" style={{ background: 'rgba(245,239,232,0.04)', borderRadius: 12 }}>
-          {[
-            { label: '诊断', icon: '📊' },
-            { label: '课程', icon: '📚' },
-            { label: '训练', icon: '🎯' },
-          ].map((t, i) => (
-            <motion.button key={t.label} className="flex-1 flex items-center justify-center gap-1.5 py-2.5"
-              style={{
-                borderRadius: 10,
-                background: subTab === i ? 'rgba(155,126,222,0.2)' : 'transparent',
-                border: subTab === i ? '1px solid rgba(155,126,222,0.3)' : '1px solid transparent',
-              }}
-              whileTap={{ scale: 0.97 }} onClick={() => setSubTab(i)}>
-              <span style={{ fontSize: 14 }}>{t.icon}</span>
-              <span style={{
-                color: subTab === i ? '#B39DDB' : 'rgba(245,239,232,0.5)',
-                fontSize: 13, fontWeight: 600,
-              }}>{t.label}</span>
-            </motion.button>
-          ))}
-        </div>
-
-        {/* ═══ 诊断 Tab ═══ */}
-        {subTab === 0 && (<>
 
         {/* 恋爱物种鉴定 */}
         <motion.div className="mb-5" initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }}>
@@ -1758,14 +1732,6 @@ export function DiagnosticPage() {
             </motion.button>
           ))}
         </div>
-
-        </>)}
-
-        {/* ═══ 课程 Tab ═══ */}
-        {subTab === 1 && <CourseTab isVip={isVipActive} onOpenVip={() => setShowVIPPage(true)} />}
-
-        {/* ═══ 训练 Tab ═══ */}
-        {subTab === 2 && <TrainingTab isVip={isVipActive} radarData={radarData} onOpenVip={() => setShowVIPPage(true)} />}
 
       </div>
 

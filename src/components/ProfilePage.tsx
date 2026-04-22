@@ -4,20 +4,18 @@ import { EmptyState } from './EmptyState';
 import { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
 import { ChevronRight, X, Crown } from 'lucide-react';
-import { useUser } from '../context/UserContext';import { VIPPage } from './VIPPage';
-import { AssistKeyboardPage } from './AssistKeyboardPage';
+import { useUser } from '../context/UserContext';
 import { SubscriptionManageSheet } from './SubscriptionManageSheet';
 import { useSub } from './SubscriptionSheet';
-import { MyPostsPage, initialMyPosts } from './MyPostsPage';
 import { SocialPage } from './SocialPage';
 import { badgePool } from './SocialPage';
 import { EquippedBadges } from './EquippedBadges';
-import { CoachChatPage, getTotalUnread } from './CoachChatPage';
 import DeepSpeciesTest from './DeepSpeciesTest';
+import { ChatTranslator } from './ChatTranslator';
+import { RedFlagDetector } from './RedFlagDetector';
+import { DatePlanner } from './DatePlanner';
 
 const menuItems = [
-  { icon: <IcPen size={16} color="#fff" />, bg: gradients.sky, label: '我的帖子' },
-  { icon: <IcChat size={16} color="#fff" />, bg: gradients.mint, label: '导师私信' },
   { icon: <IcTrophy size={16} color="#fff" />, bg: gradients.coral, label: '我的成就' },
   { icon: <IcBook size={16} color="#fff" />, bg: gradients.purple, label: '学习记录' },
   { icon: <IcShield size={16} color="#fff" />, bg: gradients.golden, label: '公众号' },
@@ -65,21 +63,15 @@ const settingsGroups = [
 
 type ModalType = 'achievements' | 'learning' | 'settings' | 'privileges' | 'publicAccount' | null;
 
-export function ProfilePage({ onLogout }: { onLogout?: () => void }) {
+export function ProfilePage({ onLogout, onPracticeAction }: { onLogout?: () => void; onPracticeAction?: (action: any) => void }) {
   const user = useUser();
   const [activeModal, setActiveModal] = useState<ModalType>(null);
-  const [showVIP, setShowVIP] = useState(false);
-  const [showAssistKb, setShowAssistKb] = useState(false);
-  const [showSubManage, setShowSubManage] = useState(false);
   const sub = useSub();
   const [showSocial, setShowSocial] = useState(false);
-  const [showMyPosts, setShowMyPosts] = useState(false);
-  const [showCoachChat, setShowCoachChat] = useState(false);
   const [showDeepTest, setShowDeepTest] = useState(false);
   const [editingName, setEditingName] = useState(false);
   const [nameInput, setNameInput] = useState(user.name);
   const [bookedCount, setBookedCount] = useState(0);
-  const [unreadCount, setUnreadCount] = useState(0);
   const [darkToggle, setDarkToggle] = useState(() => {
     const saved = typeof window !== 'undefined' ? localStorage.getItem('darkMode') : null;
     return saved !== null ? saved === 'true' : true;
@@ -92,7 +84,6 @@ export function ProfilePage({ onLogout }: { onLogout?: () => void }) {
         const ids: number[] = JSON.parse(localStorage.getItem('foxsay_booked_coaches') || '[]');
         setBookedCount(ids.length);
       } catch { setBookedCount(0); }
-      setUnreadCount(getTotalUnread());
     };
     refresh();
     window.addEventListener('foxsay_coach_booked', refresh);
@@ -132,7 +123,6 @@ export function ProfilePage({ onLogout }: { onLogout?: () => void }) {
   const hasSpecies = !!user.speciesId;
   const unlockedAchievements = achievementDefs.filter(a => a.need(user, streakDays)).length;
   const menuBadges: Record<string, string> = {
-    '我的帖子': isNewUser ? '' : String(initialMyPosts.length),
     '我的成就': unlockedAchievements > 0 ? String(unlockedAchievements) : '',
   };
   const activeLearningRecords = isNewUser ? [] : learningRecords;
@@ -297,116 +287,52 @@ export function ProfilePage({ onLogout }: { onLogout?: () => void }) {
           </div>
         </motion.div>
 
-        {/* VIP 会员横幅 */}
-        <motion.button
-          className="w-full mb-6 text-left relative overflow-hidden"
-          style={{ borderRadius: 14, padding: 1, background: 'linear-gradient(135deg, rgba(155,126,222,0.5), rgba(255,217,61,0.3), rgba(155,126,222,0.2), rgba(255,217,61,0.4))' }}
-          initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.02 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={() => user.isPro?.() ? setShowSubManage(true) : setShowVIP(true)}
-        >
-            {/* 流光边框动画 */}
-            <motion.div
-              className="absolute inset-0 pointer-events-none"
-              style={{
-                borderRadius: 14,
-                background: 'linear-gradient(90deg, transparent 0%, rgba(255,217,61,0.25) 25%, rgba(155,126,222,0.3) 50%, rgba(255,217,61,0.25) 75%, transparent 100%)',
-                backgroundSize: '200% 100%',
-              }}
-              animate={{ backgroundPosition: ['200% 0', '-200% 0'] }}
-              transition={{ duration: 4, repeat: Infinity, ease: 'linear' }}
-            />
-            {/* 浮动微粒 */}
-            {[
-              { x: '15%', delay: 0, dur: 3 },
-              { x: '45%', delay: 1.2, dur: 2.5 },
-              { x: '75%', delay: 0.6, dur: 3.2 },
-              { x: '90%', delay: 2, dur: 2.8 },
-            ].map((p, i) => (
-              <motion.div key={i}
-                className="absolute pointer-events-none"
-                style={{
-                  left: p.x, bottom: 4,
-                  width: 3, height: 3, borderRadius: '50%',
-                  background: i % 2 === 0 ? 'rgba(255,217,61,0.6)' : 'rgba(155,126,222,0.6)',
-                }}
-                animate={{ y: [0, -20, -36], opacity: [0, 0.8, 0], scale: [0.5, 1, 0.3] }}
-                transition={{ duration: p.dur, repeat: Infinity, delay: p.delay, ease: 'easeOut' }}
-              />
-            ))}
-            <div className="px-4 py-3 flex items-center justify-between relative" style={{ background: '#352f45', borderRadius: 13 }}>
-            <div className="flex items-center gap-3">
-              <motion.div className="w-8 h-8 rounded-lg flex items-center justify-center"
-                style={{ background: 'linear-gradient(135deg, rgba(155,126,222,0.3), rgba(255,217,61,0.15))' }}
-                animate={{ boxShadow: ['0 0 8px rgba(155,126,222,0.15)', '0 0 16px rgba(155,126,222,0.3)', '0 0 8px rgba(155,126,222,0.15)'] }}
-                transition={{ duration: 2.5, repeat: Infinity }}>
-                <Crown size={14} color="rgba(155,126,222,0.7)" strokeWidth={2.5} />
-              </motion.div>
-              <div>
-                <div className="flex items-center gap-2">
-                  <span style={{ color: 'rgba(245,239,232,0.8)', fontSize: '14px', fontWeight: 700 }}>{user.isPro?.() ? '管理订阅会员' : '开通会员'}</span>
-                  <span style={{ color: 'rgba(245,239,232,0.45)', fontSize: '11px' }}>
-                    {user.isPro?.()
-                      ? (user.subExpireAt ? `剩余 ${user.daysLeft?.() || 0} 天` : '已激活')
-                      : '解锁全部功能'}
-                  </span>
+        {/* XP 晋级卡片 */}
+        {(() => {
+          const xp = user.xp || 0;
+          const maxXp = 500;
+          const percent = Math.min(100, Math.round((xp / maxXp) * 100));
+          const remain = Math.max(0, maxXp - xp);
+          const lv = user.level || 1;
+          const rankOf = (l: number) => {
+            if (l >= 21) return { rank: '恋爱大师', next: null as string | null };
+            if (l >= 16) return { rank: '恋爱达人', next: '恋爱大师' };
+            if (l >= 11) return { rank: '恋爱学徒', next: '恋爱达人' };
+            if (l >= 6)  return { rank: '恋爱新手', next: '恋爱学徒' };
+            return                { rank: '恋爱新生', next: '恋爱新手' };
+          };
+          const { rank, next } = rankOf(lv);
+          return (
+            <motion.div className="mb-4 overflow-hidden" style={{ borderRadius: 16, border: '1px solid rgba(245,239,232,0.08)' }}
+              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+              <div className="p-5" style={{ background: '#352f45', borderRadius: 16 }}>
+                <div className="flex items-center justify-between mb-3">
+                  <div className="flex items-center gap-2">
+                    <IconBubble size={24} bg={gradients.purple}><IcCrown size={12} color="#fff" /></IconBubble>
+                    <span style={{ color: '#f5efe8', fontSize: '14px', fontWeight: 600 }}>Lv.{lv} {rank}</span>
+                    {next && (
+                      <>
+                        <span style={{ color: 'rgba(245,239,232,0.55)', fontSize: '13px' }}>→</span>
+                        <span style={{ color: '#FF8A80', fontSize: '14px', fontWeight: 600 }}>{next}</span>
+                      </>
+                    )}
+                  </div>
+                  <span style={{ color: 'rgba(245,239,232,0.65)', fontSize: '12px' }}>{xp}/{maxXp}</span>
                 </div>
-                <p style={{ color: 'rgba(245,239,232,0.5)', fontSize: '11px', marginTop: 2 }}>
-                  {user.isPro?.() ? '点击管理订阅 · 升级 / 续费 / 关闭自动续费' : '解锁 AI 键盘·深度诊断·专属导师'}
+                <div className="w-full overflow-hidden" style={{ height: 6, borderRadius: 3, background: 'rgba(245,239,232,0.12)' }}>
+                  <motion.div className="h-full" style={{ background: 'linear-gradient(90deg, #FF8A80, #FFB199)', borderRadius: 3 }}
+                    initial={{ width: '0%' }} animate={{ width: `${percent}%` }} transition={{ duration: 1, delay: 0.3 }} />
+                </div>
+                <p style={{ color: 'rgba(245,239,232,0.58)', fontSize: '12px', marginTop: 10 }}>
+                  {next
+                    ? <>再获得 <span style={{ color: '#f5efe8', fontWeight: 600 }}>{remain} XP</span> 即可晋级</>
+                    : <>已达顶级段位 🎉</>}
                 </p>
               </div>
-            </div>
-            <ChevronRight size={16} color="rgba(245,239,232,0.4)" />
-          </div>
-        </motion.button>
-
-        {/* 辅助键盘入口 (PRO 下方) */}
-        <motion.button
-          className="w-full mb-6 relative overflow-hidden text-left"
-          style={{
-            borderRadius: 14,
-            background: 'linear-gradient(135deg, #3d3354 0%, #453a60 55%, #3a2f4e 100%)',
-            border: '1px solid rgba(255,138,128,0.22)',
-          }}
-          initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.35, delay: 0.04 }}
-          whileTap={{ scale: 0.98 }}
-          onClick={() => setShowAssistKb(true)}
-        >
-          {/* 流光点缀 */}
-          <motion.div
-            className="absolute pointer-events-none"
-            style={{
-              top: -20, right: -20, width: 120, height: 120, borderRadius: '50%',
-              background: 'radial-gradient(circle, rgba(255,217,61,0.18) 0%, transparent 70%)',
-            }}
-            animate={{ scale: [1, 1.15, 1], opacity: [0.6, 1, 0.6] }}
-            transition={{ duration: 3, repeat: Infinity, ease: 'easeInOut' }}
-          />
-          <div className="px-4 py-3.5 flex items-center gap-3 relative">
-            <motion.div
-              className="flex items-center justify-center flex-shrink-0"
-              style={{
-                width: 42, height: 42, borderRadius: 12,
-                background: 'linear-gradient(135deg, #FF8A80 0%, #F5B87C 60%, #FFD93D 100%)',
-                boxShadow: '0 6px 16px rgba(255,138,128,0.35)',
-              }}
-              animate={{ rotate: [0, 3, -3, 0] }}
-              transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
-            >
-              <IcSparkle size={18} color="#fff" />
             </motion.div>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-1.5">
-                <span style={{ color: '#f5efe8', fontSize: 14, fontWeight: 700 }}>撩研所 · 辅助键盘</span>
-                <span style={{ fontSize: 9, color: '#FFD93D', border: '1px solid rgba(255,217,61,0.4)', padding: '1px 5px', borderRadius: 6, lineHeight: 1.2 }}>NEW</span>
-              </div>
-              <p style={{ color: 'rgba(245,239,232,0.55)', fontSize: 11, marginTop: 2 }}>
-                智能回复 · 话术库 · 创作工具 · 潜台词翻译
-              </p>
-            </div>
-            <ChevronRight size={16} color="rgba(245,239,232,0.5)" />
-          </div>
-        </motion.button>
+          );
+        })()}
+
         <div className="grid grid-cols-3 gap-3 mb-6">
           {(() => {
             const abilityVals = user.abilityScores ? Object.values(user.abilityScores).map((v: any) => Number(v) || 0) : [];
@@ -437,26 +363,38 @@ export function ProfilePage({ onLogout }: { onLogout?: () => void }) {
               style={{ background: '#453a60', borderRadius: idx === 0 ? '14px 14px 0 0' : idx === menuItems.length - 1 ? '0 0 14px 14px' : 0 }}
               initial={{ opacity: 0, x: -6 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.12 + idx * 0.04 }}
               whileTap={{ scale: 0.98 }} onClick={() => {
-                if (item.label === '我的帖子') return setShowMyPosts(true);
-                if (item.label === '导师私信') return setShowCoachChat(true);
                 if (item.label === '公众号') { setActiveModal('publicAccount'); return; }
                 setActiveModal(menuActions[item.label] || null);
               }}>
               <IconBubble size={36} bg={item.bg}>{item.icon}</IconBubble>
               <span className="flex-1" style={{ color: '#f5efe8', fontSize: '14px', fontWeight: 600 }}>{item.label}</span>
-              {item.label === '导师私信' ? (
-                unreadCount > 0 && (
-                  <span className="flex items-center gap-1.5" style={{ marginRight: 4 }}>
-                    <span className="min-w-5 h-5 rounded-full flex items-center justify-center px-1" style={{ background: '#FF4444', fontSize: 11, fontWeight: 700, color: '#fff' }}>{unreadCount}</span>
-                  </span>
-                )
-              ) : (
-                menuBadges[item.label] && <span style={{ color: 'rgba(245,239,232,0.58)', fontSize: '12px', marginRight: 4 }}>{menuBadges[item.label]}</span>
-              )}
+              {menuBadges[item.label] && <span style={{ color: 'rgba(245,239,232,0.58)', fontSize: '12px', marginRight: 4 }}>{menuBadges[item.label]}</span>}
               <ChevronRight size={14} color="rgba(245,239,232,0.34)" strokeWidth={2} />
             </motion.button>
             </div>
           ))}
+        </div>
+
+        {/* 妙妙工具 */}
+        <div className="mt-4 mb-4">
+          <div className="grid grid-cols-2 gap-3">
+            <motion.button
+              className="flex items-center gap-3 p-4 text-left"
+              style={{ background: '#453a60', borderRadius: 14, minWidth: 0 }}
+              whileTap={{ scale: 0.95 }}
+              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
+              onClick={() => onPracticeAction?.({ type: 'openSos' })}
+            >
+              <IconBubble size={42} bg={gradients.rose}><IcShield size={20} color="#fff" /></IconBubble>
+              <div className="flex-1 min-w-0">
+                <span style={{ color: '#f5efe8', fontSize: 13, fontWeight: 600, display: 'block' }}>恋爱急诊室</span>
+                <span style={{ color: 'rgba(245,239,232,0.5)', fontSize: 11 }}>遇到问题马上问</span>
+              </div>
+            </motion.button>
+            <ChatTranslator delay={0.06} />
+            <RedFlagDetector delay={0.1} />
+            <DatePlanner delay={0.14} />
+          </div>
         </div>
       </div>
 
@@ -748,26 +686,10 @@ export function ProfilePage({ onLogout }: { onLogout?: () => void }) {
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {showVIP && <VIPPage onClose={() => setShowVIP(false)} />}
-      </AnimatePresence>
 
-      <AnimatePresence>
-        {showAssistKb && <AssistKeyboardPage onClose={() => setShowAssistKb(false)} />}
-      </AnimatePresence>
-
-      <SubscriptionManageSheet open={showSubManage} onClose={() => setShowSubManage(false)} onUpgrade={() => setShowVIP(true)} />
 
       <AnimatePresence>
         {showSocial && <SocialPage onClose={() => setShowSocial(false)} />}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {showMyPosts && <MyPostsPage onClose={() => setShowMyPosts(false)} />}
-      </AnimatePresence>
-
-      <AnimatePresence>
-        {showCoachChat && <CoachChatPage onClose={() => setShowCoachChat(false)} />}
       </AnimatePresence>
 
       <AnimatePresence>

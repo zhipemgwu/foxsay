@@ -17,6 +17,7 @@ const PracticePage = lazy(() => import('./components/PracticePage').then(m => ({
 const DiagnosticPage = lazy(() => import('./components/DiagnosticPage').then(m => ({ default: m.DiagnosticPage })));
 const CommunityPage = lazy(() => import('./components/CommunityPage').then(m => ({ default: m.CommunityPage })));
 const ProfilePage = lazy(() => import('./components/ProfilePage').then(m => ({ default: m.ProfilePage })));
+const OrderPage = lazy(() => import('./components/OrderPage').then(m => ({ default: m.OrderPage })));
 import { SplashScreen } from './components/SplashScreen';
 import { OnboardingScreen } from './components/OnboardingScreen';
 import { AuthScreen } from './components/AuthScreen';
@@ -162,8 +163,8 @@ export default function App() {
                   {activeTab === 0 && (homeLoading ? <HomeSkeletonLoader /> : <HomePage onPracticeAction={handlePracticeAction} />)}
                   {activeTab === 1 && <ErrorBoundary><Suspense fallback={<TabFallback />}><DiagnosticPage /></Suspense></ErrorBoundary>}
                   {activeTab === 2 && <ErrorBoundary><Suspense fallback={<TabFallback />}><PracticePage pendingAction={practiceAction} onActionConsumed={() => setPracticeAction(null)} /></Suspense></ErrorBoundary>}
-                  {activeTab === 3 && <ErrorBoundary><Suspense fallback={<TabFallback />}><CommunityPage /></Suspense></ErrorBoundary>}
-                  {activeTab === 4 && <ErrorBoundary><Suspense fallback={<TabFallback />}><ProfilePage onLogout={handleLogout} /></Suspense></ErrorBoundary>}
+                  {activeTab === 3 && <ErrorBoundary><Suspense fallback={<TabFallback />}><OrderPage /></Suspense></ErrorBoundary>}
+                  {activeTab === 4 && <ErrorBoundary><Suspense fallback={<TabFallback />}><ProfilePage onLogout={handleLogout} onPracticeAction={handlePracticeAction} /></Suspense></ErrorBoundary>}
                 </motion.div>
               </AnimatePresence>
             </div>
@@ -202,10 +203,6 @@ function HomePage({ onPracticeAction }) {
       <TodayScene onPracticeAction={onPracticeAction} />
       <div style={{ height: 16 }} />
 
-      {/* 快速工具箱 （从练习页提前到首页） */}
-      <HomeQuickTools onPracticeAction={onPracticeAction} />
-      <div style={{ height: 16 }} />
-
       {/* 今日洞察 — 暂隐藏 */}
       {false && <DiagnosticStream />}
       <div style={{ height: 40 }} />
@@ -213,35 +210,3 @@ function HomePage({ onPracticeAction }) {
   );
 }
 
-function HomeQuickTools({ onPracticeAction }) {
-  return (
-    <div className="px-5 pb-2">
-      {/* 标题 */}
-      <div className="flex items-center gap-2 mb-4">
-        <span style={{ color: '#f5efe8', fontSize: 18, fontWeight: 600 }}>妙妙工具</span>
-        <motion.div animate={{ rotate: [0, 15, -15, 0] }} transition={{ duration: 2, repeat: Infinity }}>
-          <IcSparkle size={14} color="#FFD93D" />
-        </motion.div>
-      </div>
-      <div className="grid grid-cols-2 gap-3">
-        {/* 恋爱急诊室 — 跳转到练习页并启动 SOS 对话 */}
-        <motion.button
-          className="flex items-center gap-3 p-4 text-left"
-          style={{ background: '#453a60', borderRadius: 14, minWidth: 0 }}
-          whileTap={{ scale: 0.95 }}
-          initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-          onClick={() => onPracticeAction?.({ type: 'openSos' })}
-        >
-          <IconBubble size={42} bg={gradients.rose}><IcShield size={20} color="#fff" /></IconBubble>
-          <div className="flex-1 min-w-0">
-            <span style={{ color: '#f5efe8', fontSize: 13, fontWeight: 600, display: 'block' }}>恋爱急诊室</span>
-            <span style={{ color: 'rgba(245,239,232,0.5)', fontSize: 11 }}>遇到问题马上问</span>
-          </div>
-        </motion.button>
-        <ChatTranslator delay={0.06} />
-        <RedFlagDetector delay={0.1} />
-        <DatePlanner delay={0.14} />
-      </div>
-    </div>
-  );
-}

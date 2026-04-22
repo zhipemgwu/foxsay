@@ -1110,35 +1110,6 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
 
         {/* ====== 5. 关卡模式切换 + 章节标签 + 关卡列表 ====== */}
 
-        {/* 排行榜入口 */}
-        <motion.button
-          className="w-full mb-4 p-[1px] overflow-hidden"
-          style={{ borderRadius: 16, background: 'linear-gradient(135deg, rgba(255,217,61,0.4), rgba(255,138,128,0.25), rgba(155,126,222,0.25))' }}
-          whileTap={{ scale: 0.98 }}
-          onClick={() => setShowRanking(true)}
-          initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.22 }}
-        >
-          <div className="flex items-center gap-3 px-4 py-3.5"
-            style={{ background: 'linear-gradient(135deg, #4a3f65, #453a60)', borderRadius: 15 }}>
-            <IconBubble size={38} bg={gradients.golden} glow glowColor="#FFD93D">
-              <IcTrophy size={16} color="#fff" />
-            </IconBubble>
-            <div className="flex-1 min-w-0">
-              <div className="flex items-center gap-2">
-                <span style={{ color: '#FFD93D', fontSize: 14, fontWeight: 700 }}>恋爱排行榜</span>
-                <span className="px-1.5 py-0.5" style={{ background: 'rgba(255,138,128,0.2)', borderRadius: 4, color: '#FF8A80', fontSize: 9, fontWeight: 700 }}>HOT</span>
-              </div>
-              <p style={{ color: 'rgba(245,239,232,0.5)', fontSize: 11, marginTop: 2 }}>看看你能排到第几名</p>
-            </div>
-            <div className="flex items-center -space-x-2 mr-2">
-              {['🥇', '🥈', '🥉'].map((m, i) => (
-                <div key={i} className="flex items-center justify-center" style={{ width: 24, height: 24, borderRadius: 12, background: '#3d3358', border: '2px solid #453a60', fontSize: 12 }}>{m}</div>
-              ))}
-            </div>
-            <ChevronRight size={16} color="rgba(245,239,232,0.35)" />
-          </div>
-        </motion.button>
-
         {/* 模式切换：剧情关卡 / 人物挑战 */}
         <div className="flex gap-0 mb-3 p-1" style={{ background: '#3d3358', borderRadius: 12 }}>
           {(['story', 'challenge'] as const).map(m => (

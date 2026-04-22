@@ -66,37 +66,6 @@ export function GreetingSection() {
             </div>
           </div>
         </motion.div>
-
-        {/* XP card with gradient border */}
-        <motion.div className="mt-5 overflow-hidden" style={{
-          borderRadius: 16,
-          border: '1px solid rgba(245,239,232,0.08)',
-        }} initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4, delay: 0.1 }}>
-          <div className="p-5" style={{ background: '#352f45', borderRadius: 16 }}>
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-2">
-                <IconBubble size={24} bg={gradients.purple}><IcCrown size={12} color="#fff" /></IconBubble>
-                <span style={{ color: '#f5efe8', fontSize: '14px', fontWeight: 600 }}>Lv.{user.level} {rank}</span>
-                {next && (
-                  <>
-                    <span style={{ color: 'rgba(245,239,232,0.55)', fontSize: '13px' }}>→</span>
-                    <span style={{ color: '#FF8A80', fontSize: '14px', fontWeight: 600 }}>{next}</span>
-                  </>
-                )}
-              </div>
-              <span style={{ color: 'rgba(245,239,232,0.65)', fontSize: '12px' }}>{xp}/{maxXp}</span>
-            </div>
-            <div className="w-full overflow-hidden" style={{ height: 6, borderRadius: 3, background: 'rgba(245,239,232,0.12)' }}>
-              <motion.div className="h-full" style={{ background: 'linear-gradient(90deg, #FF8A80, #FFB199)', borderRadius: 3 }}
-                initial={{ width: '0%' }} animate={{ width: `${percent}%` }} transition={{ duration: 1, delay: 0.5 }} />
-            </div>
-            <p style={{ color: 'rgba(245,239,232,0.58)', fontSize: '12px', marginTop: 10 }}>
-              {next
-                ? <>再获得 <span style={{ color: '#f5efe8', fontWeight: 600 }}>{remain} XP</span> 即可晋级</>
-                : <>已达顶级段位 🎉</>}
-            </p>
-          </div>
-        </motion.div>
       </div>
     </div>
   );

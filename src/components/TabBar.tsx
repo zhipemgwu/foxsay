@@ -4,7 +4,7 @@ const tabs = [
   { label: '首页', icon: TabHome },
   { label: '成长', icon: TabAI },
   { label: '练习', icon: TabHeart, isPrimary: true },
-  { label: '社区', icon: TabChat },
+  { label: '订购', icon: TabCrown },
   { label: '我的', icon: TabUser },
 ];
 
@@ -171,6 +171,17 @@ function TabUser({ size, color, active }: { size: number; color: string; active:
         stroke={color} strokeWidth={active ? 2 : 1.6} />
       <path d="M20 21c0-3.314-3.582-6-8-6s-8 2.686-8 6"
         stroke={color} strokeWidth={active ? 2 : 1.6} strokeLinecap="round" />
+    </svg>
+  );
+}
+
+function TabCrown({ size, color, active }: { size: number; color: string; active: boolean }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d="M3 8l4 3 5-6 5 6 4-3-2 11H5L3 8z"
+        fill={active ? color : 'transparent'} opacity={active ? 0.2 : 0}
+        stroke={color} strokeWidth={active ? 2 : 1.6} strokeLinejoin="round" strokeLinecap="round" />
+      <path d="M5 19h14" stroke={color} strokeWidth={active ? 2 : 1.6} strokeLinecap="round" />
     </svg>
   );
 }
