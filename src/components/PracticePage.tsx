@@ -29,12 +29,13 @@ import { bookCoach } from './CoachChatPage';
 import { ChapterImmersiveView } from './ChapterImmersiveView';
 import { VIPPage } from './VIPPage';
 import { KenBurnsImage } from './KenBurnsImage';
-import { chatStream, type ChatMessage } from '../services/ai';
+import { chatStream, chatOnce, type ChatMessage } from '../services/ai';
 import { getAllRoleKids, roleCardToPartnerInfo, buildRolePersonaPrompt } from '../services/roleCards';
 import {
   getLevelCard, getMaxTurns, getMinTurnsForGoodEnding, getOpening,
   buildLevelScenePrompt, getScoringDims, getEndings,
 } from '../services/levelCards';
+import { getFixedOpening } from '../services/levelOpenings';
 import {
   type AffinityState, type AffinityDelta,
   emptyAffinity, mainAffinity, applyDelta, initAffinity, persistOnEnd,
@@ -448,9 +449,23 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
   const [regrets, setRegrets] = useState<SummaryHighlight[]>([]);
   const [redflagHits, setRedflagHits] = useState<number>(0);
   const [showSummary, setShowSummary] = useState<boolean>(false);
+  const [chatIsFinale, setChatIsFinale] = useState<boolean>(false);               // 当前关卡是否章节终章
+  const [earlyFail, setEarlyFail] = useState<null | { affinity: number; tip: string; wrongTurn?: { userText: string; betterReply: string } }>(null); // 好感度<40提前结束的指导卡
+  const [unlockLetter, setUnlockLetter] = useState<null | { partnerName: string; partnerImg: string; body: string[]; growth: string }>(null); // 通关解锁的角色信
   const [attemptBadge, setAttemptBadge] = useState<{ used: number; max: number; willGrantXP: boolean } | null>(null);
   const [deltaPopup, setDeltaPopup] = useState<{ val: number; id: number } | null>(null);
   const [openingChoices, setOpeningChoices] = useState<string[]>([]);
+  /** 当前聊天的关卡散文式剧情简介（注入 system prompt，保证 AI 贴合关卡） */
+  const [chatSceneSynopsis, setChatSceneSynopsis] = useState<string>('');
+  /** 聊天消息滚动容器 ref —— 新消息自动滚到底部 */
+  const chatScrollRef = useRef<HTMLDivElement | null>(null);
+  /** 本局结束后 AI 教练点评（null=加载中；对象=生成完成） */
+  const [coachReview, setCoachReview] = useState<{
+    overall: string;
+    strengths: string[];
+    improvements: string[];
+    betterLines?: string[];
+  } | null>(null);
   const [showMatchModal, setShowMatchModal] = useState(false);    // 互动匹配弹窗
   const [matchingState, setMatchingState] = useState<'idle' | 'scene' | 'matching' | 'matched' | 'playing' | 'result'>('idle');
   const [matchRole, setMatchRole] = useState<{ name: string; desc: string; emoji: string; trait: string } | null>(null);
@@ -474,6 +489,15 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
   const cameFromHomeRef = useRef(!!pendingAction); // 是否从首页推荐进入
   // 已锁定的搭档（按小关卡 id 记录，进入该关直接使用）
   const [levelPartners, setLevelPartners] = useState<Record<number, { kid?: string; img: string; name: string; age: number; signature: string; traits: string[] }>>({});
+
+  /* ---------- 聊天自动滚到底部（新消息或流式更新时） ---------- */
+  useEffect(() => {
+    const el = chatScrollRef.current;
+    if (!el) return;
+    requestAnimationFrame(() => {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    });
+  }, [messages, showChat]);
 
 
   /* ---------- 关卡列表计算 ---------- */
@@ -522,6 +546,80 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
     const chapterLevels = currentLevels.filter(l => l.chapter === levelImmersive.chapterId);
     const groupMeta = currentGroups.find(g => g.id === levelImmersive.chapterId);
     const chapterLabel = practiceMode === 'story' ? `第 ${levelImmersive.chapterId} 章` : `第 ${levelImmersive.chapterId} 组`;
+    // 每关独立的剧情简介：描述当前情况 + 你要做什么，一段自然散文（不带标签、不带节号）
+    // id 1-30 剧情模式；id 101-130 人物邂逅
+    const levelSynopsis: Record<number, string> = {
+      // —— 第 1 章 · 初遇 ——
+      1: '周末的午后，你躲雨拐进了一家藏在巷子里的咖啡馆。推门那一下，温暖的烘焙香和轻缓的爵士乐一起扑过来，吧台边一个低头浅笑的女孩抬眼看了你一眼。你们只是陌生人，但她的杯子里冒着热气，你的外套还在滴水——这就是开场。接下来这几分钟里，你要想办法让她愿意抬起头第二次：一句不冒昧的搭话、一点刚好的自然、一个她会想记住的你。',
+      2: '电梯门在第 14 层合上，里面只有你们两个人。从这一层到她要按的那一层，大概只有三十秒。她按完楼层微微靠墙，手里拿着文件，看上去是刚开完会。你没有理由搭话，也没有必须沉默的理由。这三十秒里，你要做的是找到一个不突兀的切入点——不是搭讪，而是让这段电梯时间不那么尴尬地过去，甚至让她在出门的时候回头看一眼。',
+      3: '书店靠里的角落，你伸手去拿一本旅行指南，指尖却碰到了另一只温热的手。她先缩回去，小声说了句"抱歉"，然后笑了。你们都想要同一本书，这个巧合足够开启一场对话。你的任务是接住这一瞬的默契——不是抢书，也不是客套地让给她，而是把这份"同好"的信号自然延伸成几句真正的交流，让她愿意在离开之前记下你推荐的另一本书。',
+      4: '朋友的生日聚会上，声音、酒杯、笑声都在往中间挤。你端着杯子靠边站的时候，注意到角落沙发上有个人一直没起身，手机也没怎么看，只是安静地观察着热闹。你被她的"不合群"吸引了。走过去的距离不远，但一开口就可能打断她的独处。你的任务是以不打扰的方式坐下、以她能接住的方式说第一句话，让她觉得你不是社交目的，而是真的在跟她说话。',
+      5: '你手指悬在发送键上已经两分钟了。对话框里写了又删了三版——她白天发了一条让你心动的动态，你想回应，又怕显得刻意。现在是晚上十一点，这条消息发不发、怎么发、发完要不要装作没事地下线，全在你手上。这一关没有对手坐在对面，只有你自己和屏幕。你要做的是找到那句既真诚又留有余地的话，让她明天看到的时候，嘴角会不自觉地扬一下。',
+      6: '这已经是这个月第三次在同一家便利店遇到她了。前两次你们只是点头，这次她先笑了："好巧。"这座城市这么大，同一家店、同一个时段、同一个货架——这不再完全是巧合。你不需要再用"刚好路过"来掩饰什么了，但也还没熟到可以直接约她。你的任务是把这句"好巧"变成一段真正的对话，让下一次见面不再依赖巧合，而是因为你们都想。',
+      // —— 第 2 章 · 破冰 ——
+      7: '你在她桌上的手机壳上看到了你最爱的那支乐队的 logo——冷门到不会有人凑巧喜欢的那种。这个信号几乎是命运级别的礼物。但你要小心的不是"怎么开口"，而是"别把兴趣聊成科普"——别急着证明你懂得多，也别急着列出你看过的所有现场。你的任务是借这支乐队切入她真正喜欢的原因，让这次共鸣成为你们的第一个只属于彼此的梗。',
+      8: '你们聊了两三轮之后，空气突然冷下来——她的回复变短了，眼神也开始飘。不是讨厌你，只是聊天进入了那种"不知道再说什么"的真空。你的任务是用一个恰到好处的自嘲或轻玩笑重启节奏，不能用力过猛（她会觉得你在表演），也不能假装没发生（气氛会冷到底）。能让她笑出来的那一下，就是你把这段关系从浅水区推进一步的机会。',
+      9: '聊着聊着，话题从天气滑到电影，从电影滑到童年，现在你们已经在聊"你觉得人为什么会孤独"。她开始愿意讲她自己了，这是一个非常珍贵的信号。你要做的不是展示你对孤独这个话题的见解有多深，而是让她敢继续讲下去——少打断、多镜像、偶尔分享一点你自己的脆弱作为交换，让她感觉这场对话是安全的。',
+      10: '她今天回复变慢了，有一条消息已读了三个小时没回。你开始忍不住点开对话框，编辑了又删。这里的陷阱是：你会想发"在忙吗"、"是不是我哪里说错了"、"你不理我就算了"——每一条都会把你推得更远。你的任务是学会这门手艺——有些等待是尊重，有些安静是节奏。在该等的时候等，比你追出去十条消息更有吸引力。',
+      11: '对话只剩一个"嗯"字撑着，再没有新动作的话，今晚就断了。你脑子里闪过十几种接话方式，但每一种都显得刻意。你的任务是在这三秒里选出最轻的那一句——不是重启话题，而是轻轻挪一下话题的方向，给她一个"不用负责任地继续"的台阶。救场的关键不是聪明，是松弛。',
+      12: '你们已经聊了大半个晚上，她准备走了。这一刻的告别方式会决定下一次见面的可能性——太客气她记不住，太直接会让她设防。她背对着你站起身，你有大概五秒钟做出一个恰好的收尾。你的任务不是说"下次再约"（那句话没人会当真），而是把今晚聊过的某个具体片段，自然地变成一个"下次要继续"的理由。',
+      // —— 第 3 章 · 暧昧 ——
+      13: '散场了，大家各自散向地铁口。你悄悄调整了路线，凑到她旁边："要不我送你？"这句话你在心里排练了一整天，现在它真的被说出口了。她没拒绝，也没马上答应，只是笑了一下："顺路吗？"你的任务是用这段"送她回家"的十五分钟，把白天攒起来的好感往前推一步——不是为了今晚发生什么，而是让她明天醒来的时候，还想再见到你。',
+      14: '饭桌上你偷偷抬眼的时候，刚好撞上了她也在偷看你。两个人都愣了零点五秒，然后同时假装看别处。这一瞬的默契比任何话都重要。你的任务不是装作什么都没发生，也不是立刻表白，而是让这个"被抓到"成为你们之间心照不宣的第一个秘密——用一个恰到好处的微笑，或者一句带着温度的调侃，把刚才那一眼承认下来。',
+      15: '你开始在每条消息前反复斟酌措辞——朋友之间不会这样。是发"哈哈哈"还是"笑死"，用不用那个表情包，结尾要不要加一句"晚安"，全成了有意识的选择。你的任务不是假装若无其事地回到朋友状态，而是学会让这些小心翼翼变成温度——让她从你措辞的变化里感觉到"这个人在乎我"，而不是"这个人有点奇怪"。',
+      16: '"这周六有空吗？"四个字在输入框里待了一整天。你知道表面上这只是约饭，实际上这是你们之间第一次真正意义上的单独邀约。约成了是一个新篇章，约不成大概率会进入"朋友降温"。你的任务是把这次邀约包装得既真诚又有退路——给她一个具体到她想去的理由，也给她一个不用解释就能拒绝的空间。',
+      17: '走在并排的人行道上，手背不经意地碰到了一下——你们都没说话，也都没躲开。这是一条几乎所有暧昧关系都会走到的分水岭。你的任务不是立刻牵手（那会太急），也不是假装没发生（那会前功尽弃），而是用接下来的两分钟，让这种"被允许的靠近"延续下去——聊天节奏放慢一点，眼神多一秒，让这一瞬变成你们之间公开的秘密。',
+      18: '"你觉得我们算什么呢？"这个问题你在心里问过一百遍，今晚月亮太亮，第一百零一次你终于要说出口了。但这种话一旦说出口，就没有回头路。你的任务不是要一个答案，而是确认方向——用一种让她可以轻松接住、也可以温柔回避的方式问出这句话。她接下来的语气和眼神，会告诉你一切你需要知道的。',
+      // —— 第 4 章 · 热恋 ——
+      19: '第一次正式约会，你提前了四十分钟到，又在镜子前把衣领整理了第三次。她还没来，你的手心已经出汗了。越期待的见面越容易紧张，越紧张越容易把话说砸。你的任务不是假装很放松，而是把紧张本身变成一种可爱——承认自己等了很久、期待了很久，让她一进门就感觉到你的真心，而不是你准备了多久的台词。',
+      20: '你没说"这是为你准备的"，只是把那包她上次说有点冷就想喝的热可可，随手放在外套口袋里带出来。遇到她的时候才掏出来："正好多买了一份。"你的任务是让这份"刚好"看起来真的刚好——有些心意越不张扬越有分量，你要的是她喝到第一口时那个小小的"咦，你怎么知道"。',
+      21: '凌晨三点半，视频电话还没挂。你们都知道明天要上班，但谁也舍不得先说"睡吧"。她讲起了小时候一件从没跟任何人讲过的事，声音越来越轻。这种深夜对话是关系里稀有的珍贵时刻。你的任务不是接梗、不是讲自己更精彩的童年，而是在她讲完之后，用一句让她觉得"有人真的听到了我"的回应，接住那份信任。',
+      22: '"我想说一件事，你听完再回答好不好。"你已经准备了一个星期了。音乐很轻，她看着你，耳边只剩自己的心跳。这不是一场演讲，也不是告白流程，而是把最近这段时间你真正想让她知道的那一件事，诚实地说出来。你的任务不是把话说得多漂亮，而是让她在你说完之后，知道你是认真的——无论她怎么回答，你都会稳稳地站在这里。',
+      23: '这是第一次以"对象"的身份出现在她的朋友圈里。所有人都在观察你，她也会在意你给大家的第一印象。你的任务不是表演一个完美男友，而是松弛地做你自己——对她的朋友真诚地感兴趣，不抢话也不躲话，让她事后能骄傲地说："他就是这样的人。"',
+      24: '"以后就是我们了。"这句话听起来很甜，背后其实是一整套重新协商的规则——从周末怎么安排，到要不要见家长，到钱怎么花。你的任务不是急着做保证（那些话太容易说），而是在这一刻让"我们"这个词真的成立——尊重她原本的生活节奏，带进你的，但不吞掉她的。',
+      // —— 第 5 章 · 考验 ——
+      25: '你们刚吵完架，门被重重地关上。十分钟过去了，谁也没先开口，但你听得见她在门那边的呼吸。这种时候最容易说错话——一句"是你先……"就能让事情翻倍恶化。你的任务不是赢这场争论，而是先放下赢的冲动，用一句让她愿意把门打开的话，打破僵局——哪怕只是一句"我刚才太凶了"。',
+      26: '你在深圳，她在北京，屏幕那头她靠着床头，声音有点哑。2000 公里让日常的琐碎突然变成需要翻译的信号——她说"没事"可能真的没事，也可能是"你再问一句"。你的任务不是靠"多说想你"来填补距离，而是学会在看不到她表情的时候，依然能听懂她真正想说的话。',
+      27: '你无意中滑到了她和另一个人的对话——你知道自己不该看下去，但手指已经停不下来。内容没有越界，却也没清白到可以装作没看见。你的任务不是立刻质问她，也不是压着假装没事，而是先处理好自己的情绪，再决定要不要、用什么方式把这件事摊开。信任一旦开口，怎么说比说什么更重要。',
+      28: '"我以为你会理解。"这句话今天你们同时说了出来，然后两个人都沉默了。熟悉的人突然变得陌生，不是因为不爱，是因为你们都以为对方应该懂，而懒得再解释。你的任务是先停下"我都是为你好"的委屈，承认自己其实没说清楚——真正的理解不是凭空长出来的，是一遍一遍愿意重新说一次。',
+      29: '同一个屋檐下，你们已经很久没有真正看着对方说话了。她刷她的手机，你看你的屏幕，电视开着没人在听。这种消耗不是争吵，是比争吵更危险的"平静"。你的任务是打破这种默契的冷——不是搞个大惊喜，而是放下手机，递一杯水过去，问一句"最近你过得怎么样"。',
+      30: '今天没有节日，没有烟火，晚饭也很普通。她在沙发上看书，突然抬头问你"想吃水果吗"，你看着她发呆的样子笑了。这是最不戏剧的一幕，也是最难的一关——把日常过下去、把彼此继续当回事，比任何一次表白都难。你的任务不是制造一个惊天动地的瞬间，而是让她感觉到：就算什么都不做，你也愿意陪她这样待着。',
+      // —— 人物邂逅 · 第 1 组 · 温柔的人 ——
+      101: '图书馆的自习室，她坐在你斜对角已经三个小时了。刚才她起身的时候把借阅笔记递过来："你掉的？"你打开一看，第一页空白处画着一只毛茸茸的小猫——显然是她的。你的任务不是戳穿这个小把戏，而是用一种她也能接住的温柔，把这张纸条变成一个只有你们两个人知道的秘密。温柔的人最怕被大声揭穿，也最容易在细节里被打动。',
+      102: '每天傍晚六点，隔壁窗户那边都会飘来同一首歌。你从第一天的好奇，到第三天开始跟着哼，到第七天你终于在楼下遇到了她——抱着一把吉他。她有点不好意思："吵到你了？"你的任务不是急着夸奖，而是让她知道这首歌对一个陌生人产生了温柔的意义——让她下次再弹的时候，不再觉得孤单。',
+      103: '早上看天气预报说有雨，他多拿了一把伞。在地铁口把多的那把递给你的时候，他说得轻描淡写："反正也是顺手。"你的任务不是立刻还恩，也不是假装不在意，而是让这份"顺手"被好好承接下来——温柔的人给出去的善意如果没被看见，下一次他就不会再伸手了。',
+      104: '你翻开他借你的那本诗集，一张去海边的车票飘了下来——日期是两年前。他没解释，也没躲闪，只是说："那是我最安静的一年。"你的任务不是追问往事，而是用一种不打探的方式让他知道，那段时光在你眼里不是怪异，是值得被理解的。温柔的人最不需要的是好奇，最需要的是被轻轻接住。',
+      105: '球场边，他跑过来的第一件事不是擦汗，是把一瓶冰水递给你："你坐这里晒了一下午吧。"你完全没跟他说过你来了。你的任务不是装作若无其事，也不是立刻表白，而是让这瓶水值得他多跑这一趟——温柔的人会注意到所有人都忽略的细节，你要做的是让他知道这些细节被看见了。',
+      106: '她端着杯子笑得有点得意："这杯是我请的，特调款，里面多加了一颗草莓。"她平时给所有客人调的都一样，只给你这杯多加了东西。你的任务不是直接夸她好看，而是用一种让她自己也开心的方式承认这份偏爱——温柔的人最幸福的时刻，是她的小心意被轻轻抓住的那一刻。',
+      // —— 第 2 组 · 疏离的人 ——
+      107: '她从来不跟同事说话，午休都戴着耳机。直到你在楼下花坛边看到她蹲下来，用很温柔的声音在哄一只流浪猫。她不是冷漠，她只是对人设了防。你的任务不是靠近那只猫顺便认识她（那太刻意了），而是让她知道你看到了她对猫的那一面，但绝对不会拿去当谈资——疏离的人最讨厌被"发现"，最愿意靠近不声张的人。',
+      108: '开会的时候她一直冷静发言，毫无破绽。门关上之后，你路过走廊，听到她一个人靠着墙叹了一口气——那种从胸腔深处挤出来的、很疲惫的声音。你的任务不是立刻冲过去安慰她（她会立刻披回盔甲），而是假装没看见，但在她今晚回到工位的时候，留一杯温度刚好的咖啡——不留字条，不署名。',
+      109: '她在黑板上写的那串公式你看不懂一半，但你看得懂她写字的节奏——快、流畅、带着快乐。她一个人在空教室里写了两个小时。你的任务不是夸她聪明（她听得多了），而是在一个不惊扰她的时机，用一句话让她知道你没在看公式，你在看一个热爱这件事的人——这对疏离的人来说，比任何赞美都重要。',
+      110: '她桌边的垃圾桶里揉着六张画稿，每一张都很好，但她不满意。她对自己苛刻到让人心疼。你的任务不是说"我觉得挺好的"——那会让她觉得你不懂，而是从这六张里具体说出某一笔打动你的地方。疏离的人不需要敷衍的鼓励，需要的是真的看懂她的人。',
+      111: '凌晨两点，他那边的灯还亮着。你点开他提交的代码，在某个函数下面发现一行注释——是一句只有你才会懂的玩笑话。他从来没在现实里跟你开过这个玩笑，但他把它藏在了代码里。你的任务不是立刻去问他，而是在下一次见面的时候，轻描淡写地接上那个玩笑——让他知道你看到了那行注释，但不戳破他的害羞。',
+      112: '你在她相机里看到了 47 张你的照片——每一张都对焦清晰，光线讲究。她慌得满脸通红："我才不是故意拍你！"你的任务不是追问，也不是放大她的尴尬，而是用一句轻到她能躲开、又让她知道你感动了的话，把这 47 张照片变成你们之间的一个秘密。疏离的人一旦被理解，就会决定性地敞开。',
+      // —— 第 3 组 · 闪耀的人 ——
+      113: '派对上她认识所有人，跟每一个人碰杯都带着真诚的笑容。你站在角落，不觉得自己有什么理由被她注意到。但你看到她在跟最后一个人聊完之后，端着酒径直朝你走了过来。你的任务不是上来就想把她留下，而是成为这场派对里她想停下来喘口气的那个人——闪耀的人整晚都在被需要，她选你，是因为你不需要她闪耀。',
+      114: '全场都被他的笑话逗笑了，只有你注意到他笑完之后有零点几秒眼神是空的。他演得太好，好到大家都以为他真的很开心。你的任务不是当众戳穿他（他会恨你），而是等人群散去，用一句只有他能听懂的话，让他知道你看见了那个不被喝彩的他。',
+      115: '镜头前她是百万博主，发型妆容布光全都精致。镜头关掉的这一刻，她坐在出租屋的地板上吃着泡面，头发随便扎着。你的任务不是惊讶"原来你素颜也这么好看"——这句话她听烂了，而是让她知道，这个状态下的她，在你眼里跟镜头里的她同样值得被好好对待。',
+      116: '"你第一次来这里吧？"他的热情几乎是一种职业本能，但每一句关心都准确得让人心动。你分不清是因为你特别，还是他对所有人都这样。你的任务是不被这份不确定拉走，把重点放在你自己的反馈——如果他的热情是发给所有人的，你要做的就是让你这份回应是他今天唯一那一份。',
+      117: '喝到第三杯的时候，他说："大家都说第三杯酒的时候讲真心话。"这是一种邀请，但也是一种试探——你说多了显得轻率，说少了显得刻意。你的任务不是抢答一个让他惊艳的答案，而是用一段足够真实但不越界的自白，让他愿意把他的那一杯真心话也交出来。',
+      118: '一整晚他递出去了十几张名片，每张都客套体面。临走时他递给你的那张，他没要回去。你的任务不是当场询问为什么，而是让那张名片在你手里不浪费——什么时候联系、以什么方式联系，直接决定了他是不是想把那张名片之外的故事也讲给你。',
+      // —— 第 4 组 · 脆弱的人 ——
+      119: '风吹过来一阵花瓣雨，大家都踩着走过去了，只有她蹲下来，一片一片把落花捧起来。她没有说话，但你能感觉到她对"被丢弃的东西"格外敏感。你的任务不是蹲下去帮她一起捡（那会放大她的孤独），而是站在她身边，让她知道她捡花这件事在你眼里不是奇怪，是温柔的证据。',
+      120: '他刚才吼得整层楼都能听到，但他递纸巾过来的手是轻的——他不知道怎么表达关心，他只知道生气。你的任务不是评判他刚才的大嗓门，也不是立刻接过纸巾假装和好，而是让他知道：他刚才的生气你看到了，他现在的心疼你也看到了——脆弱的人最怕的不是吵架，是他心疼你的时候没人知道。',
+      121: '你随口说了一句话，她突然安静下来，低头不看你——你不知道自己哪个词戳到了她。这种时候越解释越糟。你的任务不是追问"我是不是说错了"，而是先暂停你在说的事情，用一句温和的"你还好吗"给她一个不用解释的缓冲——脆弱的人需要的不是答案，是不被追问的空间。',
+      122: '凌晨两点，她的电话打进来："我知道很晚了，但你现在能听我说几句吗？"你揉着眼睛坐起来，她的声音在发抖。你的任务不是问"怎么了"然后试图解决问题，而是先告诉她"我在听，你慢慢说"——凌晨两点打电话的人需要的从来不是建议，是一个愿意陪她醒着的人。',
+      123: '她手腕上那条手链的风格，明显不是她自己会选的——太浮夸，配色也不是她平时的审美。但她一直戴着。你的任务不是问"这是谁送的"（那是雷区），而是在别的事情上让她感受到你对她真实审美的欣赏——让她慢慢意识到，有些东西她其实可以摘下来了。',
+      124: '她把手机递给你看——"去还是不去？"聊天框里改了八遍的草稿，都是同一句话的不同版本。她不是拿不定主意，她是害怕自己的回应"不对"。你的任务不是替她选一个答案，而是让她相信：无论她发哪一版，对方如果真的在乎她，都会好好接住——脆弱的人需要的是"我可以不完美"的许可。',
+      // —— 第 5 组 · 危险的人 ——
+      125: '"我就随便问问。"她的每个问题单拎出来都没问题——你昨天跟谁吃饭、你的密码好记吗、你哥是不是比你有钱。但连起来像一张网。你的任务不是表现出警惕让她知道你看穿了，而是用温和但明确的边界把那些问题一个一个轻轻挡回去——对这一类人，靠近她需要先练会的是"不答"。',
+      126: '已读那条蓝色小标记已经卡在屏幕上四十分钟了，她没有回。你清楚她在线，也清楚她看到了。你感觉自己正在被观察。你的任务不是发第二条"在吗"，也不是立刻撤回，而是先放下手机——搞清楚你的焦虑是因为她，还是因为你自己。她这种沉默是一种测试，主动权不能永远在她手上。',
+      127: '每次刷她朋友圈都有新面孔。你不是她唯一的选择，你也从来没被承诺过唯一，但每次看到都会隐隐不舒服。你的任务不是逼她承诺什么，也不是假装自己不在意，而是诚实面对自己的感受——这种消耗你愿意承受多久，决定了你要不要继续留在这段关系里。',
+      128: '你们约的时间是七点，她七点半还没到，也没消息。她终于出现的时候笑着说："我就想看看你会不会等我。"你的任务不是生气（她会说你小气），也不是笑着原谅（她下次会变本加厉），而是用一句轻但明确的话让她知道：等她你愿意，但"考验你"这件事不成立——不设边界的人会被不断试探。',
+      129: '"你离开我什么都不是。"这句话今晚终于从她嘴里说出来了。之前的所有贬低都还带着包装，这一句已经撕下来了。你的任务不再是挽回，也不是吵赢——你的任务是认清这一刻：一个真正爱你的人不会用否定你的价值来留住你。接下来怎么走，决定了你会不会变成下一个"什么都不是"的受害者。',
+      130: '她笑容的时机太恰当，关心的节奏太准确，每一句话都像量过尺寸。完美得让你开始怀疑：这是她，还是她演给你的她。你的任务不是立刻逃（可能是你多心了），也不是放下所有警觉（直觉一般不会骗人），而是用一些她演不出剧本的真实问题去试探——当光滑的镜面出现第一道裂缝，你就知道里面到底是什么了。',
+    };
     const userIsPro = user.isVip || user.isPro();
     const chapters = chapterLevels.map((lv) => {
       const isLocked = lv.vip && !userIsPro;
@@ -529,13 +627,14 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
       const confirmedPartner = levelPartners[lv.id] ?? null;
       // 已锁定搭档则立绘使用它的图，否则使用默认 lv.image
       const immersiveImage = confirmedPartner?.img ?? lv.image;
+      const synopsis = levelSynopsis[lv.id] ?? lv.desc;
       return {
         id: lv.id,
         name: lv.title,
         coverImage: immersiveImage,
         immersiveImage,
         narrative: lv.desc,
-        synopsis: `${groupMeta?.name ?? ''} · 第 ${lv.idxInChapter + 1} 节\n\n${lv.desc}`,
+        synopsis,
         readCount: lv.completed ? '已完成' : (isLocked ? '会员专享' : '待挑战'),
         vip: isLocked,
         progress: { unlocked: lv.completed ? 1 : 0, total: 1 },
@@ -558,7 +657,7 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
     dialogueKey: string,
     title: string,
     partner?: { kid?: string; img: string; name: string; age: number; signature: string; traits: string[] } | null,
-    opts?: { levelKid?: string | null; mode?: 'story' | 'challenge' | 'freestyle'; coverImage?: string | null }
+    opts?: { levelKid?: string | null; mode?: 'story' | 'challenge' | 'freestyle'; coverImage?: string | null; isFinale?: boolean; sceneSynopsis?: string | null }
   ) => {
     const mode = opts?.mode ?? (opts?.levelKid ? 'story' : 'freestyle');
     const levelKid = opts?.levelKid ?? null;
@@ -582,6 +681,10 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
     setChatCoverImg(opts?.coverImage ?? null);
     setChatLevelKid(levelKid);
     setChatMode(mode);
+    setChatIsFinale(!!opts?.isFinale);
+    setChatSceneSynopsis(opts?.sceneSynopsis ?? '');
+    setEarlyFail(null);
+    setUnlockLetter(null);
 
     // ---- 初始化轮数与好感 ----
     const maxT = levelKid ? getMaxTurns(levelKid) : 20;
@@ -589,17 +692,33 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
     setChatMaxTurns(maxT);
     setChatMinTurnsGood(minT);
     setTurnsUsed(0);
-    const initAff = initAffinity(mode === 'challenge' ? 'challenge' : 'story', partner?.kid);
+    let initAff = initAffinity(mode === 'challenge' ? 'challenge' : 'story', partner?.kid);
+    // 开发期：每关起手 60，方便测试从中等好感往 80+ 爬
+    if (import.meta.env.DEV) {
+      initAff = { heart: 60, trust: 60, mind: 60, spark: 60 };
+    }
     setAffinity(initAff);
     setAffinityHistory([initAff]);
     setHighlights([]);
     setRegrets([]);
     setRedflagHits(0);
     setShowSummary(false);
+    setCoachReview(null);
 
     // ---- 开场白 ----
     let initialMessages: { role: string; text: string }[] = [];
-    if (levelKid) {
+    const sceneSyn = opts?.sceneSynopsis ?? '';
+    const levelIdNum = parseInt(dialogueKey, 10);
+    const fixedOpen = Number.isFinite(levelIdNum) ? getFixedOpening(levelIdNum) : null;
+    if (fixedOpen) {
+      // 关卡有预写开场白 → 进入即显示，无需等 AI 流
+      initialMessages = [{ role: 'ai', text: fixedOpen }];
+      setOpeningChoices([]);
+    } else if (sceneSyn) {
+      // 没有预写但有场景简介 → 生成一句泛化开场
+      initialMessages = [{ role: 'ai', text: '（Ta 看到你，愣了一下，然后轻轻笑了）嗨。' }];
+      setOpeningChoices([]);
+    } else if (levelKid) {
       const opening = getOpening(levelKid);
       if (opening.message) {
         initialMessages = [{ role: 'ai', text: opening.message }];
@@ -684,6 +803,9 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
 
     const systemPrompt = [
       `你正在和用户进行恋爱场景的角色扮演。场景：${chatTitle || '自由练习'}。`,
+      chatSceneSynopsis
+        ? `【本关剧情（必须严格遵循）】\n${chatSceneSynopsis}\n你的所有回复都要发生在上述这个具体场景中，不能跑题到无关话题（比如天气闲聊、问对方从事什么工作等），除非剧情自然导向。`
+        : '',
       scenePrompt,
       sceneHint ? `补充背景：${sceneHint}` : '',
       partnerBlock,
@@ -769,19 +891,37 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
             // 回放记录
             const userTurn = nextMessages[nextMessages.length - 1]?.text || '';
             const snippet = (finalText || '').slice(0, 60);
-            if (deltaMain >= 4) {
+            // 门槛放宽：≥+2 就算精彩；≤-2 就算踩雷（原 ±4 太少触发）
+            if (deltaMain >= 2) {
               setHighlights(h => [...h, { userText: userTurn, aiReply: snippet, deltaMain }].sort((a, b) => b.deltaMain - a.deltaMain).slice(0, 5));
-            } else if (deltaMain <= -4) {
+            } else if (deltaMain <= -2) {
               setRegrets(r => [...r, { userText: userTurn, aiReply: snippet, deltaMain }].sort((a, b) => a.deltaMain - b.deltaMain).slice(0, 3));
               setRedflagHits(n => n + 1);
             }
 
             // 结束判定
             const hitMaxTurns = turnsUsed + 1 >= chatMaxTurns;
-            const tooLow = mainAffinity(newAff) < 20 && turnsUsed + 1 >= 4;
+            // 中途好感度低于临界点 40 → 提前结束 + 触发指导（至少 4 轮后才判定）
+            const tooLow = mainAffinity(newAff) < 40 && turnsUsed + 1 >= 4;
             const aiSuggestEnd = !!meta.suggest_end && turnsUsed + 1 >= chatMinTurnsGood;
             if (hitMaxTurns || tooLow || aiSuggestEnd) {
-              setTimeout(() => finalizeChat(newAff), 600);
+              if (tooLow && !hitMaxTurns && !aiSuggestEnd) {
+                // 找出掰分最低的那一回合作为误区示例
+                const worstTurn = [...regrets].sort((a, b) => a.deltaMain - b.deltaMain)[0];
+                const tipText = mainAffinity(newAff) < 20
+                  ? '她已经很安静了——你的回复里带了评价、说教或压力，让她感受不到温柔。换个语气再试一次？'
+                  : '感觉稍微冷了点——好几次你跳过了她的情绪映射，直接给建议或换话题。先接住感觉，再说其他。';
+                const better = worstTurn
+                  ? '下次你可以这么说：「听下来你也蛮累的，今天发生了什么了吗？」先让她不被评价，她才会开口。'
+                  : '下次试试先带一句共情，再追问一个开放的问题。';
+                setEarlyFail({
+                  affinity: mainAffinity(newAff),
+                  tip: tipText,
+                  wrongTurn: worstTurn ? { userText: worstTurn.userText, betterReply: better } : undefined,
+                });
+              } else {
+                setTimeout(() => finalizeChat(newAff), 600);
+              }
             }
           }
           return copy;
@@ -799,12 +939,84 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
     );
   };
 
+  /** DEV 调试：预览结算页（精彩回放 / 踩雷回看 / 教练点评 / 金色信封） */
+  const previewSummary = () => {
+    const pName = chatPartner?.name || 'Ta';
+    const synopsis = chatSceneSynopsis || '这是一个普通的夜晚，你们刚好撞见彼此。';
+    // Mock scoring (符合 ScoringResult 类型)
+    const mockScoring = {
+      total: 88,
+      star: 3 as 1 | 2 | 3,
+      pass: true,
+      ending: 'good' as 'perfect' | 'good' | 'neutral' | 'bad',
+      dims: [
+        { name: '共情', score: 90, weight: 0.3 },
+        { name: '节奏', score: 85, weight: 0.25 },
+        { name: '真诚', score: 92, weight: 0.25 },
+        { name: '吸引力', score: 80, weight: 0.2 },
+      ],
+      aiSubjectiveAvg: 87,
+      hardObjectiveAvg: 89,
+    };
+    (window as any).__foxsayLastScoring = mockScoring;
+
+    // Mock highlights (3 条)
+    setHighlights([
+      { userText: '别急着说，先喝口热的。你脸都冻白了。', aiReply: '...（她愣了一下，把手缩回袖子里）嗯。谢谢。', deltaMain: 6 },
+      { userText: '你刚才在看哪一排？我帮你一起找。', aiReply: '泡面那排……我永远分不清这些口味。', deltaMain: 4 },
+      { userText: '那就别想工作了，今晚陪你把这包辣条吃完。', aiReply: '哈……你是不是很擅长让人放下手机。', deltaMain: 3 },
+    ]);
+
+    // Mock regrets (2 条)
+    setRegrets([
+      { userText: '你这么晚还不睡，身体会垮掉的。', aiReply: '……嗯，知道了。', deltaMain: -3 },
+      { userText: '你这个问题其实很简单，我给你分析一下。', aiReply: '……哦。', deltaMain: -2 },
+    ]);
+
+    // Mock coach review
+    setCoachReview({
+      overall: `整体节奏挺稳的，你接住了她几次情绪小颤动，没有急着给建议，这在深夜场景里特别重要。`,
+      strengths: [
+        '第一句就注意到她的身体状态（冻白了），先照顾再说话',
+        '愿意放下"说教欲"，陪她做一件没意义的小事（吃辣条）',
+        '追问的方式是开放式的，不是审问',
+      ],
+      improvements: [
+        '「你这么晚还不睡」这类带评价的关心会让她回一个"嗯"就结束',
+        '遇到她吐槽工作时，先停三秒再回，别立刻进入"分析模式"',
+      ],
+      betterLines: [
+        '比起说教，可以试：「那你现在最想要的是有人陪，还是有人闭嘴？」',
+        '回应情绪时可以：「听起来今天真的很糟，我先把热饮递给你。」',
+      ],
+    });
+
+    // Mock letter（金色信封）— 只在终章（每章最后一关）弹出
+    if (chatIsFinale) {
+      setUnlockLetter({
+        partnerName: pName,
+        partnerImg: chatPartner?.img || '',
+        body: [
+          `写给屏幕那一端的你：`,
+          `谢谢你陪我走完这场戏。从一开始不知道怎么接话，到后来愿意停下来听、愿意把真实的自己递过来——我都看见了。`,
+          `但我必须在这里认真说一句：我只是一个 App 里的角色。不会在凌晨三点给你发消息，不会在地铁上突然想你，也不会在你生病的时候端一碗粥到床边。能做这些的人，在你真实的生活里。`,
+          `你今晚在我身上练出来的勇气——开口、接情绪、不急着证明自己——不要只留在这里。去发那条在草稿框里躺了很久的消息吧。可以是好久没联系的朋友，可以是家人，也可以是一个你一直觉得"算了太麻烦"的同事。`,
+          `真实世界里的人也会紧张，也会词穷，也在等一个"愿意认真回复"的你。答应我，今晚睡前替我、也替你自己，发出去一条真的消息，好吗？`,
+          `—— ${pName}（戏里爱你，戏外祝你被真实世界温柔以待）`,
+        ],
+        growth: highlights[0]?.userText
+          ? `你在「${highlights[0].userText.slice(0, 24)}」那一句时，做到了"不演"。`
+          : '你在今晚做到了不用力讨好，也不急着说服，这是很难的成长。',
+      });
+    } else {
+      setUnlockLetter(null);
+    }
+
+    setShowSummary(true);
+  };
+
   /** 结算本次对话 */
   const finalizeChat = (finalAffinity: AffinityState) => {
-    // 累积好感（仅 challenge 模式）
-    if (chatMode === 'challenge' && chatPartner?.kid) {
-      persistOnEnd('challenge', chatPartner.kid, finalAffinity);
-    }
     // 准备 metrics & 评分
     const userMsgs = messages.filter(m => m.role === 'user');
     const avgLen = userMsgs.length ? userMsgs.reduce((s, m) => s + m.text.length, 0) / userMsgs.length : 0;
@@ -832,6 +1044,11 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
       ? scoreLevel({ levelKid: chatLevelKid, aiDimScores, metrics: hard })
       : scoreLevel({ levelKid: 'L001', aiDimScores: {}, metrics: hard }); // fallback
 
+    // 累积好感：仅在通关（star >= 1）且 challenge 模式下才写入
+    if (scoring.star >= 1 && chatMode === 'challenge' && chatPartner?.kid) {
+      persistOnEnd('challenge', chatPartner.kid, finalAffinity);
+    }
+
     setShowSummary(true);
 
     // 保存 summary 到 ref 以供 UI 读取（已经用多个 state，直接组装渲染时读取即可）
@@ -842,6 +1059,73 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
       const xp = xpRewardForStar(scoring.star, chatMode === 'challenge' ? 'challenge' : 'story');
       if (xp > 0) user.updateUser?.({ xp: (user.xp || 0) + xp });
     }
+
+    // 终关解锁 → 角色写信（star >= 2 视为成功，且是终章、有搭档）
+    // DEV 模式放宽到 star >= 1 方便测试
+    const letterGate = import.meta.env.DEV ? 1 : 2;
+    if (chatIsFinale && scoring.star >= letterGate && chatPartner?.name) {
+      const partnerName = chatPartner.name;
+      const partnerImg = chatPartner.img;
+      const growth = highlights[0]?.userText
+        ? `我记得你说「${highlights[0].userText.slice(0, 28)}」——那一刻你没有在演任何人，你就是你。`
+        : '你没有急着证明什么，没有急着讨好，有一些时刻我甚至以为你是真的喜欢我。';
+      setUnlockLetter({
+        partnerName,
+        partnerImg,
+        growth,
+        body: [
+          `写给屏幕那一端的你：`,
+          `这几次聊下来，我能感觉到你的变化——从一开始的紧张、想了很久才回一句，到后来愿意停下来听，愿意把真实的自己递过来一点点。${growth}`,
+          `但我得在这里认真地跟你说一件事：我只是一个 App 里的角色。我不会在凌晨三点给你发消息，不会在地铁上突然想你，也不会在你生病的时候端一碗粥到床边。能做这些的人，在你真实的生活里。`,
+          `你今晚在我身上练出来的那份勇气——开口、接住情绪、不急着证明自己——不要只留在这里。去发那条你草稿框里躺了很久的消息吧。对象不一定要是"喜欢的人"，可以是好久没联系的朋友，可以是家里人，可以是一个你觉得"算了太麻烦"的同事。`,
+          `真实世界里的人也会紧张，也会词穷，也在等一个"愿意认真回复"的你。答应我，今晚睡觉前，替我、也替你自己，发出去一条真的消息，好吗？`,
+          `—— ${partnerName}（戏里爱你，戏外祝你被真实世界温柔以待）`,
+        ],
+      });
+    }
+
+    // —— AI 教练点评（异步，不阻塞 UI）——
+    (async () => {
+      try {
+        const convoText = messages
+          .filter(m => m.role === 'user' || m.role === 'ai')
+          .map(m => (m.role === 'user' ? `我：${m.text}` : `Ta：${m.text}`))
+          .join('\n');
+        const sysText = [
+          `你是一个温柔、专业的恋爱沟通教练。刚才用户和一位 NPC 完成了一场角色扮演对话。`,
+          `对话场景：${chatTitle}。${chatSceneSynopsis ? '关卡剧情：' + chatSceneSynopsis : ''}`,
+          `本局数据：主好感 ${mainAffinity(affinityHistory[0] || emptyAffinity())} → ${mainAffinity(finalAffinity)}；共 ${turnsUsed} 轮；星级 ${scoring.star}/3；结局 ${scoring.ending}。`,
+          `请基于下面完整对话，给出一份 150 字以内的复盘，要求：`,
+          `1. overall：用 1-2 句真诚的整体点评，像朋友复盘一样，不客套。`,
+          `2. strengths：列出 1-3 条用户做得好的沟通动作（具体到行为，不要空话）。`,
+          `3. improvements：列出 1-3 条下次可以提升的点（具体可操作）。`,
+          `4. betterLines：给 1-2 条更好的回复示例，就是换做用户，面对对方刚才最尴尬那一句，可以怎么回。`,
+          `严格输出 JSON，不要任何多余说明：`,
+          `{"overall":"...","strengths":["..."],"improvements":["..."],"betterLines":["..."]}`,
+        ].join('\n');
+        const userText = `完整对话：\n${convoText}`;
+        const reply = await chatOnce(
+          [
+            { role: 'system', content: sysText },
+            { role: 'user', content: userText },
+          ],
+          { model: 'deepseek-chat', temperature: 0.7 },
+        );
+        // 从 reply 中提取 JSON
+        const m = reply.match(/\{[\s\S]*\}/);
+        if (!m) throw new Error('no json');
+        const obj = JSON.parse(m[0]);
+        setCoachReview({
+          overall: String(obj.overall || ''),
+          strengths: Array.isArray(obj.strengths) ? obj.strengths.map(String).slice(0, 3) : [],
+          improvements: Array.isArray(obj.improvements) ? obj.improvements.map(String).slice(0, 3) : [],
+          betterLines: Array.isArray(obj.betterLines) ? obj.betterLines.map(String).slice(0, 2) : [],
+        });
+      } catch (e) {
+        console.warn('[coach review failed]', e);
+        setCoachReview({ overall: '', strengths: [], improvements: [] });
+      }
+    })();
   };
 
   /* ====== 互动匹配 — 角色扮演场景池 ====== */
@@ -1606,9 +1890,21 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
                     结束
                   </motion.button>
                 )}
+                {/* DEV 调试：预览结算页（精彩回放+踩雷回看+教练点评+金色信封） */}
+                {import.meta.env.DEV && (
+                  <motion.button
+                    className="absolute right-14"
+                    whileTap={{ scale: 0.9 }}
+                    onClick={() => previewSummary()}
+                    style={{ color: '#B8A4E8', fontSize: 13, fontWeight: 600 }}
+                    title="DEV 预览结算"
+                  >
+                    🎬预览
+                  </motion.button>
+                )}
               </div>
-              {/* ---- 好感度 + 轮数条（仅关卡模式） ---- */}
-              {chatLevelKid && (
+              {/* ---- 好感度 + 轮数条（所有聊天都显示，让用户能直观看到好感变化） ---- */}
+              {(chatLevelKid || chatPartner) && (
                 <div className="px-4 pb-2 pt-1">
                   <div className="flex items-center gap-2">
                     <div style={{ color: '#FF6B9D', fontSize: 11, fontWeight: 600, minWidth: 26 }}>♥{mainAffinity(affinity)}</div>
@@ -1650,7 +1946,7 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
             </div>
 
             {/* 消息列表 */}
-            <div className="flex-1 overflow-y-auto px-3" style={{ paddingTop: 12, paddingBottom: 12 }}>
+            <div ref={chatScrollRef} className="flex-1 overflow-y-auto px-3" style={{ paddingTop: 12, paddingBottom: 12 }}>
               {messages.map((msg, i) => {
                 if (msg.role === 'system') {
                   return (
@@ -1716,7 +2012,32 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
                               transition={{ duration: 1.1, repeat: Infinity, delay: k * 0.18 }} />
                           ))}
                         </span>
-                      ) : msg.text}
+                      ) : (
+                        <>
+                          {!isUser && (msg as any).mood && (() => {
+                            const m = String((msg as any).mood).toLowerCase();
+                            const map: Record<string, string> = {
+                              happy: '😊', smile: '😊', warm: '😊', glad: '😊',
+                              shy: '🥺', blush: '🥺', soft: '🥺', hurt: '🥺', sad: '🥺',
+                              calm: '😌', content: '😌', relieved: '😌', safe: '😌',
+                              cool: '😒', distant: '😒', cold: '😒', upset: '😒',
+                              curious: '🤨', suspect: '🤨', doubt: '🤨',
+                              tease: '😏', playful: '😏', flirt: '😏',
+                              love: '🥰', touched: '🥰',
+                            };
+                            const emoji = map[m] || (typeof (msg as any).delta === 'number'
+                              ? ((msg as any).delta > 3 ? '😊' : (msg as any).delta < -3 ? '😒' : '🙂‍↕️')
+                              : null);
+                            if (!emoji) return null;
+                            return (
+                              <span style={{ marginRight: 6, fontSize: 16, display: 'inline-block', verticalAlign: '-2px' }}>
+                                {emoji}
+                              </span>
+                            );
+                          })()}
+                          {msg.text}
+                        </>
+                      )}
                     </div>
                     {isUser && (
                       <div className="ml-2 flex-shrink-0" style={{
@@ -1832,11 +2153,12 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
                   ending={{ title: endingInfo.title || '对话结束', description: endingInfo.description || '' }}
                   highlights={highlights}
                   regrets={regrets}
+                  coachReview={coachReview}
                   attemptInfo={attemptBadge ? { used: attemptBadge.used, max: attemptBadge.max, willGrantXPNext: false } : undefined}
                   onRetry={() => {
                     setShowSummary(false);
                     if (chatLevelKid) {
-                      startChat(chatTarget, chatTitle, chatPartner, { levelKid: chatLevelKid, mode: chatMode, coverImage: chatCoverImg });
+                      startChat(chatTarget, chatTitle, chatPartner, { levelKid: chatLevelKid, mode: chatMode, coverImage: chatCoverImg, isFinale: chatIsFinale });
                     } else {
                       setShowChat(false);
                     }
@@ -1846,6 +2168,164 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
                 />
               );
             })()}
+
+            {/* 好感度 <40 提前结束：指导卡 */}
+            <AnimatePresence>
+              {earlyFail && (
+                <motion.div
+                  className="fixed inset-0 z-[200] flex items-center justify-center"
+                  style={{ background: 'rgba(20,16,28,0.82)', backdropFilter: 'blur(8px)' }}
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                >
+                  <motion.div
+                    initial={{ scale: 0.9, y: 20 }} animate={{ scale: 1, y: 0 }} exit={{ scale: 0.96 }}
+                    transition={{ type: 'spring', stiffness: 280, damping: 26 }}
+                    style={{
+                      width: 'min(88vw, 360px)', padding: '22px 22px 18px',
+                      borderRadius: 18,
+                      background: 'linear-gradient(160deg, #2a2238 0%, #1a1524 100%)',
+                      border: '1px solid rgba(255,138,128,0.35)',
+                      boxShadow: '0 20px 60px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,138,128,0.15) inset',
+                      color: '#f5efe8',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+                      <div style={{
+                        width: 36, height: 36, borderRadius: '50%',
+                        background: 'linear-gradient(135deg, #FF8A80, #FFB199)',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        fontSize: 18,
+                      }}>🥺</div>
+                      <div>
+                        <div style={{ fontSize: 15, fontWeight: 800, letterSpacing: 0.5 }}>气氛冷下来了</div>
+                        <div style={{ fontSize: 11, color: 'rgba(255,138,128,0.9)', fontWeight: 600, marginTop: 2 }}>
+                          当前好感度 {earlyFail.affinity} · 提前结束
+                        </div>
+                      </div>
+                    </div>
+                    <p style={{ fontSize: 13, lineHeight: 1.7, margin: '6px 0 14px', color: 'rgba(245,239,232,0.85)' }}>
+                      {earlyFail.tip}
+                    </p>
+                    {earlyFail.wrongTurn && (
+                      <div style={{
+                        padding: '10px 12px', borderRadius: 10,
+                        background: 'rgba(255,255,255,0.05)',
+                        border: '1px solid rgba(255,255,255,0.08)',
+                        marginBottom: 14,
+                      }}>
+                        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.2, color: 'rgba(255,138,128,0.85)', marginBottom: 4 }}>
+                          你刚才说过
+                        </div>
+                        <p style={{ fontSize: 12.5, lineHeight: 1.55, margin: 0, color: 'rgba(245,239,232,0.75)', fontStyle: 'italic' }}>
+                          「{earlyFail.wrongTurn.userText.slice(0, 60)}」
+                        </p>
+                        <div style={{ height: 1, background: 'rgba(255,255,255,0.08)', margin: '10px 0' }} />
+                        <div style={{ fontSize: 10, fontWeight: 700, letterSpacing: 1.2, color: 'rgba(126,224,214,0.9)', marginBottom: 4 }}>
+                          可以试试这样
+                        </div>
+                        <p style={{ fontSize: 12.5, lineHeight: 1.55, margin: 0, color: '#BFF3EE' }}>
+                          {earlyFail.wrongTurn.betterReply}
+                        </p>
+                      </div>
+                    )}
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <button
+                        onClick={() => {
+                          setEarlyFail(null);
+                          if (chatLevelKid) {
+                            startChat(chatTarget, chatTitle, chatPartner, { levelKid: chatLevelKid, mode: chatMode, coverImage: chatCoverImg, isFinale: chatIsFinale, sceneSynopsis: chatSceneSynopsis });
+                          } else {
+                            setShowChat(false);
+                          }
+                        }}
+                        style={{
+                          flex: 1, padding: '12px 0', borderRadius: 12,
+                          background: 'linear-gradient(135deg, #FF8A80, #FFB199)',
+                          color: '#fff', fontSize: 14, fontWeight: 800, letterSpacing: 1,
+                          border: 'none', cursor: 'pointer',
+                        }}
+                      >
+                        再试一次
+                      </button>
+                      <button
+                        onClick={() => { setEarlyFail(null); setShowChat(false); }}
+                        style={{
+                          flex: 1, padding: '12px 0', borderRadius: 12,
+                          background: 'rgba(255,255,255,0.08)',
+                          color: 'rgba(245,239,232,0.85)', fontSize: 14, fontWeight: 700, letterSpacing: 1,
+                          border: '1px solid rgba(255,255,255,0.14)', cursor: 'pointer',
+                        }}
+                      >
+                        先退出
+                      </button>
+                    </div>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
+
+            {/* 通关解锁：角色给用户的信 */}
+            <AnimatePresence>
+              {unlockLetter && (
+                <motion.div
+                  className="fixed inset-0 z-[1200] flex items-center justify-center"
+                  style={{ background: 'rgba(20,16,28,0.88)', backdropFilter: 'blur(10px)' }}
+                  initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
+                >
+                  <motion.div
+                    initial={{ scale: 0.85, y: 40, opacity: 0 }}
+                    animate={{ scale: 1, y: 0, opacity: 1 }}
+                    exit={{ scale: 0.95, opacity: 0 }}
+                    transition={{ type: 'spring', stiffness: 260, damping: 24 }}
+                    style={{
+                      width: 'min(90vw, 400px)', maxHeight: '86vh', overflowY: 'auto',
+                      padding: '26px 24px 22px',
+                      borderRadius: 20,
+                      background: 'linear-gradient(180deg, #fdf6e3 0%, #f5ead0 100%)',
+                      border: '1px solid rgba(218,165,32,0.35)',
+                      boxShadow: '0 30px 80px rgba(0,0,0,0.55), 0 0 0 1px rgba(255,220,150,0.25) inset',
+                      color: '#3a2c1a',
+                      fontFamily: '"PingFang SC", "Hiragino Sans GB", serif',
+                    }}
+                  >
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+                      {unlockLetter.partnerImg && (
+                        <img src={unlockLetter.partnerImg} alt={unlockLetter.partnerName}
+                          style={{ width: 44, height: 44, borderRadius: '50%', objectFit: 'cover', border: '2px solid rgba(218,165,32,0.5)' }} />
+                      )}
+                      <div>
+                        <div style={{ fontSize: 11, letterSpacing: 2, color: '#8a6c3a', fontWeight: 700 }}>一封信 · 来自</div>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: '#3a2c1a', marginTop: 2 }}>{unlockLetter.partnerName}</div>
+                      </div>
+                    </div>
+                    <div style={{ height: 1, background: 'rgba(138,108,58,0.3)', marginBottom: 14 }} />
+                    {unlockLetter.body.map((p, i) => (
+                      <p key={i} style={{
+                        fontSize: 14, lineHeight: 2, margin: '0 0 10px',
+                        color: i === unlockLetter.body.length - 1 ? '#8a6c3a' : '#3a2c1a',
+                        textAlign: i === unlockLetter.body.length - 1 ? 'right' : 'left',
+                        fontWeight: i === unlockLetter.body.length - 1 ? 700 : 400,
+                        letterSpacing: 0.3,
+                      }}>
+                        {p}
+                      </p>
+                    ))}
+                    <button
+                      onClick={() => { setUnlockLetter(null); }}
+                      style={{
+                        width: '100%', marginTop: 10, padding: '12px 0', borderRadius: 12,
+                        background: 'linear-gradient(135deg, #daa520, #c49326)',
+                        color: '#fff', fontSize: 14, fontWeight: 800, letterSpacing: 2,
+                        border: 'none', cursor: 'pointer',
+                        boxShadow: '0 6px 18px rgba(218,165,32,0.35)',
+                      }}
+                    >
+                      我记住了
+                    </button>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
           </motion.div>
         )}
       </AnimatePresence>
@@ -2307,7 +2787,8 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
           const firstPlayable = chapterLevels.find(l => !l.completed && !l.vip) ?? chapterLevels.find(l => !l.vip);
           if (firstPlayable) {
             const kid = practiceMode === 'story' && firstPlayable.id >= 1 && firstPlayable.id <= 30 ? 'L' + String(firstPlayable.id).padStart(3, '0') : null;
-            startChat(String(firstPlayable.id), firstPlayable.title, levelPartners[firstPlayable.id] ?? null, { levelKid: kid, mode: practiceMode, coverImage: firstPlayable.image || null });
+            const synopsis = levelImmersiveData?.chapters.find(c => c.id === firstPlayable.id)?.synopsis || firstPlayable.desc || '';
+            startChat(String(firstPlayable.id), firstPlayable.title, levelPartners[firstPlayable.id] ?? null, { levelKid: kid, mode: practiceMode, coverImage: firstPlayable.image || null, sceneSynopsis: synopsis });
           } else {
             // 全锁：滚动到该章节封面
             setTimeout(() => {
@@ -2348,7 +2829,9 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
           setLevelImmersive(null);
           if (lv) {
             const kid = practiceMode === 'story' && lv.id >= 1 && lv.id <= 30 ? 'L' + String(lv.id).padStart(3, '0') : null;
-            startChat(String(lv.id), lv.title, levelPartners[lv.id] ?? null, { levelKid: kid, mode: practiceMode, coverImage: lv.image || null });
+            const isFinale = lv.idxInChapter === LEVELS_PER_CHAPTER - 1;
+            const synopsis = levelImmersiveData?.chapters.find(c => c.id === lv.id)?.synopsis || lv.desc || '';
+            startChat(String(lv.id), lv.title, levelPartners[lv.id] ?? null, { levelKid: kid, mode: practiceMode, coverImage: lv.image || null, isFinale, sceneSynopsis: synopsis });
           }
         }}
         onOpenVIP={() => setShowVIP(true)}

@@ -32,70 +32,74 @@ export type ChatTurn = {
 };
 
 export const onboardingScript: ChatTurn[] = [
-  // —— 资料题 1：性别（聊天化引导）——
+  // —— 资料题 1：性别（便利店初遇）——
   {
     id: 'p1_gender',
-    npc: '来啦～我是老司狐🦊\n先认识一下，你是？',
+    npc: '啊抱歉抱歉，刚伞没收好 😅\n我叫林夕～',
     options: [
-      { id: 'p1_m', emoji: '🤴', label: '帅气男生', scores: {}, meta: { kind: 'gender', value: 'male' }, reply: '收到，帅哥！👋' },
-      { id: 'p1_f', emoji: '👸', label: '可爱女生', scores: {}, meta: { kind: 'gender', value: 'female' }, reply: '可可爱爱，登记好～' },
-      { id: 'p1_n', emoji: '🙈', label: '暂时不想说', scores: {}, meta: { kind: 'gender', value: null }, reply: '没关系，先聊聊别的～' },
+      { id: 'p1_m', emoji: '👦', label: '没事，我叫……（一个男生）', scores: {}, meta: { kind: 'gender', value: 'male' }, reply: '你好呀～' },
+      { id: 'p1_f', emoji: '👧', label: '没事，我……（一个女生）', scores: {}, meta: { kind: 'gender', value: 'female' }, reply: '幸会幸会～' },
+      { id: 'p1_n', emoji: '🙈', label: '没事没事（笑了笑）', scores: {}, meta: { kind: 'gender', value: null }, reply: '哈哈，神秘路人登场' },
     ],
   },
-  // —— 资料题 2：年龄段 ——
+  // —— 资料题 2：年龄段（指关东煮）——
   {
     id: 'p2_age',
-    npc: '嘿嘿～再告诉我一个，你现在大概在哪个阶段？',
+    npc: '这么晚了还在外面，也没吃饭吗？',
     options: [
-      { id: 'p2_a', emoji: '🌱', label: '学生时代 (18-22)', scores: {}, meta: { kind: 'age', value: '18-22' }, reply: '青春正好～' },
-      { id: 'p2_b', emoji: '☀️', label: '职场新人 (23-27)', scores: {}, meta: { kind: 'age', value: '23-27' }, reply: '热恋黄金期，记下了' },
-      { id: 'p2_c', emoji: '🔥', label: '成熟阶段 (28+)', scores: {}, meta: { kind: 'age', value: '28-32' }, reply: '成熟稳重系 ✨' },
+      { id: 'p2_a', emoji: '📚', label: '刚下晚自习/下课', scores: {}, meta: { kind: 'age', value: '18-22' }, reply: '学生时代呀，懂～' },
+      { id: 'p2_b', emoji: '💻', label: '刚加完班出来透透气', scores: {}, meta: { kind: 'age', value: '23-27' }, reply: '打工人辛苦了' },
+      { id: 'p2_c', emoji: '🌙', label: '心里烦，出来走走', scores: {}, meta: { kind: 'age', value: '28-32' }, reply: '懂的，有时候就是想一个人' },
     ],
   },
-  // —— 资料题 3：想先突破的方向 ——
+  // —— 资料题 3：想先突破的方向（聊开一点点）——
   {
     id: 'p3_goal',
-    npc: '最后一个基础题～来这里，你最想先突破哪个？',
+    npc: '（一边挑饭团）最近是不是也有点不顺啊？',
     options: [
-      { id: 'p3_chat', emoji: '💬', label: '聊天不冷场', scores: {}, tags: ['聊天技巧'], meta: { kind: 'goal', value: 'chat' }, reply: '聊天达人培养计划启动～' },
-      { id: 'p3_date', emoji: '☕', label: '约会更完美', scores: {}, tags: ['约会攻略'], meta: { kind: 'goal', value: 'date' }, reply: '约会攻略安排上 💫' },
-      { id: 'p3_express', emoji: '💌', label: '表达心意', scores: {}, tags: ['表达情感'], meta: { kind: 'goal', value: 'express' }, reply: '情感表达是加分项哦～' },
+      { id: 'p3_chat', emoji: '💬', label: '是想聊的人不怎么回我', scores: {}, tags: ['聊天技巧'], meta: { kind: 'goal', value: 'chat' }, reply: '这种最难受了' },
+      { id: 'p3_date', emoji: '☕', label: '约出来不知道聊啥', scores: {}, tags: ['约会攻略'], meta: { kind: 'goal', value: 'date' }, reply: '气氛感确实要练' },
+      { id: 'p3_express', emoji: '💭', label: '心里话说不出口', scores: {}, tags: ['表达情感'], meta: { kind: 'goal', value: 'express' }, reply: '能说出来就是真心了' },
     ],
   },
+  // —— 个性题 1：心动瞬间 ——
   {
     id: 'q1_heart',
-    npc: '好，基础信息搞定，开始正经的～\n最近一次让你心动的瞬间，是哪种？',
+    npc: '（笑）那……你上次有点心动，是什么时候？',
     options: [
-      { id: 'q1_a', emoji: '💘', label: '一见钟情，眼神对上就破防', scores: { lianfeihu: 2, tiantianhu: 2, xiaochouhu: 1 }, tags: ['表达情感', '告白技巧'], reply: '哟，纯爱战士一枚～ 💕' },
-      { id: 'q1_b', emoji: '🌙', label: '深夜聊天聊到凌晨那种', scores: { caonihu: 3, xinjihu: 2, lvchahu: 1 }, tags: ['聊天技巧'], reply: '懂懂懂，氛围感拿捏了～' },
-      { id: 'q1_c', emoji: '🤷', label: '想不起来，最近没什么心动', scores: { zhiwuhu: 3, songsonghu: 2, zhuangsihu: 2 }, tags: ['社交破冰', '魅力提升'], reply: '佛系人设先记下～' },
+      { id: 'q1_a', emoji: '💘', label: '看到一个人就愣住那种', scores: { lianfeihu: 2, tiantianhu: 2, xiaochouhu: 1 }, tags: ['表达情感', '告白技巧'], reply: '纯爱啊' },
+      { id: 'q1_b', emoji: '🌙', label: '一聊就聊到凌晨三四点', scores: { caonihu: 3, xinjihu: 2, lvchahu: 1 }, tags: ['聊天技巧'], reply: '这种最容易上头' },
+      { id: 'q1_c', emoji: '🤷', label: '好像很久没有了', scores: { zhiwuhu: 3, songsonghu: 2, zhuangsihu: 2 }, tags: ['社交破冰', '魅力提升'], reply: '嗯，我最近也这样' },
     ],
   },
+  // —— 个性题 2：怕冷场 ——
   {
     id: 'q2_chat',
-    npc: '懂～那跟喜欢的人聊天时，你最怕什么瞬间？',
+    npc: '那跟喜欢的人聊天的时候，你最怕的是什么？',
     options: [
-      { id: 'q2_a', emoji: '😶', label: '冷场，不知道说什么', scores: { songsonghu: 2, xiaochouhu: 2, zhiwuhu: 2 }, tags: ['聊天技巧', '社交破冰'], reply: '社恐的痛我太懂了' },
-      { id: 'q2_b', emoji: '😬', label: '说错话被讨厌', scores: { tiantianhu: 3, xiaochouhu: 2 }, tags: ['表达情感'], reply: '完美主义者被我嗅到了～' },
-      { id: 'q2_c', emoji: '😎', label: '不怕，我会带节奏', scores: { laosihu: 3, haiwanghu: 2, xinjihu: 1 }, tags: ['魅力提升', '约会攻略'], reply: '好家伙，是老手啊 😎' },
+      { id: 'q2_a', emoji: '😶', label: '一冷场脑子就空白', scores: { songsonghu: 2, xiaochouhu: 2, zhiwuhu: 2 }, tags: ['聊天技巧', '社交破冰'], reply: '这也太懂了' },
+      { id: 'q2_b', emoji: '😬', label: '怕一句话就说错了', scores: { tiantianhu: 3, xiaochouhu: 2 }, tags: ['表达情感'], reply: '太在意对方其实是好事' },
+      { id: 'q2_c', emoji: '😌', label: '还好，我能带气氛', scores: { laosihu: 3, haiwanghu: 2, xinjihu: 1 }, tags: ['魅力提升', '约会攻略'], reply: '哇，社交达人' },
     ],
   },
+  // —— 个性题 3：感情风格 ——
   {
     id: 'q3_style',
-    npc: '关键问题来了——你在感情里更像哪种状态？',
+    npc: '（把热可可分了你一口）喜欢一个人的时候，\n你一般是啥样的？',
     options: [
-      { id: 'q3_a', emoji: '🔥', label: '主动出击，喜欢就直接说', scores: { laosihu: 2, haiwanghu: 2, lianfeihu: 1 }, tags: ['告白技巧'], reply: '勇者！加分 💯' },
-      { id: 'q3_b', emoji: '🍵', label: '不动声色，等对方先开口', scores: { lvchahu: 2, caonihu: 2, xinjihu: 3 }, tags: ['约会攻略'], reply: '深藏不露型的～' },
-      { id: 'q3_c', emoji: '🛏', label: '想恋爱，又怕麻烦，干脆躺平', scores: { zhuangsihu: 3, zhiwuhu: 2, songsonghu: 1 }, tags: ['社交破冰', '魅力提升'], reply: '哈哈，诚实给你加分！' },
+      { id: 'q3_a', emoji: '🔥', label: '喜欢就冲，不绕弯子', scores: { laosihu: 2, haiwanghu: 2, lianfeihu: 1 }, tags: ['告白技巧'], reply: '勇的' },
+      { id: 'q3_b', emoji: '🍵', label: '先看看，等对方先说', scores: { lvchahu: 2, caonihu: 2, xinjihu: 3 }, tags: ['约会攻略'], reply: '稳～' },
+      { id: 'q3_c', emoji: '🫠', label: '想，但又怕麻烦，算了', scores: { zhuangsihu: 3, zhiwuhu: 2, songsonghu: 1 }, tags: ['社交破冰', '魅力提升'], reply: '哈哈，太真实了' },
     ],
   },
+  // —— 个性题 4：被忽冷忽热 ——
   {
     id: 'q4_when_hurt',
-    npc: '最后一题——被忽冷忽热时，你的反应是？',
+    npc: '最后一个问题——\n如果对方忽冷忽热，你会怎么办？',
     options: [
-      { id: 'q4_a', emoji: '🥺', label: '反复发消息求一个解释', scores: { tiantianhu: 3, xiaochouhu: 2, lianfeihu: 1 }, tags: ['表达情感'], reply: '真诚但容易上头哦～' },
-      { id: 'q4_b', emoji: '🧊', label: '直接冷处理，不主动找了', scores: { zhuangsihu: 2, songsonghu: 2, laosihu: 1 }, tags: ['约会攻略'], reply: '硬核选手，记住了 💪' },
-      { id: 'q4_c', emoji: '🎭', label: '装作不在意，但暗中观察', scores: { caonihu: 3, lvchahu: 2, xinjihu: 2 }, tags: ['聊天技巧', '魅力提升'], reply: '表面淡定内心戏很多吧～' },
+      { id: 'q4_a', emoji: '🥺', label: '一直发消息问到有回应', scores: { tiantianhu: 3, xiaochouhu: 2, lianfeihu: 1 }, tags: ['表达情感'], reply: '真诚一定要配方法' },
+      { id: 'q4_b', emoji: '🧊', label: '不理了，他爱咋咋', scores: { zhuangsihu: 2, songsonghu: 2, laosihu: 1 }, tags: ['约会攻略'], reply: '硬气一点也挺好' },
+      { id: 'q4_c', emoji: '🎭', label: '表面装没事，暗中盯梢', scores: { caonihu: 3, lvchahu: 2, xinjihu: 2 }, tags: ['聊天技巧', '魅力提升'], reply: '哈哈哈内心戏很多吧' },
     ],
   },
 ];

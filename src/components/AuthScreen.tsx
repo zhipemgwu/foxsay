@@ -650,6 +650,7 @@ export function AuthScreen({ onComplete }: { onComplete: () => void }) {
               initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}
               transition={{ duration: 0.25 }}>
               <OnboardingChat
+                onQuickLogin={() => { setIsLogin(true); setView('phone'); }}
                 onFinish={(result) => {
                   const ab = speciesAbilityHint[result.speciesId] || speciesAbilityHint.laosihu;
                   // 从聊天答案中解析 gender/age/goals（资料收集已融入 AI 对话）

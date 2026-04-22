@@ -40,7 +40,7 @@ export function getRoleImage(kid: string): string {
   return `/chapters/roles/role-${padded}.jpg`;
 }
 
-/** 把角色卡转换成沉浸页卡片用的 PartnerInfo */
+/** 把角色卡转换成沉浸页卡片用的 PartnerInfo（带扩展个人资料） */
 export function roleCardToPartnerInfo(kid: string): {
   kid: string;
   img: string;
@@ -48,11 +48,23 @@ export function roleCardToPartnerInfo(kid: string): {
   age: number;
   signature: string;
   traits: string[];
+  identities?: string[];
+  temperament?: string;
+  attachment?: string;
+  hobbies?: string[];
+  height?: string;
+  loveReceiving?: string;
+  biggestFear?: string;
+  biggestDesire?: string;
 } | null {
   const role = getRoleCard(kid);
   if (!role) return null;
   const core = role.core || {};
   const personality = role.personality || {};
+  const appearance = role.appearance || {};
+  const lifestyle = role.lifestyle || {};
+  const attach = role.attachment_style || {};
+  const love = role.love_language || {};
   // 用 surface_traits 前两条 + core_traits 第一条，尽量给 3 个"标签化"的短词
   const shortLabel = (s: string): string => {
     if (!s) return '';
@@ -64,6 +76,9 @@ export function roleCardToPartnerInfo(kid: string): {
   if (Array.isArray(personality.surface_traits)) rawTraits.push(...personality.surface_traits);
   if (Array.isArray(personality.core_traits)) rawTraits.push(...personality.core_traits);
   const traits = Array.from(new Set(rawTraits.map(shortLabel).filter(Boolean))).slice(0, 3);
+  const identities = Array.isArray(core.identities) ? core.identities.filter(Boolean).slice(0, 3) : undefined;
+  const hobbies = Array.isArray(lifestyle.hobbies) ? lifestyle.hobbies.filter(Boolean).slice(0, 4) : undefined;
+  const height = appearance?.physique?.height || undefined;
   return {
     kid,
     img: getRoleImage(kid),
@@ -71,6 +86,14 @@ export function roleCardToPartnerInfo(kid: string): {
     age: typeof core.age === 'number' ? core.age : 22,
     signature: core.one_line_summary || '',
     traits: traits.length ? traits : ['神秘'],
+    identities,
+    temperament: personality.temperament || undefined,
+    attachment: attach.type ? `${attach.type}${attach.description ? ` · ${attach.description}` : ''}` : undefined,
+    hobbies,
+    height,
+    loveReceiving: love.receiving || undefined,
+    biggestFear: personality.biggest_fear || undefined,
+    biggestDesire: personality.biggest_desire || undefined,
   };
 }
 

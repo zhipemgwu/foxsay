@@ -78,29 +78,22 @@ function FloatingParticles() {
   );
 }
 
-/** 老司狐头像胶囊 — 呼吸光晕版 */
-function FoxAvatar({ size = 28, glow = false }: { size?: number; glow?: boolean }) {
+/** NPC 头像 — 微信风格静态方圆图 */
+function FoxAvatar({ size = 28 }: { size?: number; glow?: boolean }) {
   return (
-    <div style={{ position: 'relative', width: size, height: size, flexShrink: 0 }}>
-      {glow && (
-        <motion.div
-          className="absolute rounded-full"
-          style={{ inset: -3, background: 'radial-gradient(circle, rgba(255,107,107,0.4) 0%, transparent 70%)' }}
-          animate={{ scale: [1, 1.25, 1], opacity: [0.5, 0.8, 0.5] }}
-          transition={{ duration: 2.5, repeat: Infinity, ease: 'easeInOut' }}
-        />
-      )}
-      <div
-        style={{
-          width: size, height: size, borderRadius: '50%',
-          background: 'radial-gradient(circle at 35% 30%, #FFB199 0%, #FF6B6B 55%, #c23616 100%)',
-          display: 'flex', alignItems: 'center', justifyContent: 'center',
-          boxShadow: '0 2px 8px rgba(255,107,107,0.35), inset 0 1px 0 rgba(255,255,255,0.25)',
-          position: 'relative', zIndex: 1,
-        }}
-      >
-        <span style={{ fontSize: size * 0.62, lineHeight: 1 }}>🦊</span>
-      </div>
+    <div
+      style={{
+        width: size, height: size, borderRadius: 8,
+        overflow: 'hidden', flexShrink: 0,
+        background: '#2a2540',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.3)',
+      }}
+    >
+      <img
+        src="/avatars/face5.webp"
+        alt="林夕"
+        style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }}
+      />
     </div>
   );
 }
@@ -130,7 +123,7 @@ function StepIndicator({ current, total }: { current: number; total: number }) {
 }
 
 /* ====== NPC 情绪反应标签 ====== */
-const turnMoods = ['✨ 来看看你的灵魂...', '🔍 有意思...', '🎯 快锁定了...', '🔮 最后一击...'];
+const turnMoods = ['🌧 雨刚停…', '☕ 关东煮冒着热气', '🌃 夜越来越长', '💭 有点意思'];
 
 interface Bubble {
   id: string;
@@ -146,8 +139,10 @@ interface Bubble {
  */
 export function OnboardingChat({
   onFinish,
+  onQuickLogin,
 }: {
   onFinish: (result: { speciesId: string; matchRate: number; tagsTopN: string[]; answers: ChatOption[] }) => void;
+  onQuickLogin?: () => void;
 }) {
   const [turn, setTurn] = useState(0);
   const [bubbles, setBubbles] = useState<Bubble[]>([]);
@@ -266,15 +261,15 @@ export function OnboardingChat({
           background: 'linear-gradient(180deg, rgba(17,14,26,0.95) 0%, rgba(17,14,26,0.6) 80%, transparent 100%)',
         }}>
           <div className="flex items-center gap-3 mb-3">
-            <FoxAvatar size={44} glow />
+            <FoxAvatar size={44} />
             <div className="flex-1">
               <div className="flex items-center gap-2">
-                <span style={{ color: '#f5efe8', fontSize: 16, fontWeight: 700, letterSpacing: 0.5 }}>老司狐</span>
-                <span style={{ fontSize: 10, color: 'rgba(255,138,128,0.9)', background: 'rgba(255,138,128,0.12)', padding: '2px 8px', borderRadius: 10, fontWeight: 600, border: '1px solid rgba(255,138,128,0.2)' }}>入门鉴定师</span>
+                <span style={{ color: '#f5efe8', fontSize: 16, fontWeight: 700, letterSpacing: 0.5 }}>林夕</span>
+                <span style={{ fontSize: 10, color: 'rgba(255,138,128,0.9)', background: 'rgba(255,138,128,0.12)', padding: '2px 8px', borderRadius: 10, fontWeight: 600, border: '1px solid rgba(255,138,128,0.2)' }}>刚刚遇见</span>
               </div>
               <div className="flex items-center gap-1.5 mt-1">
                 <div style={{ width: 5, height: 5, borderRadius: '50%', background: '#4ECDC4', boxShadow: '0 0 6px rgba(78,205,196,0.6)' }} />
-                <span style={{ color: 'rgba(245,239,232,0.4)', fontSize: 10.5 }}>正在为你鉴定中...</span>
+                <span style={{ color: 'rgba(245,239,232,0.4)', fontSize: 10.5 }}>便利店 · 关东煮柜前</span>
               </div>
             </div>
             {/* 题号指示 */}
@@ -287,6 +282,27 @@ export function OnboardingChat({
               </AnimatePresence>
             </div>
           </div>
+          {/* 右上角 直接登录 小胶囊 */}
+          {onQuickLogin && (
+            <motion.button
+              onClick={onQuickLogin}
+              whileTap={{ scale: 0.94 }}
+              initial={{ opacity: 0 }} animate={{ opacity: 1 }}
+              className="absolute"
+              style={{
+                top: 14, right: 16,
+                padding: '5px 11px',
+                background: 'rgba(255,255,255,0.06)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                borderRadius: 999,
+                color: 'rgba(245,239,232,0.72)',
+                fontSize: 11.5,
+                fontWeight: 500,
+                backdropFilter: 'blur(12px)',
+                WebkitBackdropFilter: 'blur(12px)',
+              }}
+            >直接登录</motion.button>
+          )}
         </div>
 
         {/* ====== 对话区 ====== */}
@@ -307,27 +323,21 @@ export function OnboardingChat({
                 )}
                 <div style={{
                   maxWidth: '78%',
-                  padding: b.isReply ? '8px 14px' : '12px 16px',
-                  borderRadius: b.side === 'me' ? '20px 20px 6px 20px' : '20px 20px 20px 6px',
+                  padding: b.isReply ? '8px 14px' : '10px 14px',
+                  borderRadius: b.side === 'me' ? '14px 4px 14px 14px' : '4px 14px 14px 14px',
                   background: b.side === 'me'
-                    ? 'linear-gradient(135deg,#FF6B6B,#EC407A)'
+                    ? '#95EC69'
                     : b.isReply
-                      ? 'linear-gradient(135deg, rgba(255,138,128,0.08), rgba(155,126,222,0.08))'
+                      ? 'rgba(255,255,255,0.04)'
                       : 'rgba(255,255,255,0.08)',
-                  backdropFilter: b.side === 'npc' ? 'blur(16px)' : 'none',
-                  WebkitBackdropFilter: b.side === 'npc' ? 'blur(16px)' : 'none',
-                  border: b.side === 'me'
-                    ? '1px solid rgba(255,255,255,0.2)'
-                    : b.isReply ? '1px solid rgba(255,138,128,0.15)' : '1px solid rgba(255,255,255,0.06)',
-                  color: b.side === 'me' ? '#fff' : b.isReply ? 'rgba(255,200,180,0.9)' : '#f5efe8',
-                  fontSize: b.isReply ? 14 : 15.5,
-                  fontWeight: b.isReply ? 500 : 400,
+                  border: 'none',
+                  color: b.side === 'me' ? '#1a1a1a' : b.isReply ? 'rgba(245,239,232,0.5)' : '#f5efe8',
+                  fontSize: b.isReply ? 13 : 15,
+                  fontWeight: 400,
                   fontStyle: b.isReply ? 'italic' : 'normal',
-                  lineHeight: 1.65,
+                  lineHeight: 1.55,
                   whiteSpace: 'pre-line',
-                  boxShadow: b.side === 'me'
-                    ? '0 8px 28px rgba(236,64,122,0.3), inset 0 1px 0 rgba(255,255,255,0.2)'
-                    : '0 4px 16px rgba(0,0,0,0.2)',
+                  boxShadow: 'none',
                 }}>
                   {b.emoji && <span style={{ marginRight: 6 }}>{b.emoji}</span>}
                   {b.text}
@@ -348,9 +358,8 @@ export function OnboardingChat({
                   <FoxAvatar size={28} />
                 </div>
                 <div className="flex items-center gap-1.5" style={{
-                  padding: '13px 18px', borderRadius: '20px 20px 20px 6px',
-                  background: 'rgba(255,255,255,0.05)', border: '1px solid rgba(255,255,255,0.06)',
-                  backdropFilter: 'blur(12px)', WebkitBackdropFilter: 'blur(12px)',
+                  padding: '11px 14px', borderRadius: '4px 14px 14px 14px',
+                  background: 'rgba(255,255,255,0.08)', border: 'none',
                 }}>
                   {[0, 1, 2].map(i => (
                     <motion.span key={i}
@@ -405,47 +414,34 @@ export function OnboardingChat({
                     transition={isDismissed
                       ? { duration: 0.25, ease: 'easeIn' }
                       : { delay: idx * 0.08, type: 'spring', stiffness: 300, damping: 24 }}
-                    className="w-full flex items-center gap-3.5 px-4 py-4"
+                    className="w-full flex items-center gap-3 px-4 py-3.5"
                     style={{
-                      background: isChosen
-                        ? 'linear-gradient(135deg, rgba(255,107,107,0.2), rgba(236,64,122,0.15))'
-                        : 'linear-gradient(135deg, rgba(255,255,255,0.06), rgba(255,255,255,0.02))',
-                      backdropFilter: 'blur(20px)',
-                      WebkitBackdropFilter: 'blur(20px)',
+                      background: isChosen ? 'rgba(149,236,105,0.12)' : 'rgba(255,255,255,0.04)',
                       border: isChosen
-                        ? '1px solid rgba(255,138,128,0.5)'
-                        : '1px solid rgba(255,255,255,0.08)',
-                      borderRadius: 20,
+                        ? '1px solid rgba(149,236,105,0.35)'
+                        : '1px solid rgba(255,255,255,0.06)',
+                      borderRadius: 12,
                       color: '#f5efe8',
                       textAlign: 'left' as const,
-                      boxShadow: isChosen
-                        ? '0 6px 24px rgba(255,107,107,0.3), inset 0 1px 0 rgba(255,255,255,0.15)'
-                        : '0 2px 12px rgba(0,0,0,0.2), inset 0 1px 0 rgba(255,255,255,0.06)',
+                      boxShadow: 'none',
                       pointerEvents: (choosing ? 'none' : 'auto') as any,
                       overflow: 'hidden',
-                      transition: 'border-color 0.2s, box-shadow 0.2s',
+                      transition: 'border-color 0.2s, background 0.2s',
                     }}
                   >
-                    <motion.span
+                    <span
                       className="flex items-center justify-center flex-shrink-0"
-                      animate={isChosen ? { rotate: [0, -10, 10, 0] } : {}}
-                      transition={{ duration: 0.4 }}
                       style={{
-                        width: 40, height: 40, borderRadius: 16,
-                        background: isChosen
-                          ? 'linear-gradient(135deg, rgba(255,107,107,0.35), rgba(236,64,122,0.25))'
-                          : 'linear-gradient(135deg, rgba(255,138,128,0.12), rgba(155,126,222,0.12))',
-                        border: '1px solid rgba(255,255,255,0.06)',
-                        fontSize: 22,
-                        boxShadow: isChosen ? '0 4px 16px rgba(255,107,107,0.25)' : 'none',
+                        width: 28, height: 28,
+                        fontSize: 20,
                       }}
                     >
                       {opt.emoji}
-                    </motion.span>
-                    <span style={{ fontSize: 15, fontWeight: isChosen ? 600 : 500, flex: 1, letterSpacing: 0.3, lineHeight: 1.5 }}>{opt.label}</span>
+                    </span>
+                    <span style={{ fontSize: 14.5, fontWeight: 400, flex: 1, letterSpacing: 0.2, lineHeight: 1.4 }}>{opt.label}</span>
                     {isChosen
-                      ? <motion.span initial={{ scale: 0, rotate: -90 }} animate={{ scale: 1, rotate: 0 }} transition={{ type: 'spring', stiffness: 400 }} style={{ color: '#FF8A80', fontSize: 18, fontWeight: 700 }}>✓</motion.span>
-                      : <span style={{ color: 'rgba(245,239,232,0.2)', fontSize: 18 }}>›</span>}
+                      ? <span style={{ color: '#95EC69', fontSize: 16, fontWeight: 600 }}>✓</span>
+                      : <span style={{ color: 'rgba(245,239,232,0.25)', fontSize: 14 }}>›</span>}
                   </motion.button>
                     );
                   })}
@@ -497,7 +493,7 @@ export function OnboardingChat({
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.4 }}
               style={{ color: 'rgba(245,239,232,0.85)', fontSize: 15, fontWeight: 500, letterSpacing: 1 }}
-            >老司狐掐指一算中…</motion.p>
+            >林夕在心里默默判断中…</motion.p>
             {/* 跑马灯进度条 */}
             <motion.div
               style={{ width: 120, height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.06)', marginTop: 16, overflow: 'hidden' }}

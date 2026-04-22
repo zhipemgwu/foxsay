@@ -118,11 +118,24 @@ export function chatStream(
 /**
  * 非流式对话 — 一次性返回
  */
-export async function chatOnce(messages: ChatMessage[]): Promise<string> {
+/**
+ * 非流式对话 — 一次性返回
+ * @param messages 对话消息
+ * @param opts.model 可选模型覆盖：'deepseek-chat'（快）或 'deepseek-reasoner'（慢）
+ */
+export async function chatOnce(
+  messages: ChatMessage[],
+  opts?: { model?: 'deepseek-chat' | 'deepseek-reasoner'; temperature?: number },
+): Promise<string> {
   const res = await fetch(API_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({ messages, stream: false }),
+    body: JSON.stringify({
+      messages,
+      stream: false,
+      ...(opts?.model ? { model: opts.model } : {}),
+      ...(opts?.temperature !== undefined ? { temperature: opts.temperature } : {}),
+    }),
   });
 
   if (!res.ok) {

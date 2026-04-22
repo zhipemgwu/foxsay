@@ -10,9 +10,10 @@
 
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence, PanInfo } from 'motion/react';
-import { X, ChevronDown, Lock, Crown, Shuffle, Sparkles, Check } from 'lucide-react';
+import { X, ChevronDown, Lock, Crown, Shuffle, Sparkles, Check, Heart } from 'lucide-react';
 import { KenBurnsImage } from './KenBurnsImage';
 import { useSub } from './SubscriptionSheet';
+import { loadAffinityByKid, mainAffinity } from '../services/affinity';
 
 export interface PartnerInfo {
   img: string;
@@ -21,6 +22,15 @@ export interface PartnerInfo {
   signature: string;     // 个性签名 / 一句话介绍
   traits: string[];      // 3 个特性标签
   kid?: string;          // 可选：对应的角色卡 KID（R001..R030），用于聊天 prompt 拉取完整人设
+  // —— 扩展个人资料（来自角色卡，选搭档时展示，不影响聊天） ——
+  identities?: string[];    // 身份标签：如"外企高级策划"、"独居生活爱好者"
+  temperament?: string;     // 气质简述
+  attachment?: string;      // 依恋风格 + 描述
+  hobbies?: string[];       // 爱好
+  height?: string;          // 身高
+  loveReceiving?: string;   // 喜欢被怎么对待
+  biggestFear?: string;     // 最害怕
+  biggestDesire?: string;   // 最渴望
 }
 
 export interface ImmersiveChapter {
@@ -66,6 +76,21 @@ function imgSeed(url: string): number {
   let h = 0;
   for (let i = 0; i < url.length; i++) h = ((h << 5) - h + url.charCodeAt(i)) | 0;
   return Math.abs(h);
+}
+
+/** 读取某个角色的好感度（主好感 0-100）。默认 0，只在用该角色通关关卡时才会增加。 */
+export function getPartnerAffinity(kid?: string, img?: string): number {
+  if (typeof window === 'undefined') return 0;
+  if (!kid) return 0;
+  try {
+    // 若本地没有任何记录，显示 0；否则返回主好感
+    const raw = localStorage.getItem('foxsay_affinity_by_kid');
+    const map = raw ? JSON.parse(raw) : {};
+    if (!map[kid]) return 0;
+    return mainAffinity(loadAffinityByKid(kid));
+  } catch {
+    return 0;
+  }
 }
 
 export function ChapterImmersiveView({ open, mode, chapters, initialIndex, onClose, onStart, onOpenVIP, headerLabel, ctaLabelOverride, enablePartnerPicker, onConfirmPartner, entranceEffect }: Props) {
@@ -328,31 +353,70 @@ export function ChapterImmersiveView({ open, mode, chapters, initialIndex, onClo
               <>{headerLabel ?? (mode === 'story' ? '剧情关卡' : '人物邂逅')} · {index + 1} / {chapters.length}</>
             )}
           </div>
-          {/* 右上角：切换搭档按钮（仅 idle + 启用 picker 时显示） */}
-          {pickerPhase === 'idle' && enablePartnerPicker && !isVip && candidates.length > 1 ? (
-            <motion.button
-              whileTap={{ scale: 0.9 }}
-              onClick={() => {
-                setPickerPhase('picking');
-                setPickerDir(0);
-                // 若已锁定，从它开始浏览；否则从 0 开始
-                const startIdx = confirmed ? Math.max(0, candidates.findIndex(c => c.img === confirmed.img)) : 0;
-                setPickerIndex(startIdx);
-              }}
-              aria-label="切换搭档"
-              style={{
-                height: 36, padding: '0 12px', borderRadius: 18,
-                background: 'linear-gradient(135deg, rgba(167,139,250,0.85), rgba(240,171,252,0.85))',
-                backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
-                border: '1px solid rgba(255,255,255,0.22)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
-                cursor: 'pointer', color: '#fff', fontSize: 12, fontWeight: 700, letterSpacing: 1,
-                boxShadow: '0 6px 18px rgba(167,139,250,0.4)',
-              }}
-            >
-              <Shuffle size={14} strokeWidth={2.4} />
-              <span>切换搭档</span>
-            </motion.button>
+          {/* 右上角：好感度爱心 + 切换搭档按钮（仅启用 picker 时显示） */}
+          {enablePartnerPicker ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {/* 好感度爱心（读取当前聚焦的候选人/已锁定搭档） */}
+              {(() => {
+                const focus = pickerPhase === 'picking' ? activeCandidate : confirmed;
+                if (!focus) return <div style={{ width: 36 }} />;
+                const aff = getPartnerAffinity(focus.kid, focus.img);
+                return (
+                  <motion.div
+                    key={`aff-${focus.kid || focus.img}-${aff}`}
+                    initial={{ scale: 0.8, opacity: 0 }}
+                    animate={{ scale: 1, opacity: 1 }}
+                    transition={{ type: 'spring', stiffness: 300, damping: 20 }}
+                    aria-label={`好感度 ${aff}`}
+                    style={{
+                      position: 'relative',
+                      height: 36, minWidth: 36, padding: '0 4px', borderRadius: 18,
+                      background: 'rgba(0,0,0,0.38)',
+                      backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+                      border: '1px solid rgba(255,182,193,0.35)',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: '#fff', fontSize: 12, fontWeight: 800, letterSpacing: 0.5,
+                    }}
+                  >
+                    <Heart size={26} fill="#FF6B8A" strokeWidth={0} style={{ filter: 'drop-shadow(0 2px 6px rgba(255,107,138,0.55))' }} />
+                    <span style={{
+                      position: 'absolute', inset: 0,
+                      display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      color: '#fff', fontSize: 11, fontWeight: 900, letterSpacing: 0.2,
+                      textShadow: '0 1px 2px rgba(0,0,0,0.45)',
+                      pointerEvents: 'none',
+                      transform: 'translateY(1px)',
+                    }}>
+                      {aff}
+                    </span>
+                  </motion.div>
+                );
+              })()}
+              {pickerPhase === 'idle' && !isVip && candidates.length > 1 ? (
+                <motion.button
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => {
+                    setPickerPhase('picking');
+                    setPickerDir(0);
+                    const startIdx = confirmed ? Math.max(0, candidates.findIndex(c => c.img === confirmed.img)) : 0;
+                    setPickerIndex(startIdx);
+                  }}
+                  aria-label="切换搭档"
+                  style={{
+                    height: 36, padding: '0 12px', borderRadius: 18,
+                    background: 'linear-gradient(135deg, rgba(167,139,250,0.85), rgba(240,171,252,0.85))',
+                    backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+                    border: '1px solid rgba(255,255,255,0.22)',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 5,
+                    cursor: 'pointer', color: '#fff', fontSize: 12, fontWeight: 700, letterSpacing: 1,
+                    boxShadow: '0 6px 18px rgba(167,139,250,0.4)',
+                  }}
+                >
+                  <Shuffle size={14} strokeWidth={2.4} />
+                  <span>切换搭档</span>
+                </motion.button>
+              ) : null}
+            </div>
           ) : (
             <div style={{ width: 36 }} />
           )}
@@ -547,7 +611,7 @@ export function ChapterImmersiveView({ open, mode, chapters, initialIndex, onClo
               padding: '0 28px 34px',
               display: 'flex', flexDirection: 'column', gap: 14,
             }}>
-              {/* 章节标签 + 状态徽章 */}
+              {/* 章节标签 + 状态徽章（启用搭档选择时仅隐藏『第 X 章』chip） */}
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
                 <div style={{
                   padding: '4px 12px', borderRadius: 8,
@@ -555,9 +619,11 @@ export function ChapterImmersiveView({ open, mode, chapters, initialIndex, onClo
                   border: '1px solid rgba(255,255,255,0.18)',
                   backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
                   color: '#fff', fontSize: 11, fontWeight: 600, letterSpacing: 1.5,
+                  display: pickerPhase === 'picking' ? 'none' : undefined,
                 }}>
                   {chapter.unitLabel ?? (mode === 'story' ? `第 ${chapter.id} 章` : `第 ${chapter.id} 组`)}
                 </div>
+                {pickerPhase !== 'picking' && (
                 <motion.div
                   key={`${chapter.id}-${status}`}
                   initial={{ scale: 0.85, opacity: 0 }}
@@ -575,9 +641,11 @@ export function ChapterImmersiveView({ open, mode, chapters, initialIndex, onClo
                 >
                   {S.badge}
                 </motion.div>
+                )}
               </div>
 
-              {/* 标题 */}
+              {/* 标题（picking 时隐藏，由候选卡的姓名承担） */}
+              {pickerPhase !== 'picking' && (
               <h1 style={{
                 color: '#fff', fontSize: 34, fontWeight: 800,
                 letterSpacing: 2, margin: 0, lineHeight: 1.15,
@@ -585,8 +653,10 @@ export function ChapterImmersiveView({ open, mode, chapters, initialIndex, onClo
               }}>
                 {chapter.name}
               </h1>
+              )}
 
-              {/* 叙事文案（斜体钩子） */}
+              {/* 叙事文案（斜体钩子）—— picking 时隐藏，由候选卡的签名承担 */}
+              {pickerPhase !== 'picking' && (
               <p style={{
                 color: 'rgba(255,255,255,0.82)', fontSize: 14.5, lineHeight: 1.75,
                 fontStyle: 'italic', margin: 0,
@@ -595,76 +665,135 @@ export function ChapterImmersiveView({ open, mode, chapters, initialIndex, onClo
               }}>
                 “{chapter.narrative}”
               </p>
+              )}
 
-              {/* ========== picking 模式：候选搭档信息卡 ========== */}
+              {/* ========== picking 模式：候选搭档信息（参考关卡排版：标题 → 签名 → 资料框） ========== */}
               <AnimatePresence mode="wait">
                 {pickerPhase === 'picking' && activeCandidate && (
                   <motion.div
                     key={`cand-${chapter.id}-${activeCandidate.img}`}
-                    initial={{ opacity: 0, y: 10, scale: 0.97 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -8, scale: 0.96 }}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -8 }}
                     transition={{ duration: 0.4, ease: 'easeOut' }}
-                    style={{
-                      padding: '14px 14px 12px',
-                      background: 'linear-gradient(135deg, rgba(167,139,250,0.22), rgba(240,171,252,0.14))',
-                      border: '1px solid rgba(240,171,252,0.4)',
-                      borderRadius: 14,
-                      backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
-                      display: 'flex', flexDirection: 'column', gap: 8,
-                    }}
+                    style={{ display: 'flex', flexDirection: 'column', gap: 12 }}
                   >
-                    {/* 姓名 + 年龄 */}
-                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, flexWrap: 'wrap' }}>
-                      <span style={{
-                        color: '#fff', fontSize: 20, fontWeight: 800, letterSpacing: 1.2,
-                        textShadow: '0 2px 8px rgba(0,0,0,0.4)',
+                    {/* —— 姓名（大标题，对齐关卡 h1 的位置） —— */}
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 10, flexWrap: 'wrap' }}>
+                      <h1 style={{
+                        color: '#fff', fontSize: 32, fontWeight: 800,
+                        letterSpacing: 2, margin: 0, lineHeight: 1.15,
+                        textShadow: '0 4px 24px rgba(0,0,0,0.6)',
                       }}>
                         {activeCandidate.name}
-                      </span>
+                      </h1>
                       <span style={{
-                        color: 'rgba(240,171,252,0.9)', fontSize: 12, fontWeight: 600, letterSpacing: 0.8,
+                        color: 'rgba(240,171,252,0.95)', fontSize: 13, fontWeight: 700, letterSpacing: 0.8,
+                        textShadow: '0 1px 4px rgba(0,0,0,0.5)',
                       }}>
-                        {activeCandidate.age} 岁
-                      </span>
-                      <span style={{
-                        marginLeft: 'auto',
-                        color: 'rgba(255,255,255,0.55)', fontSize: 10, fontWeight: 600, letterSpacing: 1.5,
-                      }}>
-                        候选 · {(pickerIndex % Math.max(candidates.length, 1)) + 1} / {candidates.length}
+                        {activeCandidate.age} 岁{activeCandidate.height ? ` · ${activeCandidate.height}` : ''}
                       </span>
                     </div>
-                    {/* 特性标签 */}
-                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                      {activeCandidate.traits.map((t) => (
-                        <span
-                          key={t}
-                          style={{
-                            padding: '3px 10px', borderRadius: 999,
-                            background: 'rgba(255,255,255,0.14)',
-                            border: '1px solid rgba(255,255,255,0.25)',
-                            color: '#fff', fontSize: 11.5, fontWeight: 700, letterSpacing: 0.5,
-                          }}
-                        >
-                          {t}
-                        </span>
-                      ))}
-                    </div>
-                    {/* 个性签名 */}
-                    <p style={{
-                      margin: 0, color: 'rgba(255,255,255,0.88)', fontSize: 13, lineHeight: 1.65,
-                      fontStyle: 'italic', letterSpacing: 0.3,
-                      textShadow: '0 1px 4px rgba(0,0,0,0.45)',
+
+                    {/* —— 身份 + 特性合并后固定只展示 2 个，一排对齐 —— */}
+                    {(() => {
+                      const idSet = new Set(activeCandidate.identities ?? []);
+                      const tags = [
+                        ...(activeCandidate.identities ?? []),
+                        ...activeCandidate.traits,
+                      ].filter(Boolean).slice(0, 2);
+                      if (tags.length === 0) return null;
+                      return (
+                        <div style={{ display: 'flex', gap: 6, flexWrap: 'nowrap' }}>
+                          {tags.map((t, i) => {
+                            const isId = idSet.has(t);
+                            return (
+                              <span
+                                key={`tag-${i}-${t}`}
+                                style={{
+                                  flexShrink: 0,
+                                  padding: '3px 10px', borderRadius: isId ? 8 : 999,
+                                  background: isId ? 'rgba(240,171,252,0.18)' : 'rgba(255,255,255,0.1)',
+                                  border: isId ? '1px solid rgba(240,171,252,0.4)' : '1px solid rgba(255,255,255,0.22)',
+                                  color: isId ? '#F5D6FF' : 'rgba(255,255,255,0.9)',
+                                  fontSize: 11, fontWeight: 600, letterSpacing: 0.3,
+                                  whiteSpace: 'nowrap',
+                                  backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+                                }}
+                              >
+                                {t}
+                              </span>
+                            );
+                          })}
+                        </div>
+                      );
+                    })()}
+
+                    {/* —— 个性签名（对齐关卡的斜体 narrative） —— */}
+                    {activeCandidate.signature && (
+                      <p style={{
+                        color: 'rgba(255,255,255,0.85)', fontSize: 14.5, lineHeight: 1.75,
+                        fontStyle: 'italic', margin: 0,
+                        textShadow: '0 1px 6px rgba(0,0,0,0.55)',
+                        letterSpacing: 0.3,
+                      }}>
+                        “{activeCandidate.signature}”
+                      </p>
+                    )}
+
+                    {/* —— 主要介绍框（对齐关卡 synopsis 的玻璃框） —— */}
+                    {(activeCandidate.temperament || activeCandidate.attachment || (activeCandidate.hobbies && activeCandidate.hobbies.length)) && (
+                      <div style={{
+                        padding: '12px 14px',
+                        background: 'rgba(255,255,255,0.06)',
+                        border: '1px solid rgba(255,255,255,0.1)',
+                        borderLeft: '2px solid rgba(240,171,252,0.6)',
+                        borderRadius: 10,
+                        backdropFilter: 'blur(14px)', WebkitBackdropFilter: 'blur(14px)',
+                        maxHeight: 180, overflowY: 'auto',
+                        display: 'flex', flexDirection: 'column', gap: 8,
+                      }}>
+                        <div style={{
+                          color: 'rgba(255,255,255,0.45)', fontSize: 10, fontWeight: 700,
+                          letterSpacing: 2, marginBottom: 2,
+                        }}>
+                          · 个人介绍 ·
+                        </div>
+                        {activeCandidate.temperament && (
+                          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                            <span style={{ color: 'rgba(240,171,252,0.85)', fontSize: 10.5, fontWeight: 700, letterSpacing: 1, flexShrink: 0, marginTop: 2, minWidth: 44 }}>气质</span>
+                            <span style={{ color: 'rgba(255,255,255,0.82)', fontSize: 12.5, lineHeight: 1.75 }}>{activeCandidate.temperament}</span>
+                          </div>
+                        )}
+                        {activeCandidate.attachment && (
+                          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                            <span style={{ color: 'rgba(240,171,252,0.85)', fontSize: 10.5, fontWeight: 700, letterSpacing: 1, flexShrink: 0, marginTop: 2, minWidth: 44 }}>依恋</span>
+                            <span style={{ color: 'rgba(255,255,255,0.82)', fontSize: 12.5, lineHeight: 1.75 }}>{activeCandidate.attachment}</span>
+                          </div>
+                        )}
+                        {activeCandidate.hobbies && activeCandidate.hobbies.length > 0 && (
+                          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+                            <span style={{ color: 'rgba(240,171,252,0.85)', fontSize: 10.5, fontWeight: 700, letterSpacing: 1, flexShrink: 0, marginTop: 2, minWidth: 44 }}>爱好</span>
+                            <span style={{ color: 'rgba(255,255,255,0.82)', fontSize: 12.5, lineHeight: 1.75 }}>{activeCandidate.hobbies.join(' · ')}</span>
+                          </div>
+                        )}
+                      </div>
+                    )}
+
+                    {/* —— 候选池小指示（回到右下角对齐 progress 文字的位置，轻量一行） —— */}
+                    <div style={{
+                      display: 'flex', justifyContent: 'flex-end',
+                      color: 'rgba(255,255,255,0.5)', fontSize: 10.5, fontWeight: 600, letterSpacing: 1.5,
                     }}>
-                      「{activeCandidate.signature}」
-                    </p>
+                      候选 · {(pickerIndex % Math.max(candidates.length, 1)) + 1} / {candidates.length}
+                    </div>
                   </motion.div>
                 )}
               </AnimatePresence>
 
-              {/* 特性标签（已锁定搭档且非 picking 时显示） */}
+              {/* 特性标签（已锁定搭档且非 picking 时显示）—— 与 picking 卡的 2 个标签保持一致 */}
               <AnimatePresence>
-                {pickerPhase === 'idle' && enablePartnerPicker && confirmed && confirmed.traits.length > 0 && (
+                {pickerPhase === 'idle' && enablePartnerPicker && confirmed && (confirmed.traits.length > 0 || (confirmed.identities && confirmed.identities.length > 0)) && (
                   <motion.div
                     key={`traits-${chapter.id}-${confirmed.img}`}
                     initial={{ opacity: 0, y: 8, scale: 0.96 }}
@@ -687,28 +816,40 @@ export function ChapterImmersiveView({ open, mode, chapters, initialIndex, onClo
                       <Sparkles size={12} />
                       今日搭档 · {confirmed.name} · {confirmed.age}
                     </div>
-                    {confirmed.traits.map((t, i) => (
-                      <motion.span
-                        key={t}
-                        initial={{ opacity: 0, y: 6, scale: 0.8 }}
-                        animate={{ opacity: 1, y: 0, scale: 1 }}
-                        transition={{ delay: (justConfirmed ? 0.45 : 0) + i * 0.08, type: 'spring', stiffness: 260, damping: 18 }}
-                        style={{
-                          padding: '3px 10px', borderRadius: 999,
-                          background: 'rgba(255,255,255,0.12)',
-                          border: '1px solid rgba(255,255,255,0.22)',
-                          color: '#fff', fontSize: 12, fontWeight: 600, letterSpacing: 0.5,
-                        }}
-                      >
-                        {t}
-                      </motion.span>
-                    ))}
+                    {(() => {
+                      const idSet = new Set(confirmed.identities ?? []);
+                      const tags = [
+                        ...(confirmed.identities ?? []),
+                        ...confirmed.traits,
+                      ].filter(Boolean).slice(0, 2);
+                      return tags.map((t, i) => {
+                        const isId = idSet.has(t);
+                        return (
+                          <motion.span
+                            key={`${t}-${i}`}
+                            initial={{ opacity: 0, y: 6, scale: 0.8 }}
+                            animate={{ opacity: 1, y: 0, scale: 1 }}
+                            transition={{ delay: (justConfirmed ? 0.45 : 0) + i * 0.08, type: 'spring', stiffness: 260, damping: 18 }}
+                            style={{
+                              padding: '3px 10px', borderRadius: isId ? 8 : 999,
+                              background: isId ? 'rgba(240,171,252,0.18)' : 'rgba(255,255,255,0.12)',
+                              border: isId ? '1px solid rgba(240,171,252,0.4)' : '1px solid rgba(255,255,255,0.22)',
+                              color: isId ? '#F5D6FF' : '#fff',
+                              fontSize: 12, fontWeight: 600, letterSpacing: 0.5,
+                              whiteSpace: 'nowrap',
+                            }}
+                          >
+                            {t}
+                          </motion.span>
+                        );
+                      });
+                    })()}
                   </motion.div>
                 )}
               </AnimatePresence>
 
-              {/* 剧情简介（不透露全部） */}
-              {chapter.synopsis && (
+              {/* 剧情简介—— picking 时隐藏 */}
+              {pickerPhase !== 'picking' && chapter.synopsis && (
                 <div style={{
                   padding: '12px 14px',
                   background: 'rgba(255,255,255,0.06)',
@@ -734,7 +875,8 @@ export function ChapterImmersiveView({ open, mode, chapters, initialIndex, onClo
                 </div>
               )}
 
-              {/* 进度条 */}
+              {/* 进度条（picking 时隐藏，避免和候选搭档信息重叠） */}
+              {pickerPhase !== 'picking' && (
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 2 }}>
                 <div style={{ flex: 1, height: 4, borderRadius: 2, background: 'rgba(255,255,255,0.14)', overflow: 'hidden' }}>
                   <motion.div
@@ -753,6 +895,7 @@ export function ChapterImmersiveView({ open, mode, chapters, initialIndex, onClo
                   {isVip ? '会员解锁' : chapter.readCount}
                 </span>
               </div>
+              )}
 
               {/* 章节小圆点指示器（chapters.length > 1 时才显示；picking 时改为候选池指示器） */}
               {pickerPhase === 'picking' && candidates.length > 1 ? (

@@ -57,24 +57,24 @@ function IllustrationGrowth() {
 
 const slides = [
   {
-    gradient: 'radial-gradient(ellipse 80% 60% at 50% 30%, rgba(255,138,128,0.35) 0%, rgba(236,64,122,0.15) 40%, transparent 70%)',
-    deco: 'radial-gradient(ellipse 50% 40% at 70% 60%, rgba(155,126,222,0.18) 0%, transparent 60%)',
+    gradient: 'radial-gradient(ellipse 80% 60% at 50% 30%, rgba(155,126,222,0.32) 0%, rgba(236,64,122,0.12) 40%, transparent 70%)',
+    deco: 'radial-gradient(ellipse 50% 40% at 70% 60%, rgba(255,138,128,0.15) 0%, transparent 60%)',
     icon: <IcHeartSpark size={28} color="#fff" />,
-    iconBg: gradients.coral,
+    iconBg: gradients.purple,
     heroIllustration: <IllustrationChat />,
-    title: 'AI 恋爱陪练',
-    subtitle: '沉浸式模拟真实约会场景\nAI 实时分析，精准提升共情力与表达',
-    accent: '#FF8A80',
+    title: '消息总是石沉大海？',
+    subtitle: '约出来冷场、回一句删三次\n不是不想谈，是还没人陪你练。',
+    accent: '#9B7EDE',
   },
   {
-    gradient: 'radial-gradient(ellipse 80% 60% at 50% 30%, rgba(78,205,196,0.35) 0%, rgba(128,203,196,0.15) 40%, transparent 70%)',
+    gradient: 'radial-gradient(ellipse 80% 60% at 50% 30%, rgba(255,138,128,0.35) 0%, rgba(236,64,122,0.15) 40%, transparent 70%)',
     deco: 'radial-gradient(ellipse 50% 40% at 65% 50%, rgba(255,217,61,0.15) 0%, transparent 60%)',
-    icon: <IcTarget size={28} color="#fff" />,
-    iconBg: gradients.mint,
-    heroIllustration: <IllustrationGrowth />,
-    title: '游戏化成长',
-    subtitle: '解锁成就、升级段位\n每一步进步都看得见',
-    accent: '#4ECDC4',
+    icon: <IcSparkle size={28} color="#fff" />,
+    iconBg: gradients.coral,
+    heroIllustration: <IllustrationAnalysis />,
+    title: '先在这里把恋爱练一遍',
+    subtitle: '沉浸模拟约会，读懂她的潜台词\nAI 陪你复盘，放心犯错再上场。',
+    accent: '#FF8A80',
   },
 ];
 

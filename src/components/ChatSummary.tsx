@@ -39,6 +39,13 @@ interface Props {
   };
   highlights: SummaryHighlight[];   // 最多 3 条
   regrets: SummaryHighlight[];      // 最多 2 条
+  /** AI 教练点评（异步生成中为 null，失败为 ''） */
+  coachReview?: {
+    overall: string;       // 整体点评 1-2 句
+    strengths: string[];   // 你做得好的点
+    improvements: string[];// 可以提升的点
+    betterLines?: string[];// 参考更好的回复示例
+  } | null;
   attemptInfo?: { used: number; max: number; willGrantXPNext: boolean };
   onRetry: () => void;
   onNext: () => void;
@@ -58,6 +65,7 @@ export function ChatSummary({
   ending,
   highlights,
   regrets,
+  coachReview,
   attemptInfo,
   onRetry,
   onNext,
@@ -224,6 +232,66 @@ export function ChatSummary({
             </span>
           </div>
         )}
+
+        {/* AI 教练点评 */}
+        <motion.div
+          className="mb-4 p-4"
+          style={{ background: 'linear-gradient(135deg, #3a4560 0%, #453a60 100%)', borderRadius: 16, border: '1px solid rgba(255,217,102,0.18)' }}
+          initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.5 }}
+        >
+          <div className="mb-3 flex items-center gap-2" style={{ color: '#FFD966', fontSize: 13, fontWeight: 600 }}>
+            <span>🦊 小狐狸教练点评</span>
+          </div>
+          {coachReview === null || coachReview === undefined ? (
+            <div style={{ color: 'rgba(245,239,232,0.5)', fontSize: 12.5, lineHeight: 1.6 }}>
+              正在整理这场对话的复盘……
+            </div>
+          ) : !coachReview.overall && coachReview.strengths.length === 0 && coachReview.improvements.length === 0 ? (
+            <div style={{ color: 'rgba(245,239,232,0.5)', fontSize: 12.5 }}>
+              点评生成失败，换个网络试试。
+            </div>
+          ) : (
+            <div className="space-y-3">
+              {coachReview.overall && (
+                <div style={{ color: '#f5efe8', fontSize: 13, lineHeight: 1.6 }}>
+                  {coachReview.overall}
+                </div>
+              )}
+              {coachReview.strengths.length > 0 && (
+                <div>
+                  <div style={{ color: '#4ECDC4', fontSize: 12, fontWeight: 600, marginBottom: 4 }}>你做得好的：</div>
+                  <ul style={{ paddingLeft: 18, margin: 0 }}>
+                    {coachReview.strengths.map((s, i) => (
+                      <li key={i} style={{ color: 'rgba(245,239,232,0.78)', fontSize: 12.5, lineHeight: 1.55, marginBottom: 2 }}>{s}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {coachReview.improvements.length > 0 && (
+                <div>
+                  <div style={{ color: '#FFB080', fontSize: 12, fontWeight: 600, marginBottom: 4 }}>可以再优化：</div>
+                  <ul style={{ paddingLeft: 18, margin: 0 }}>
+                    {coachReview.improvements.map((s, i) => (
+                      <li key={i} style={{ color: 'rgba(245,239,232,0.78)', fontSize: 12.5, lineHeight: 1.55, marginBottom: 2 }}>{s}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {coachReview.betterLines && coachReview.betterLines.length > 0 && (
+                <div>
+                  <div style={{ color: '#B8A4E8', fontSize: 12, fontWeight: 600, marginBottom: 4 }}>下次可以这样说：</div>
+                  <div className="space-y-1.5">
+                    {coachReview.betterLines.map((s, i) => (
+                      <div key={i} style={{ background: 'rgba(184,164,232,0.08)', color: 'rgba(245,239,232,0.85)', fontSize: 12, lineHeight: 1.55, padding: '6px 10px', borderRadius: 8 }}>
+                        "{s}"
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </motion.div>
 
         {/* 精彩回放 */}
         {highlights.length > 0 && (

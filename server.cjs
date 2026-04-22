@@ -30,14 +30,18 @@ if (!API_KEY) {
  *   [{ role: 'system', content: '...' }, { role: 'user', content: '...' }, ...]
  */
 app.post('/api/chat', async (req, res) => {
-  const { messages, stream = true, temperature, max_tokens } = req.body;
+  const { messages, stream = true, temperature, max_tokens, model } = req.body;
 
   if (!messages || !Array.isArray(messages)) {
     return res.status(400).json({ error: 'messages 字段必须是数组' });
   }
 
+  // 白名单：允许前端指定 deepseek-chat（快）或 deepseek-reasoner（慢但聪明），其他一律用默认
+  const allowedModels = ['deepseek-chat', 'deepseek-reasoner'];
+  const useModel = allowedModels.includes(model) ? model : MODEL;
+
   const body = {
-    model: MODEL,
+    model: useModel,
     messages,
     stream,
   };
