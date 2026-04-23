@@ -1,0 +1,132 @@
+﻿=== INITIAL URL === http://localhost:5173/
+=== INITIAL LOCALSTORAGE === {
+  "foxsay:stage": "main",
+  "foxsay:onboarding_done": "1",
+  "foxsay:__migrated_v1": "1",
+  "foxsay:followed_names": "[]",
+  "foxsay:user_state": "{\"userId\":\"u_gzeywomhve1s\",\"name\":\"灏忛箍\",\"xp\":0,\"level\":1,\"title\":\"鎭嬬埍鏂扮敓\",\"streak\":1,\"lastCheckinDate\":\"2026-04-23\",\"achievements\":0,\"isVip\":false,\"subTier\":null,\"subPlan\":null,\"subExpireAt\":null,\"subCha",
+  "foxsay_stage": "main"
+}
+=== INITIAL BODY TEXT (2000) ===
+璁粌涓績
+
+鎭嬬埍缁冧範鍦?1澶╄繛缁?浠婃棩绮鹃€変綋楠?鏌ョ湅鍏ㄩ儴
+馃拺
+鈽?鈻?馃敟
+浠婃棩鐑棬
+AI 绾︿細妯℃嫙
+閭ｆ澂鎷块搧鐨勬俯搴?鎺ㄨ崘
+娌夋蹈寮忔亱鐖辨晠浜?
+涓?AI 杩涜娌夋蹈寮忕害浼氭儏鏅紨缁冿紝閿荤偧寮€鍦虹櫧涓庤瘽棰樺欢灞曡兘鍔?
+寮€濮嬬粌涔?馃摉 鎴戠殑鏁呬簨30
+馃挮 浜虹墿閭傞€?0
+绗?绔?鍒濋亣
+
+"鎺ㄥ紑閭ｆ墖闂ㄧ殑鏃跺€欙紝浣犱笉鐭ラ亾鍛借繍宸茬粡寮€濮嬪€掕鏃躲€?
+
+0/6 鑺?鍓ф儏绠€浠?绗?绔?鐮村啺
+
+"娌夐粯涓嶆槸娌℃湁璇濊锛屾槸杩樻病鎵惧埌閭ｄ釜璁╀綘鎯冲紑鍙ｇ殑浜恒€?
+
+0/6 鑺?鍓ф儏绠€浠?绗?绔?鏆ф槯
+
+"閭ｄ簺蹇冭烦鍔犻€熺殑鐬棿锛屼綘浠ヤ负瀵规柟鍚笉瑙佸悧锛?
+
+0/6 鑺?鍓ф儏绠€浠?绗?绔?鐑亱
+
+"浠庨偅澶╄捣锛屾墍鏈夋瓕閲屽敱鐨勯兘鏈変簡鐢婚潰銆?
+
+0/6 鑺?鍓ф儏绠€浠?绗?绔?鑰冮獙
+
+"鐪熸鐨勭埍鎯呬笉鏄病鏈夐鏆达紝鏄鏆磋繃鍚庝綘杩樺湪銆?
+
+0/6 鑺?鍓ф儏绠€浠?浜掑姩鍖归厤
+NEW
+鏈懆 1/5 娆?瑙掕壊鎵紨瀵圭粌 馃幁
+
+闅忔満鍖归厤瀵规墜锛屾壆婕斾笉鍚岃鑹茶繘琛屽疄鎴樺璇濄€?0鍒嗛挓闄愭椂鎸戞垬锛孉I瀹炴椂璇勫垎锛屾楠屼綘鐨勭湡瀹炴按骞筹紒
+
+鎶藉彇鍦烘櫙
+鍒嗛厤瑙掕壊
+闄愭椂瀵硅瘽
+AI璇勫垎
+馃弳
+瀹屾垚瀵圭粌鍙幏 30-80 XP锛屾瘡鍛?娆″厤璐规満浼?绔嬪嵆寮€濮嬪尮閰?棣栭〉
+鎴愰暱
+寰粌涔?璁㈣喘
+鎴戠殑
+=== INITIAL ROOT HTML (3000) ===
+<div class="w-full h-screen flex flex-col overflow-hidden" style="background: rgb(43, 37, 53);"><div class="relative flex flex-col h-full w-full overflow-hidden" style="max-width: 430px; margin: 0px auto; background: rgb(43, 37, 53); font-family: inherit;"><div class="flex-1 overflow-hidden relative"><div class="absolute inset-0 overflow-y-auto overflow-x-hidden" style="opacity: 1; transform: none;"><div class="px-5 pt-8 pb-8 relative overflow-hidden"><div class="absolute top-0 left-0 right-0 pointer-events-none" style="height: 200px; background: radial-gradient(80% 50% at 50% 0%, rgba(255, 138, 128, 0.18) 0%, transparent 100%);"></div><div style="opacity: 1; transform: none;"><div class="flex items-center justify-between mb-5"><div><p style="color: rgba(245, 239, 232, 0.58); font-size: 14px; margin-bottom: 4px;">璁粌涓績</p><h1 style="color: rgb(245, 239, 232); font-size: 28px; font-weight: 700; letter-spacing: 0.2px; line-height: 1.14; margin: 0px;">鎭嬬埍缁冧範鍦?/h1></div><div class="flex items-center gap-2 px-3 py-1.5" style="background: rgba(255, 138, 128, 0.12); border-radius: 20px; border: 1px solid rgba(255, 138, 128, 0.2);"><svg width="12" height="12" viewBox="0 0 24 24" fill="none"><path d="M12 22c4.418 0 7-3.134 7-7 0-2.5-1.5-4.5-3-6-.5 1-2 2-3 1.5.5-2.5-.5-5.5-3-7.5 0 3-1.5 5-3 6.5S4 13 4 15c0 3.866 2.582 7 8 7z" fill="#FF8A80" opacity="0.25"></path><path d="M12 22c4.418 0 7-3.134 7-7 0-2.5-1.5-4.5-3-6-.5 1-2 2-3 1.5.5-2.5-.5-5.5-3-7.5 0 3-1.5 5-3 6.5S4 13 4 15c0 3.866 2.582 7 8 7z" stroke="#FF8A80" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"></path></svg><span style="color: rgb(255, 138, 128); font-size: 12px; font-weight: 600;">1澶╄繛缁?/span></div></div></div><div class="mb-5" style="opacity: 1; transform: none;"><div class="flex items-center justify-between mb-3"><span style="color: rgb(255, 138, 128); font-size: 16px; font-weight: 700;">浠婃棩绮鹃€変綋楠?/span><button class="flex items-center gap-1"><span style="color: rgba(245, 239, 232, 0.45); font-size: 12px;">鏌ョ湅鍏ㄩ儴</span><svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="rgba(245,239,232,0.35)" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" class="lucide lucide-chevron-right" aria-hidden="true"><path d="m9 18 6-6-6-6"></path></svg></button></div><button class="w-full text-left overflow-hidden" tabindex="0" style="border-radius: 20px; background: rgb(69, 58, 96);"><div class="relative" style="height: 180px;"><div style="position: absolute; inset: 0px;"><div style="position: relative; width: 100%; height: 100%; overflow: hidden; transform-style: preserve-3d; perspective: 1200px;"><div style="position: absolute; inset: 0px; will-change: transform; transform: none;"><img src="/chapters/roles/role-32.jpg" alt="浠婃棩绮鹃€? loading="eager" draggable="false" style="width: 100%; height: 100%; object-fit: cover; display: block; user-select: none; pointer-events: none; transform: translateY(-1%) scale(1.1);"><div aria-hidden="true
+=== CLICKS SEQUENCE === ["馃拺\n鈽昞n鈻禱n馃敟\n浠婃棩鐑棬\nAI 绾︿細妯℃嫙\n閭ｆ澂鎷块搧鐨勬俯搴n鎺ㄨ崘\n娌夋蹈寮忔亱鐖辨晠浜媆n\n涓?AI 杩涜娌夋蹈寮忕害浼氭儏鏅紨缁冿紝閿荤偧寮€鍦虹櫧涓庤瘽棰樺欢灞曡兘鍔沑n\n寮€濮嬬粌涔?,"馃拺\n鈽昞n鈻禱n馃敟\n浠婃棩鐑棬\nAI 绾︿細妯℃嫙\n閭ｆ澂鎷块搧鐨勬俯搴n鎺ㄨ崘\n娌夋蹈寮忔亱鐖辨晠浜媆n\n涓?AI 杩涜娌夋蹈寮忕害浼氭儏鏅紨缁冿紝閿荤偧寮€鍦虹櫧涓庤瘽棰樺欢灞曡兘鍔沑n\n寮€濮嬬粌涔?,"馃拺\n鈽昞n鈻禱n馃敟\n浠婃棩鐑棬\nAI 绾︿細妯℃嫙\n閭ｆ澂鎷块搧鐨勬俯搴n鎺ㄨ崘\n娌夋蹈寮忔亱鐖辨晠浜媆n\n涓?AI 杩涜娌夋蹈寮忕害浼氭儏鏅紨缁冿紝閿荤偧寮€鍦虹櫧涓庤瘽棰樺欢灞曡兘鍔沑n\n寮€濮嬬粌涔?,"馃拺\n鈽昞n鈻禱n馃敟\n浠婃棩鐑棬\nAI 绾︿細妯℃嫙\n閭ｆ澂鎷块搧鐨勬俯搴n鎺ㄨ崘\n娌夋蹈寮忔亱鐖辨晠浜媆n\n涓?AI 杩涜娌夋蹈寮忕害浼氭儏鏅紨缁冿紝閿荤偧寮€鍦虹櫧涓庤瘽棰樺欢灞曡兘鍔沑n\n寮€濮嬬粌涔?,"馃拺\n鈽昞n鈻禱n馃敟\n浠婃棩鐑棬\nAI 绾︿細妯℃嫙\n閭ｆ澂鎷块搧鐨勬俯搴n鎺ㄨ崘\n娌夋蹈寮忔亱鐖辨晠浜媆n\n涓?AI 杩涜娌夋蹈寮忕害浼氭儏鏅紨缁冿紝閿荤偧寮€鍦虹櫧涓庤瘽棰樺欢灞曡兘鍔沑n\n寮€濮嬬粌涔?,"馃拺\n鈽昞n鈻禱n馃敟\n浠婃棩鐑棬\nAI 绾︿細妯℃嫙\n閭ｆ澂鎷块搧鐨勬俯搴n鎺ㄨ崘\n娌夋蹈寮忔亱鐖辨晠浜媆n\n涓?AI 杩涜娌夋蹈寮忕害浼氭儏鏅紨缁冿紝閿荤偧寮€鍦虹櫧涓庤瘽棰樺欢灞曡兘鍔沑n\n寮€濮嬬粌涔?,"馃拺\n鈽昞n鈻禱n馃敟\n浠婃棩鐑棬\nAI 绾︿細妯℃嫙\n閭ｆ澂鎷块搧鐨勬俯搴n鎺ㄨ崘\n娌夋蹈寮忔亱鐖辨晠浜媆n\n涓?AI 杩涜娌夋蹈寮忕害浼氭儏鏅紨缁冿紝閿荤偧寮€鍦虹櫧涓庤瘽棰樺欢灞曡兘鍔沑n\n寮€濮嬬粌涔?,"馃拺\n鈽昞n鈻禱n馃敟\n浠婃棩鐑棬\nAI 绾︿細妯℃嫙\n閭ｆ澂鎷块搧鐨勬俯搴n鎺ㄨ崘\n娌夋蹈寮忔亱鐖辨晠浜媆n\n涓?AI 杩涜娌夋蹈寮忕害浼氭儏鏅紨缁冿紝閿荤偧寮€鍦虹櫧涓庤瘽棰樺欢灞曡兘鍔沑n\n寮€濮嬬粌涔?,"馃拺\n鈽昞n鈻禱n馃敟\n浠婃棩鐑棬\nAI 绾︿細妯℃嫙\n閭ｆ澂鎷块搧鐨勬俯搴n鎺ㄨ崘\n娌夋蹈寮忔亱鐖辨晠浜媆n\n涓?AI 杩涜娌夋蹈寮忕害浼氭儏鏅紨缁冿紝閿荤偧寮€鍦虹櫧涓庤瘽棰樺欢灞曡兘鍔沑n\n寮€濮嬬粌涔?,"馃拺\n鈽昞n鈻禱n馃敟\n浠婃棩鐑棬\nAI 绾︿細妯℃嫙\n閭ｆ澂鎷块搧鐨勬俯搴n鎺ㄨ崘\n娌夋蹈寮忔亱鐖辨晠浜媆n\n涓?AI 杩涜娌夋蹈寮忕害浼氭儏鏅紨缁冿紝閿荤偧寮€鍦虹櫧涓庤瘽棰樺欢灞曡兘鍔沑n\n寮€濮嬬粌涔?]
+=== AFTER-CLICK URL === http://localhost:5173/
+=== AFTER-CLICK BODY TEXT ===
+璁粌涓績
+
+鎭嬬埍缁冧範鍦?1澶╄繛缁?浠婃棩绮鹃€変綋楠?鏌ョ湅鍏ㄩ儴
+馃拺
+鈽?鈻?馃敟
+浠婃棩鐑棬
+AI 绾︿細妯℃嫙
+閭ｆ澂鎷块搧鐨勬俯搴?鎺ㄨ崘
+娌夋蹈寮忔亱鐖辨晠浜?
+涓?AI 杩涜娌夋蹈寮忕害浼氭儏鏅紨缁冿紝閿荤偧寮€鍦虹櫧涓庤瘽棰樺欢灞曡兘鍔?
+寮€濮嬬粌涔?馃摉 鎴戠殑鏁呬簨30
+馃挮 浜虹墿閭傞€?0
+绗?绔?鍒濋亣
+
+"鎺ㄥ紑閭ｆ墖闂ㄧ殑鏃跺€欙紝浣犱笉鐭ラ亾鍛借繍宸茬粡寮€濮嬪€掕鏃躲€?
+
+0/6 鑺?鍓ф儏绠€浠?绗?绔?鐮村啺
+
+"娌夐粯涓嶆槸娌℃湁璇濊锛屾槸杩樻病鎵惧埌閭ｄ釜璁╀綘鎯冲紑鍙ｇ殑浜恒€?
+
+0/6 鑺?鍓ф儏绠€浠?绗?绔?鏆ф槯
+
+"閭ｄ簺蹇冭烦鍔犻€熺殑鐬棿锛屼綘浠ヤ负瀵规柟鍚笉瑙佸悧锛?
+
+0/6 鑺?鍓ф儏绠€浠?绗?绔?鐑亱
+
+"浠庨偅澶╄捣锛屾墍鏈夋瓕閲屽敱鐨勯兘鏈変簡鐢婚潰銆?
+
+0/6 鑺?鍓ф儏绠€浠?绗?绔?鑰冮獙
+
+"鐪熸鐨勭埍鎯呬笉鏄病鏈夐鏆达紝鏄鏆磋繃鍚庝綘杩樺湪銆?
+
+0/6 鑺?鍓ф儏绠€浠?浜掑姩鍖归厤
+NEW
+鏈懆 1/5 娆?瑙掕壊鎵紨瀵圭粌 馃幁
+
+闅忔満鍖归厤瀵规墜锛屾壆婕斾笉鍚岃鑹茶繘琛屽疄鎴樺璇濄€?0鍒嗛挓闄愭椂鎸戞垬锛孉I瀹炴椂璇勫垎锛屾楠屼綘鐨勭湡瀹炴按骞筹紒
+
+鎶藉彇鍦烘櫙
+鍒嗛厤瑙掕壊
+闄愭椂瀵硅瘽
+AI璇勫垎
+馃弳
+瀹屾垚瀵圭粌鍙幏 30-80 XP锛屾瘡鍛?娆″厤璐规満浼?绔嬪嵆寮€濮嬪尮閰?鍓ф儏鍏冲崱 路 1 / 6
+鍒囨崲鎼。
+绗?1 绔?路 绗?1 鑺?鈼?鏈紑濮?閭ｆ澂鎷块搧鐨勬俯搴?
+鈥滄帹闂ㄨ繘鍘荤殑鐬棿锛屼綘闂诲埌浜嗙儤鐒欑殑棣欐皵锛岃繕鏈変竴涓綆澶村井绗戠殑浜衡€?
+路 鍓ф儏绠€浠?路
+
+鍛ㄦ湯鐨勫崍鍚庯紝浣犺翰闆ㄦ嫄杩涗簡涓€瀹惰棌鍦ㄥ贩瀛愰噷鐨勫挅鍟￠銆傛帹闂ㄩ偅涓€涓嬶紝娓╂殩鐨勭儤鐒欓鍜岃交缂撶殑鐖靛＋涔愪竴璧锋墤杩囨潵锛屽惂鍙拌竟涓€涓綆澶存祬绗戠殑濂冲鎶溂鐪嬩簡浣犱竴鐪笺€備綘浠彧鏄檶鐢熶汉锛屼絾濂圭殑鏉瓙閲屽啋鐫€鐑皵锛屼綘鐨勫濂楄繕鍦ㄦ淮姘粹€斺€旇繖灏辨槸寮€鍦恒€傛帴涓嬫潵杩欏嚑鍒嗛挓閲岋紝浣犺鎯冲姙娉曡濂规効鎰忔姮璧峰ご绗簩娆★細涓€鍙ヤ笉鍐掓槯鐨勬惌璇濄€佷竴鐐瑰垰濂界殑鑷劧銆佷竴涓ス浼氭兂璁颁綇鐨勪綘銆?
+寰呮寫鎴?寮€濮嬭繖涓€鍏?涓嬫粦鍏抽棴
+棣栭〉
+鎴愰暱
+寰粌涔?璁㈣喘
+鎴戠殑
+
+=== CONSOLE MESSAGES ===
+[debug] [vite] connecting...
+  at http://localhost:5173/@vite/client 494
+[debug] [vite] connected.
+  at http://localhost:5173/@vite/client 617
+[info] %cDownload the React DevTools for a better development experience: https://reactjs.org/link/react-devtools font-weight:bold
+  at http://localhost:5173/node_modules/.vite/deps/chunk-PQUBWG3Q.js?v=f0ec49ac 21548
+[error] Failed to load resource: the server responded with a status of 404 (Not Found)
+  at http://localhost:5173/favicon.ico undefined
+
+=== PAGE ERRORS ===
+
+=== FAILED REQUESTS ===
+{"url":"http://localhost:5173/favicon.ico","status":404,"statusText":"Not Found"}

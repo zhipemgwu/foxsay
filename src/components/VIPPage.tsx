@@ -57,6 +57,8 @@ const benefitModules = [
     items: [
       { label: '每日对话次数', lite: '10次', pro: '50次', proplus: '无限' },
       { label: '解锁训练场景', lite: '3个', pro: '10个', proplus: '全部' },
+      { label: '微练习全量题库（已并入会员）', lite: true, pro: true, proplus: true },
+      { label: '微练习模拟考按分类定制', lite: false, pro: true, proplus: true },
       { label: 'AI 对话记忆', lite: '短期', pro: '长期', proplus: '永久' },
       { label: '语音对话模式', lite: false, pro: false, proplus: true },
     ],

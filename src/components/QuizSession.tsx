@@ -38,8 +38,6 @@ export function QuizSession({ questions, title, onExit, onFinish }: Props) {
 
   // 切题时重置
   useEffect(() => {
-    setUserAnswer(null);
-    setSubmitted(false);
     scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   }, [idx]);
 
@@ -82,6 +80,9 @@ export function QuizSession({ questions, title, onExit, onFinish }: Props) {
       });
     } else {
       setIdx(i => i + 1);
+      setUserAnswer(null);
+      setSubmitted(false);
+      scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
     }
   };
 

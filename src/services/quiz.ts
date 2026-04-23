@@ -11,7 +11,8 @@ export type QuizCategory =
   | 'love'           // 热恋沟通
   | 'redflag'        // 红旗识别
   | 'emotion-catch'  // 情绪接住
-  | 'refuse';        // 拒绝 / 退出练习
+  | 'refuse'
+  | 'recover';
 
 export type QuizType = 'single' | 'multi' | 'order' | 'cloze' | 'judge';
 
@@ -50,6 +51,7 @@ export const CATEGORY_META: Record<QuizCategory, { label: string; emoji: string;
   'redflag':       { label: '红旗识别',   emoji: '🚩', color: '#FF9F43', desc: '这是爱还是控制？' },
   'emotion-catch': { label: '情绪接住',   emoji: '🤲', color: '#FFD93D', desc: '对方情绪来了，你怎么接' },
   'refuse':        { label: '拒绝练习',   emoji: '🙅', color: '#95E1D3', desc: '体面说不 / 退出关系' },
+    'recover':       { label: '挽回前任', emoji: '🩹', color: '#B39DDB', desc: '复联策略 / 二次吸引' },
 };
 
 /* =========================================================

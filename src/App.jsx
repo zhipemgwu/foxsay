@@ -73,6 +73,11 @@ export default function App() {
   const goPractice = useCallback(() => setActiveTab(0), []);
 
   const handlePracticeAction = useCallback((action) => {
+    if (action === 'go_vip' || action?.type === 'go_vip') {
+      skipTabAnimRef.current = true;
+      setActiveTab(3);
+      return;
+    }
     setPracticeAction(action);
     skipTabAnimRef.current = true;
     setActiveTab(0);
