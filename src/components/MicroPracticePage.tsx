@@ -41,10 +41,11 @@ interface MicroPracticePageProps {
 export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps = {}) {
   const user = useUser();
   const [mode, setMode] = useState<Mode>({ kind: 'hub' });
+  const [toastMsg, setToastMsg] = useState('');
+  const flash = (m: string) => { setToastMsg(m); setTimeout(() => setToastMsg(''), 1800); };
   const [version, setVersion] = useState(0);
   const [showPaywall, setShowPaywall] = useState(false);
   const [paywallFrom, setPaywallFrom] = useState('进阶题库');
-  const [showMockCategoryPicker, setShowMockCategoryPicker] = useState(false);
   const [accessVersion, setAccessVersion] = useState(0);
 
   const hasMainVip = useMemo(() => !!user.isPro?.(), [user, accessVersion]);
@@ -65,7 +66,7 @@ export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps =
   const stats = useMemo(() => getStats(), [version]);
   const streak = useMemo(() => getStreak(), [version]);
   const wrongIds = useMemo(() => getWrongBook(), [version]);
-  const dailyPicks = useMemo(() => getDailyPicks(activeBank, 3), [version, hasMicroVip]);
+  const dailyPicks = useMemo(() => getDailyPicks(activeBank, 30), [version, hasMicroVip]);
 
   const startSession = (qs: Question[], title: string) => {
     if (qs.length === 0) return;
@@ -83,7 +84,7 @@ export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps =
     const qs = hasMicroVip ? allInCat : allInCat.filter(q => freePool.some(f => f.id === q.id));
     if (qs.length === 0) {
       if (hasMicroVip) {
-        alert('当前分类暂无题目，题库正在扩充中。');
+        flash('当前分类暂无题目，题库正在扩充中。');
         return;
       }
       setPaywallFrom(`${CATEGORY_META[cat].label} · 进阶题`);
@@ -96,7 +97,7 @@ export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps =
   const startWrongBook = () => {
     const qs = wrongIds.map(id => getQuestionById(id)).filter((q): q is Question => !!q);
     if (qs.length === 0) {
-      alert('错题本是空的～');
+      flash('错题本是空的～');
       return;
     }
     startSession(qs, '错题本');
@@ -110,7 +111,7 @@ export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps =
     }
     const wrongQs = wrongIds.map(id => getQuestionById(id)).filter((q): q is Question => !!q);
     if (wrongQs.length === 0) {
-      alert('你还没有错题，先刷几道再来深度复盘。');
+      flash('你还没有错题，先刷几道再来深度复盘。');
       return;
     }
     const inject = shuffle(QUIZ_BANK.filter(q => !wrongIds.includes(q.id))).slice(0, Math.max(0, 10 - wrongQs.length));
@@ -128,9 +129,29 @@ export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps =
     localStorage.setItem(FREE_MOCK_DAILY_KEY, today);
   };
 
+  // 按 8 大分类分层抽样，凑出 50 题：先每类均分，剩余的随机补齐
+  const buildStratifiedMockPool = (bank: Question[], total = 50): Question[] => {
+    const cats = Object.keys(CATEGORY_META) as QuizCategory[];
+    const byCat = new Map<QuizCategory, Question[]>();
+    cats.forEach(c => byCat.set(c, shuffle(bank.filter(q => q.category === c))));
+    const picked: Question[] = [];
+    const base = Math.floor(total / cats.length);
+    // 第一轮：每类先取 base 道
+    cats.forEach(c => {
+      const arr = byCat.get(c)!;
+      picked.push(...arr.splice(0, Math.min(base, arr.length)));
+    });
+    // 第二轮：在剩余的题里随机补齐到 total
+    const rest = shuffle(cats.flatMap(c => byCat.get(c)!));
+    while (picked.length < total && rest.length > 0) {
+      picked.push(rest.shift()!);
+    }
+    return shuffle(picked);
+  };
+
   const startMock = () => {
     if (activeBank.length < 5) {
-      alert('题库还在建设中，先多刷几道吧');
+      flash('题库还在建设中，先多刷几道吧');
       return;
     }
     if (!hasMicroVip) {
@@ -139,24 +160,14 @@ export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps =
         setShowPaywall(true);
         return;
       }
-      const pool = shuffle(freePool).slice(0, Math.min(50, freePool.length));
       markFreeMockUsed();
-      startSession(pool, `模拟考 · 免费版 ${pool.length} 题`);
+    }
+    const pool = buildStratifiedMockPool(activeBank, 50);
+    if (pool.length === 0) {
+      flash('题库还在建设中。');
       return;
     }
-    setShowMockCategoryPicker(true);
-  };
-
-  const startMockByCategory = (cat?: QuizCategory) => {
-    const source = cat ? getByCategory(cat) : QUIZ_BANK;
-    const qs = shuffle(source).slice(0, Math.min(50, source.length));
-    if (qs.length === 0) {
-      alert('当前分类题库为空。');
-      return;
-    }
-    const title = cat ? `模拟考 · ${CATEGORY_META[cat].label} ${qs.length} 题` : `模拟考 · 全量 ${qs.length} 题`;
-    startSession(qs, title);
-    setShowMockCategoryPicker(false);
+    startSession(pool, `模拟考 · 全量 ${pool.length} 题`);
   };
 
   const startAdvancedBank = () => {
@@ -166,7 +177,7 @@ export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps =
       return;
     }
     if (advancedPool.length === 0) {
-      alert('进阶题库正在扩充中。');
+      flash('进阶题库正在扩充中。');
       return;
     }
     startSession(shuffle(advancedPool).slice(0, Math.min(30, advancedPool.length)), '进阶题库 · 30 题');
@@ -177,7 +188,7 @@ export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps =
     localStorage.setItem(MICRO_TRIAL_EXPIRE_KEY, String(expireTs));
     setShowPaywall(false);
     setAccessVersion(v => v + 1);
-    alert('已开通微练习体验周卡（7天）');
+    flash('已开通微练习体验周卡（7天）');
   };
 
   const goOpenMembership = () => {
@@ -234,6 +245,16 @@ export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps =
       overflowY: 'auto',
       paddingBottom: 44,
     }}>
+      {toastMsg && (
+        <div style={{
+          position: 'fixed', top: '50%', left: '50%', transform: 'translate(-50%, -50%)',
+          background: 'rgba(0,0,0,0.85)', color: '#fff', padding: '12px 24px', borderRadius: 8,
+          zIndex: 9999, pointerEvents: 'none', fontSize: 14, boxShadow: '0 4px 12px rgba(0,0,0,0.2)',
+          textAlign: 'center', whiteSpace: 'nowrap'
+        }}>
+          {toastMsg}
+        </div>
+      )}
       {/* 顶部：问候（从首页迁入） */}
       <GreetingSection />
 
@@ -339,7 +360,7 @@ export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps =
                 <FileText size={22} />
               </div>
               <div style={{ fontSize: 10, color: 'rgba(255,255,255,0.4)', background: 'rgba(255,255,255,0.05)', padding: '2px 6px', borderRadius: 6 }}>
-                {hasMicroVip ? '+按分类' : (freeUsed ? '次数尽' : '免费1次')}
+                {hasMicroVip ? '全量50题' : (freeUsed ? '次数尽' : '免费1次')}
               </div>
             </div>
             <div style={{ fontSize: 16, fontWeight: 800, color: '#f5efe8', marginBottom: 4 }}>全真模拟</div>
@@ -468,23 +489,6 @@ export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps =
       </div>
 
       </div>
-      {showMockCategoryPicker && (
-        <div style={overlayStyle}>
-          <div style={modalStyle}>
-            <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 8 }}>模拟考定制</div>
-            <div style={{ fontSize: 12, color: 'rgba(245,239,232,0.65)', marginBottom: 12 }}>选择全量或按分类出题（最多 50 题）</div>
-            <button onClick={() => startMockByCategory(undefined)} style={primaryBtn}>全量 50 题</button>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginTop: 8 }}>
-              {(Object.keys(CATEGORY_META) as QuizCategory[]).map(cat => (
-                <button key={cat} onClick={() => startMockByCategory(cat)} style={miniBtn(CATEGORY_META[cat].color)}>
-                  {CATEGORY_META[cat].emoji} {CATEGORY_META[cat].label}
-                </button>
-              ))}
-            </div>
-            <button onClick={() => setShowMockCategoryPicker(false)} style={{ ...ghostBtn, marginTop: 10 }}>取消</button>
-          </div>
-        </div>
-      )}
 
       {showPaywall && (
         <div style={overlayStyle}>
