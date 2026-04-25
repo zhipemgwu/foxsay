@@ -312,7 +312,7 @@ function SingleChoice({ q, userAnswer, submitted, onChange }: {
               <div style={{ flex: 1, fontSize: 14, lineHeight: 1.6 }}>{opt.text}</div>
             </div>
             <AnimatePresence>
-              {submitted && (
+              {submitted && !opt.isCorrect && opt.explain && (
                 <motion.div
                   initial={{ opacity: 0, height: 0 }}
                   animate={{ opacity: 1, height: 'auto' }}
@@ -379,7 +379,7 @@ function MultiChoice({ q, userAnswer, submitted, onChange }: {
                 <div style={{ flex: 1, fontSize: 14, lineHeight: 1.6 }}>{opt.text}</div>
               </div>
               <AnimatePresence>
-                {submitted && (
+                {submitted && !opt.isCorrect && opt.explain && (
                   <motion.div
                     initial={{ opacity: 0, height: 0 }}
                     animate={{ opacity: 1, height: 'auto' }}

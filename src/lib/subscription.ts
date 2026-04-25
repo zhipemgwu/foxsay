@@ -40,10 +40,6 @@ export const TERMS = {
 /** 权益矩阵 — 各个功能是否需要会员 */
 export const FEATURES = {
   KEYBOARD: { pro: true, label: 'AI 辅助键盘' },
-  CHAT_TRANSLATOR: { pro: false, label: '聊天翻译机（基础）' },
-  CHAT_TRANSLATOR_DEEP: { pro: true, label: '聊天翻译机 · 深度分析' },
-  DATE_PLANNER: { pro: false, label: '约会锦囊（基础）' },
-  DATE_PLANNER_REVIEW: { pro: true, label: '约会复盘' },
   DIAGNOSTIC_DEEP: { pro: true, label: '关系深度诊断' },
   COACH_CHAT: { pro: true, label: '专属导师一对一' },
   COMMUNITY_PAID_POSTS: { pro: true, label: '精品付费专栏' },

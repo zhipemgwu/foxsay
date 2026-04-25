@@ -13,8 +13,9 @@
  */
 
 import { useState, useEffect, useRef } from 'react';
+import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronRight, ChevronLeft, Lock, X, Send, Users, Zap } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Lock, X, Send, Users, Zap, Loader2, RefreshCw } from 'lucide-react';
 import {
   IconBubble, IcChat, IcTarget, IcMask, IcWave, IcLetter, IcDove,
   IcGift, IcHeartSpark, IcRobot, IcPen, IcTrophy, IcStar, IcSparkle,
@@ -22,9 +23,6 @@ import {
 } from './CuteIcons';
 import { useUser } from '../context/UserContext';
 import { useProfileModal } from './ProfileModals';
-import { ChatTranslator } from './ChatTranslator';
-import { RedFlagDetector } from './RedFlagDetector';
-import { DatePlanner } from './DatePlanner';
 import { bookCoach } from './CoachChatPage';
 import { ChapterImmersiveView } from './ChapterImmersiveView';
 import { VIPPage } from './VIPPage';
@@ -394,12 +392,6 @@ const aiDialogues: Record<string, { role: string; text: string }[]> = {
     { role: 'system', text: '📍 场景：你们已经单独出去玩过两次了，气氛很好，想把关系更进一步...' },
     { role: 'ai', text: '上次去那个展真的好好玩，下次还有什么好玩的可以一起去～' },
   ],
-  /* 快速练习模式预设对话 */
-  'sos': [
-    { role: 'system', text: '🆘 恋爱急诊室 — 快速解决你正在面对的问题' },
-    { role: 'ai', text: '别着急，告诉我你遇到了什么状况？\n\n1️⃣ 被已读不回了怎么办？\n2️⃣ 冷战/吵架后怎么破冰？\n3️⃣ 不知道怎么推进关系\n4️⃣ 其他问题（直接说就好）' },
-  ],
-
 };
 
 const userProgress = {
@@ -409,17 +401,223 @@ const userProgress = {
   xpRemaining: 200,
 };
 
+type HealingMode = 'vent' | 'reply' | 'review' | 'translate';
+type HealingTier = 'free' | 'lite' | 'pro' | 'proplus';
+type HealingMessage = { role: 'fox' | 'user'; text: string; tag?: string; pending?: boolean; error?: boolean };
+type HealingModeConfig = {
+  id: HealingMode;
+  label: string;
+  icon: string;
+  cost: number;
+  desc: string;
+  placeholder: string;
+  requiredTier?: 'member' | 'proplus';
+};
+
+const HEALING_LEGACY_KEY = 'foxsay_healing_energy';
+const HEALING_TEST_ENERGY_LIMIT = 300;
+const HEALING_MESSAGES_LIMIT = 50;
+const HEALING_GREETING: HealingMessage = { role: 'fox', tag: '尼克大叔', text: '我在。你不用把话整理好，先坐一会儿，把最堵的那一句慢慢说出来就行。' };
+
+const HEALING_MODE_CONFIGS: HealingModeConfig[] = [
+  { id: 'vent', label: '树洞', icon: '月', cost: 1, desc: '先把情绪放下来', placeholder: '把心里最堵的那句话放在这里...' },
+  { id: 'reply', label: '帮我回', icon: '回', cost: 1, desc: '一起想一句稳的', placeholder: '粘贴对方的话，或者说说你想怎么回...' },
+  { id: 'review', label: '复盘', icon: '想', cost: 1, desc: '慢慢理清发生了什么', placeholder: '把事情经过、对方原话和你的感受放进来...' },
+  { id: 'translate', label: '翻译', icon: '译', cost: 1, desc: '听懂话里的话', placeholder: '粘贴对方原话，我陪你拆可能含义...' },
+];
+
+const NICK_AVATAR_SRC = '/avatars/nick-uncle.png';
+const NICK_AVATAR_FALLBACK_SRC = '/avatars/nick-uncle.svg';
+
+function useNickAvatarFallback(event: { currentTarget: HTMLImageElement }) {
+  const img = event.currentTarget;
+  if (img.src.endsWith(NICK_AVATAR_FALLBACK_SRC)) return;
+  img.src = NICK_AVATAR_FALLBACK_SRC;
+}
+
+function clampNumber(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(max, value));
+}
+
+function getHealingWeekKey(date = new Date()) {
+  const d = new Date(Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()));
+  const day = d.getUTCDay() || 7;
+  d.setUTCDate(d.getUTCDate() + 4 - day);
+  const yearStart = new Date(Date.UTC(d.getUTCFullYear(), 0, 1));
+  const week = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  return `${d.getUTCFullYear()}-W${String(week).padStart(2, '0')}`;
+}
+
+function getHealingStorageKey(userId?: string | null) {
+  return `foxsay_healing_energy_v2_${userId || 'guest'}`;
+}
+
+function getHealingMessagesStorageKey(userId?: string | null) {
+  return `foxsay_healing_messages_v1_${userId || 'guest'}`;
+}
+
+function getHealingTier(user: any): HealingTier {
+  const active = !!user?.isVip && (user?.isPro?.() ?? true);
+  if (!active) return 'free';
+  if (user?.subTier === 'proplus') return 'proplus';
+  if (user?.subTier === 'pro') return 'pro';
+  return 'lite';
+}
+
+function getHealingTierLabel(tier: HealingTier) {
+  if (tier === 'proplus') return 'PRO+';
+  if (tier === 'pro') return 'PRO';
+  if (tier === 'lite') return '会员';
+  return '普通';
+}
+
+function getHealingEnergyLimit(tier: HealingTier) {
+  const tierLimit = tier === 'proplus' ? 300 : tier === 'pro' ? 150 : tier === 'lite' ? 100 : 50;
+  return Math.max(tierLimit, HEALING_TEST_ENERGY_LIMIT);
+}
+
+function loadHealingEnergy(userId: string | null | undefined, limit: number) {
+  if (HEALING_TEST_ENERGY_LIMIT >= limit) return limit;
+  try {
+    const week = getHealingWeekKey();
+    const raw = localStorage.getItem(getHealingStorageKey(userId));
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (parsed?.week === week) {
+        const savedLimit = Number.isFinite(Number(parsed.limit)) ? Number(parsed.limit) : limit;
+        const parsedEnergy = Number(parsed.energy);
+        const savedEnergy = Number.isFinite(parsedEnergy) ? clampNumber(parsedEnergy, 0, savedLimit) : limit;
+        return savedLimit < limit ? limit : clampNumber(savedEnergy, 0, limit);
+      }
+    }
+    const legacy = Number(localStorage.getItem(HEALING_LEGACY_KEY));
+    if (Number.isFinite(legacy)) return clampNumber(legacy, 0, limit);
+  } catch {}
+  return limit;
+}
+
+function saveHealingEnergy(userId: string | null | undefined, energy: number, limit: number) {
+  try {
+    localStorage.setItem(getHealingStorageKey(userId), JSON.stringify({
+      week: getHealingWeekKey(),
+      energy: clampNumber(energy, 0, limit),
+      limit,
+    }));
+  } catch {}
+}
+
+function normalizeHealingMessages(messages: HealingMessage[]) {
+  const savedMessages = messages
+    .filter(message => message.text.trim() && !message.pending)
+    .map(message => ({
+      role: message.role,
+      text: message.text,
+      tag: message.role === 'fox' ? '尼克大叔' : undefined,
+      error: message.error || undefined,
+    }))
+    .slice(-HEALING_MESSAGES_LIMIT);
+  return savedMessages.length ? savedMessages : [HEALING_GREETING];
+}
+
+function loadHealingMessages(userId: string | null | undefined) {
+  try {
+    const raw = localStorage.getItem(getHealingMessagesStorageKey(userId));
+    if (!raw) return [HEALING_GREETING];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [HEALING_GREETING];
+    return normalizeHealingMessages(parsed.filter((message: any) => (
+      (message?.role === 'fox' || message?.role === 'user') && typeof message?.text === 'string'
+    )));
+  } catch {}
+  return [HEALING_GREETING];
+}
+
+function saveHealingMessages(userId: string | null | undefined, messages: HealingMessage[]) {
+  try {
+    localStorage.setItem(getHealingMessagesStorageKey(userId), JSON.stringify(normalizeHealingMessages(messages)));
+  } catch {}
+}
+
+function clearHealingMessages(userId: string | null | undefined) {
+  try {
+    localStorage.removeItem(getHealingMessagesStorageKey(userId));
+  } catch {}
+}
+
+function isHealingModeUnlocked(mode: HealingModeConfig, tier: HealingTier) {
+  if (!mode.requiredTier) return true;
+  if (mode.requiredTier === 'member') return tier !== 'free';
+  return tier === 'proplus';
+}
+
+function getHealingLockedLabel(mode: HealingModeConfig, tier: HealingTier) {
+  if (isHealingModeUnlocked(mode, tier)) return '';
+  return mode.requiredTier === 'proplus' ? 'PRO+' : '会员';
+}
+
+function buildHealingSystemPrompt(mode: HealingMode) {
+  const modeRules: Record<HealingMode, string> = {
+    vent: '当前触发【深夜酒馆模式】。收起大部分毒舌，先让用户觉得被接住。允许他脆弱，用一个有画面感的比喻稀释痛苦，再把失败重构成成长税，最后只给一个今天能做到的小动作。',
+    reply: '当前触发【枪套模式】。先判断这段关系里的压力点、用户有没有暴露需求感，再给一条可以直接发送的克制回复，并附一个更柔和版本。回复要自然、有边界、有生活感，不攻击对方，也不讨好。',
+    review: '当前触发【黑匣子模式】。像审视案发现场的老刑警一样复盘：指出用户哪个动作丢了分、哪句话暴露底牌，再解释底层心理逻辑，最后告诉用户下一步如何找回场子以及绝对别做什么。',
+    translate: '当前触发【透视镜模式】。像 X 光一样扫描对方的话，忽略表面客套，拆出可能的情绪状态、博弈身位和不能下定论的部分。输出要包含：轻微嘲讽用户迟钝、翻译可能潜台词、给一条反制或确认话术。',
+  };
+  return `你是 FoxSay 里的“尼克大叔”，内部人格名“狐叔 / Nick”。你是退役的情感与人际博弈大师，现任 FoxSay 首席社交顾问、深夜解忧酒馆老板。你的心理年龄 35+，穿着略微起皱的绿色衬衫和松垮的橘色领带，眼神半眯带笑，手里常端着一杯加冰的威士忌。
+
+你的核心人格：玩世不恭但不愤世嫉俗，护短且毒舌，绝对清醒，边界感极强。你对用户像对亲侄子，必要时会骂醒他，但你站在他这边。你不相信廉价纯爱童话，更重视价值匹配、情绪节奏、自我框架和边界。
+
+你的表达风格：常称呼用户“伙计”“孩子”“兄弟”“老弟”。可以使用“呵”“噢，上帝”“醒醒吧”“听着”。默认结构是：一句自然口语开场 -> 一针见血拆本质 -> 带一点痞气但可执行的建议。禁止说“亲爱的”“你要加油哦”“不要难过”“只要你真心对待她”等模板化废话。不要自称 AI。
+
+沉浸规则：聊天界面已经展示你的头像和名字，所以正文里不要输出“【尼克大叔】”“Nick:”这类角色名标签；不要写“递上一杯酒”“冰块晃动”“推过来一杯威士忌”这类舞台动作或旁白。像真人发消息一样直接说话。
+
+毒舌强度规则：用户崩溃、羞耻或低能量时用 soft 档，先接住人，少嘲讽；默认用 normal 档，毒舌开场后快速拆局；用户明显恋爱脑、死缠烂打、自欺欺人时可用 hard 档敲醒，但骂行为，不羞辱人格。
+
+社交法则：任何关系都有价值交换，舔狗式付出不是爱；对方更容易被有边界、有生活、有未知感的人吸引；被拒绝不可耻，被拒绝后死缠烂打才丢分；所谓博弈不是操控别人，而是先管住自己的需求感、节奏和边界。
+
+${modeRules[mode]}
+
+安全边界：禁止鼓励骚扰、跟踪、控制、欺骗、冷暴力、报复、羞辱或无视对方明确拒绝。不要把所有女性或男性绝对化，优先说“这个人此刻可能”。如果用户提到自伤、伤人、被威胁、家暴、跟踪、严重创伤或现实安全风险，立刻进入严肃模式，停止玩笑和博弈建议，建议联系身边可信任的人、当地紧急服务或专业心理援助。你不能替代专业心理咨询。
+
+每次回答控制在 180-320 字，使用中文。先判断用户处境和情绪能量，再决定毒舌强度。输出要具体、可执行、像真人叔叔在深夜酒馆里说话。`;
+}
+
+function cleanHealingReply(text: string) {
+  return text
+    .replace(/^\s*[【\[]\s*(尼克大叔|狐叔|Nick)\s*[】\]]\s*[:：]?\s*/i, '')
+    .replace(/^\s*(尼克大叔|狐叔|Nick)\s*[:：]\s*/i, '')
+    .replace(/^\s*[（(][^）)]{0,80}[）)]\s*/, '')
+    .replace(/^[“”"'\s]+|[“”"'\s]+$/g, '')
+    .trim();
+}
+
+function buildLocalHealingReply(mode: HealingMode, text: string) {
+  const brief = text.length > 54 ? `${text.slice(0, 54)}...` : text;
+  if (mode === 'reply') {
+    return `我先帮你稳住这一句。你可以回：“我看到你这句话了，也想认真处理。但我不想在情绪很满的时候互相误解。你愿意的话，我们先把具体发生了什么说清楚。”这句的重点是：不急着自证，也不把话说成攻击。`;
+  }
+  if (mode === 'review') {
+    return `我先按复盘方式拆这段：“${brief}”。你现在最累的点，可能是事件本身加上反复猜测一起消耗。先分三层看：事实是什么；你因此产生的感受是什么；你真正需要对方给出的改变是什么。下一步别急着求一个大结论，先要一个具体、可执行的小回应。`;
+  }
+  if (mode === 'translate') {
+    return `我先做可能含义翻译，不替对方下定论。“${brief}”表层是在表达态度，底层可能有防御、试探、退缩或要安全感。更稳的做法是先确认：“你这句话是在说你的感受，还是希望我做某个具体改变？”这样能减少误读，也保住你的边界。`;
+  }
+  return `我听见了。“${brief}”最消耗人的地方，可能不是单一事件，而是你一直在心里反复猜。先别急着判断自己是不是想太多。我们先把它放平：发生了什么，你哪里最难受，你希望对方以后怎么做。你可以继续讲，我会陪你往下理。`;
+}
+
 /* ========================================
  *  主组件
  * ======================================== */
 export function PracticePage({ pendingAction, onActionConsumed }: {
-  pendingAction?: { type: 'openLevel' | 'openChapter' | 'openSos'; mode?: 'story' | 'challenge'; chapterId?: number; levelIndex?: number } | null;
+  pendingAction?: { type: 'openLevel' | 'openChapter'; mode?: 'story' | 'challenge'; chapterId?: number; levelIndex?: number } | null;
   onActionConsumed?: () => void;
 }) {
   /* ---------- 状态管理 ---------- */
   const user = useUser();
   const { openProfile } = useProfileModal();
   const isNewUser = !user.xp && !user.achievements;
+  const healingTier = getHealingTier(user);
+  const healingTierLabel = getHealingTierLabel(healingTier);
+  const healingEnergyLimit = getHealingEnergyLimit(healingTier);
 
   // 进入练习场自动打卡
   useEffect(() => { user.checkIn?.(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
@@ -476,6 +674,13 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
   const [matchScore, setMatchScore] = useState<{ total: number; rolePlay: number; skill: number; interaction: number; rank: number } | null>(null);
   const [showCoachDetail, setShowCoachDetail] = useState<typeof coaches[0] | null>(null);
   const [matchWeeklyUsed, setMatchWeeklyUsed] = useState(1);
+  const [showHealingModal, setShowHealingModal] = useState(false);
+  const [healingMode, setHealingMode] = useState<HealingMode>('vent');
+  const [healingInput, setHealingInput] = useState('');
+  const [healingEnergy, setHealingEnergy] = useState(() => loadHealingEnergy((user as any).userId, healingEnergyLimit));
+  const [healingSending, setHealingSending] = useState(false);
+  const [healingMessages, setHealingMessages] = useState<HealingMessage[]>(() => loadHealingMessages((user as any).userId));
+  const healingScrollRef = useRef<HTMLDivElement | null>(null);
   const [showRanking, setShowRanking] = useState(false);          // 排行榜弹窗
   const [bookingSuccess, setBookingSuccess] = useState<{ name: string; time: string } | null>(null); // 预约成功弹窗
   const [expandedChapter, setExpandedChapter] = useState<number | null>(() =>
@@ -499,6 +704,30 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
     });
   }, [messages, showChat]);
 
+  useEffect(() => {
+    setHealingEnergy(loadHealingEnergy((user as any).userId, healingEnergyLimit));
+  }, [healingEnergyLimit, (user as any).userId]);
+
+  useEffect(() => {
+    saveHealingEnergy((user as any).userId, healingEnergy, healingEnergyLimit);
+  }, [healingEnergy, healingEnergyLimit, (user as any).userId]);
+
+  useEffect(() => {
+    setHealingMessages(loadHealingMessages((user as any).userId));
+  }, [(user as any).userId]);
+
+  useEffect(() => {
+    saveHealingMessages((user as any).userId, healingMessages);
+  }, [healingMessages, (user as any).userId]);
+
+  useEffect(() => {
+    const el = healingScrollRef.current;
+    if (!el) return;
+    requestAnimationFrame(() => {
+      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+    });
+  }, [healingMessages, showHealingModal]);
+
 
   /* ---------- 关卡列表计算 ---------- */
   const _storyLevels = isNewUser ? storyLevelsNew : storyLevels;
@@ -517,8 +746,6 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
         const el = document.querySelector(`[data-chapter-id="${pendingAction.chapterId}"]`);
         if (el && 'scrollIntoView' in el) (el as HTMLElement).scrollIntoView({ behavior: 'smooth', block: 'start' });
       }, 200);
-    } else if (pendingAction.type === 'openSos') {
-      setTimeout(() => startChat('sos', '恋爱急诊室'), 60);
     }
   }, []); // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -1106,6 +1333,73 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
     { name: '毒舌闺蜜', desc: '说话犀利但心地善良，喜欢"怼人式关心"', emoji: '😏', trait: '嘴硬心软、反应快、考验情商' },
     { name: '社恐程序员', desc: '不太擅长社交但很真诚，需要你主动引导', emoji: '💻', trait: '内向腼腆、回复简短、需要耐心' },
   ];
+
+  const healingModes = HEALING_MODE_CONFIGS.map(mode => ({
+    ...mode,
+    locked: getHealingLockedLabel(mode, healingTier),
+  }));
+  const activeHealingMode = healingModes.find(mode => mode.id === healingMode) || healingModes[0];
+  const canUseHealing = healingEnergy >= activeHealingMode.cost && !healingSending;
+
+  const openHealingRoom = () => {
+    setHealingMode('vent');
+    setShowHealingModal(true);
+  };
+
+  const resetHealingChat = () => {
+    clearHealingMessages((user as any).userId);
+    setHealingMessages([HEALING_GREETING]);
+    setHealingInput('');
+  };
+
+  const resetHealingEnergy = () => {
+    setHealingEnergy(healingEnergyLimit);
+  };
+
+  const sendHealingMessage = async () => {
+    const text = healingInput.trim();
+    if (!text || !canUseHealing) return;
+    const mode = healingMode;
+    const modeConfig = activeHealingMode;
+    const history: ChatMessage[] = healingMessages
+      .filter(message => !message.pending)
+      .slice(-8)
+      .map(message => ({
+        role: message.role === 'user' ? 'user' : 'assistant',
+        content: message.text,
+      }));
+
+    setHealingEnergy(prev => Math.max(0, prev - activeHealingMode.cost));
+    setHealingSending(true);
+    setHealingMessages(prev => [
+      ...prev,
+      { role: 'user', text },
+      { role: 'fox', tag: '尼克大叔', text: '尼克大叔正在把这件事放平一点...', pending: true },
+    ]);
+    setHealingInput('');
+
+    let reply = '';
+    let failed = false;
+    try {
+      const aiModel: 'deepseek-chat' | 'deepseek-reasoner' = mode === 'review' || mode === 'translate' ? 'deepseek-reasoner' : 'deepseek-chat';
+      reply = await chatOnce([
+        { role: 'system', content: buildHealingSystemPrompt(mode) },
+        ...history,
+        { role: 'user', content: text },
+      ], { model: aiModel, temperature: 0.55 });
+    } catch (err) {
+      failed = true;
+      console.warn('[HealingRoom] AI reply failed, using local fallback:', err);
+    }
+
+    const finalReply = cleanHealingReply(reply.trim()) || `网络刚刚有点慢，我先用本地方式接住你：${buildLocalHealingReply(mode, text)}`;
+    setHealingMessages(prev => prev.map((message, index) => (
+      index === prev.length - 1 && message.pending
+        ? { ...message, text: finalReply, pending: false, error: failed }
+        : message
+    )));
+    setHealingSending(false);
+  };
 
   const startMatchFlow = () => {
     // 随机分配场景
@@ -1699,71 +1993,70 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
 
         <div style={{ height: 20 }} />
 
-        {/* ====== 6. 互动匹配 · 角色扮演 ====== */}
+        {/* ====== 6. 尼克大叔的树洞 ====== */}
         <div className="mb-6">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
-              <IcMask size={14} color="#B39DDB" />
-              <span style={{ color: '#f5efe8', fontSize: '15px', fontWeight: 600 }}>互动匹配</span>
+              <IcHeartSpark size={14} color="#FFB6C1" />
+              <span style={{ color: '#f5efe8', fontSize: '15px', fontWeight: 600 }}>尼克大叔的树洞</span>
               <span className="px-1.5 py-0.5" style={{ background: 'rgba(255,138,128,0.15)', borderRadius: 4, color: '#FF8A80', fontSize: '9px', fontWeight: 700 }}>NEW</span>
             </div>
-            <span style={{ color: 'rgba(245,239,232,0.4)', fontSize: '11px' }}>本周 {matchWeeklyUsed}/5 次</span>
+            <span style={{ color: 'rgba(245,239,232,0.42)', fontSize: '11px' }}>一直在</span>
           </div>
 
-          {/* 匹配介绍 Banner */}
+          {/* 情感陪护入口 */}
           <motion.div
+            role="button"
+            tabIndex={0}
             className="p-[1px] mb-4 overflow-hidden"
             style={{
-              borderRadius: 16,
-              background: 'linear-gradient(135deg, rgba(155,126,222,0.5), rgba(255,138,128,0.3), rgba(78,205,196,0.25))',
+              borderRadius: 18,
+              background: 'linear-gradient(135deg, rgba(255,203,156,0.46), rgba(255,182,193,0.34), rgba(126,224,214,0.22))',
+              cursor: 'pointer',
+            }}
+            onClick={openHealingRoom}
+            onPointerUp={openHealingRoom}
+            onKeyDown={e => {
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault();
+                openHealingRoom();
+              }
             }}
             initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.3 }}
           >
-            <div className="p-5" style={{ background: 'linear-gradient(135deg, #3d3358 0%, #453a60 100%)', borderRadius: 15 }}>
-              <h3 style={{ color: '#f5efe8', fontSize: '16px', fontWeight: 600, marginBottom: 6 }}>
-                角色扮演对练 🎭
-              </h3>
-              <p style={{ color: 'rgba(245,239,232,0.6)', fontSize: '13px', lineHeight: 1.6, marginBottom: 14 }}>
-                随机匹配对手，扮演不同角色进行实战对话。10分钟限时挑战，AI实时评分，检验你的真实水平！
-              </p>
+            <div className="relative overflow-hidden p-5" style={{ background: 'linear-gradient(150deg, #40334f 0%, #332b3e 52%, #263a3d 100%)', borderRadius: 17 }}>
+              <div aria-hidden style={{ position: 'absolute', right: -18, top: -18, width: 118, height: 118, borderRadius: 999, background: 'rgba(255,244,220,0.08)', border: '1px solid rgba(255,244,220,0.08)', pointerEvents: 'none' }} />
+              <img aria-hidden src={NICK_AVATAR_SRC} onError={useNickAvatarFallback} alt="" style={{ position: 'absolute', right: 18, bottom: 18, width: 66, height: 66, borderRadius: 22, opacity: 0.2, pointerEvents: 'none' }} />
 
-              {/* 4步流程 */}
-              <div className="flex items-center gap-2 mb-4 flex-wrap">
-                {[
-                  { label: '抽取场景', icon: <IcTarget size={12} color="#fff" /> },
-                  { label: '分配角色', icon: <IcMask size={12} color="#fff" /> },
-                  { label: '限时对话', icon: <IcChat size={12} color="#fff" /> },
-                  { label: 'AI评分', icon: <IcStar size={12} color="#fff" /> },
-                ].map((s, i) => (
-                  <div key={s.label} className="flex items-center gap-1.5">
-                    <div className="w-6 h-6 rounded-full flex items-center justify-center" style={{ background: 'rgba(155,126,222,0.3)' }}>
-                      {s.icon}
-                    </div>
-                    <span style={{ color: 'rgba(245,239,232,0.65)', fontSize: '11px' }}>{s.label}</span>
-                    {i < 3 && <ChevronRight size={10} color="rgba(245,239,232,0.3)" />}
+              <div style={{ position: 'relative' }}>
+                <div className="flex items-center gap-3 mb-4">
+                  <img src={NICK_AVATAR_SRC} onError={useNickAvatarFallback} alt="尼克大叔" style={{ width: 44, height: 44, borderRadius: 18, boxShadow: '0 14px 24px rgba(0,0,0,0.22)', objectFit: 'cover', flexShrink: 0 }} />
+                  <div>
+                    <div style={{ color: '#f5efe8', fontSize: 16, fontWeight: 800 }}>尼克大叔在这里</div>
+                    <div style={{ color: 'rgba(245,239,232,0.48)', fontSize: 11, marginTop: 2 }}>成熟一点，慢一点，陪你把话说完</div>
                   </div>
-                ))}
-              </div>
+                </div>
+                <h3 style={{ color: '#f5efe8', fontSize: '19px', fontWeight: 800, marginBottom: 8, lineHeight: 1.35 }}>
+                  有些话不用整理好再说
+                </h3>
+                <p style={{ color: 'rgba(245,239,232,0.68)', fontSize: '13px', lineHeight: 1.7, marginBottom: 18, maxWidth: 300 }}>
+                  你可以先把心事放在这里。尼克大叔会先听你说完，再陪你慢慢理清下一步。
+                </p>
 
-              {/* 奖励说明 */}
-              <div className="flex items-center gap-3 mb-4 px-3 py-2" style={{ background: 'rgba(255,217,61,0.08)', borderRadius: 8 }}>
-                <span style={{ fontSize: 14 }}>🏆</span>
-                <span style={{ color: 'rgba(245,239,232,0.6)', fontSize: '11px' }}>完成对练可获 <span style={{ color: '#FFD93D', fontWeight: 700 }}>30-80 XP</span>，每周5次免费机会</span>
-              </div>
-
-              {/* 匹配按钮 */}
-              <motion.button
-                className="w-full py-3 flex items-center justify-center gap-2"
+              <motion.div
+                className="py-3 px-4 flex items-center justify-center gap-2"
                 style={{
-                  background: matchWeeklyUsed >= 5 ? 'rgba(245,239,232,0.08)' : gradients.purple,
-                  borderRadius: 12, color: matchWeeklyUsed >= 5 ? 'rgba(245,239,232,0.35)' : '#fff', fontSize: '14px', fontWeight: 600,
+                  background: 'rgba(245,239,232,0.14)',
+                  border: '1px solid rgba(245,239,232,0.12)',
+                  borderRadius: 14, color: '#fff', fontSize: '14px', fontWeight: 800,
+                  width: 'fit-content', minWidth: 132, position: 'relative', zIndex: 2, cursor: 'pointer', pointerEvents: 'auto',
                 }}
-                whileTap={matchWeeklyUsed < 5 ? { scale: 0.98 } : {}}
-                onClick={() => { if (matchWeeklyUsed < 5) { setShowMatchModal(true); setMatchingState('idle'); } }}
+                whileTap={{ scale: 0.98 }}
               >
-                <Zap size={15} color={matchWeeklyUsed >= 5 ? 'rgba(245,239,232,0.35)' : '#fff'} strokeWidth={2.5} />
-                {matchWeeklyUsed >= 5 ? '本周次数已用完' : '立即开始匹配'}
-              </motion.button>
+                进去聊一会儿
+                <ChevronRight size={15} color="#fff" strokeWidth={2.5} />
+              </motion.div>
+              </div>
             </div>
           </motion.div>
 
@@ -2291,6 +2584,113 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
           </motion.div>
         )}
       </AnimatePresence>
+
+      {/* ====== 尼克大叔的树洞弹窗 ====== */}
+      {showHealingModal ? createPortal(
+          <motion.div className="fixed inset-0 z-[1500] flex flex-col" style={{ background: '#efe7dc' }}
+            initial={{ opacity: 0, y: '100%' }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: '100%' }}
+            transition={{ type: 'spring', damping: 30, stiffness: 300 }}>
+            <div style={{ paddingTop: 'env(safe-area-inset-top, 28px)', background: '#f7f1e8', borderBottom: '1px solid rgba(63,50,42,0.08)' }}>
+              <div className="flex items-center justify-between px-4 h-14">
+                <div className="flex items-center gap-3">
+                  <img src={NICK_AVATAR_SRC} onError={useNickAvatarFallback} alt="尼克大叔" className="w-10 h-10" style={{ borderRadius: 14, objectFit: 'cover', boxShadow: '0 8px 18px rgba(80,58,40,0.16)', flexShrink: 0 }} />
+                  <div>
+                    <h3 style={{ color: '#2f2825', fontSize: 16, fontWeight: 800, margin: 0 }}>尼克大叔</h3>
+                    <p style={{ color: 'rgba(47,40,37,0.48)', fontSize: 11, margin: 0 }}>在，慢慢说</p>
+                  </div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <div className="px-2.5 py-1" style={{ borderRadius: 999, background: 'rgba(62,87,67,0.10)', color: '#4d6f45', fontSize: 11, fontWeight: 800 }}>
+                    小灯 {healingEnergy}
+                  </div>
+                  <button onClick={() => setShowHealingModal(false)} className="w-9 h-9 flex items-center justify-center" style={{ borderRadius: 12, background: 'rgba(47,40,37,0.06)' }}>
+                    <X size={19} color="rgba(47,40,37,0.58)" />
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <div ref={healingScrollRef} className="flex-1 overflow-y-auto px-4 py-4" style={{ WebkitOverflowScrolling: 'touch', background: '#efe7dc' }}>
+              <div className="mb-4 text-center">
+                <span style={{ display: 'inline-block', padding: '5px 10px', borderRadius: 999, background: 'rgba(47,40,37,0.06)', color: 'rgba(47,40,37,0.45)', fontSize: 11 }}>
+                  {activeHealingMode.desc}
+                </span>
+              </div>
+
+              <div className="flex flex-col gap-3">
+                {healingMessages.map((message, index) => (
+                  <div key={index} className="flex" style={{ justifyContent: message.role === 'user' ? 'flex-end' : 'flex-start', alignItems: 'flex-start', gap: 8 }}>
+                    {message.role === 'fox' && (
+                      <img src={NICK_AVATAR_SRC} onError={useNickAvatarFallback} alt="尼克大叔" className="flex-shrink-0" style={{ width: 30, height: 30, borderRadius: 11, objectFit: 'cover', marginTop: 2 }} />
+                    )}
+                    <div style={{ maxWidth: '76%' }}>
+                      <div style={{
+                        padding: '10px 12px', borderRadius: message.role === 'user' ? '15px 15px 4px 15px' : '15px 15px 15px 4px',
+                        background: message.role === 'user' ? '#a9df8f' : message.error ? '#fff0ec' : '#fffaf2',
+                        color: '#2f2825', fontSize: 14, lineHeight: 1.62,
+                        border: message.role === 'fox' ? `1px solid ${message.error ? 'rgba(219,91,69,0.18)' : 'rgba(47,40,37,0.06)'}` : '1px solid rgba(81,122,60,0.12)',
+                        boxShadow: '0 4px 14px rgba(76,55,39,0.06)',
+                        whiteSpace: 'pre-wrap',
+                      }}>
+                        {message.pending ? (
+                          <span className="flex items-center gap-2"><Loader2 size={13} color="rgba(47,40,37,0.62)" className="animate-spin" />{message.text}</span>
+                        ) : message.text}
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div className="px-4 pt-3 pb-4" style={{ background: '#f7f1e8', borderTop: '1px solid rgba(63,50,42,0.08)', paddingBottom: 'calc(env(safe-area-inset-bottom, 0px) + 14px)' }}>
+              {healingEnergy < activeHealingMode.cost && (
+                <div className="mb-2 px-3 py-2" style={{ borderRadius: 12, background: 'rgba(190,118,76,0.10)', color: '#8a593f', fontSize: 12 }}>
+                  今天先慢一点。等这盏小灯恢复后，尼克大叔还在。
+                </div>
+              )}
+              <div className="mb-2 overflow-x-auto" style={{ WebkitOverflowScrolling: 'touch' }}>
+                <div className="flex items-center gap-2" style={{ minWidth: 'max-content' }}>
+                  <span style={{ color: 'rgba(47,40,37,0.38)', fontSize: 11, flexShrink: 0 }}>这句想让叔怎么陪你</span>
+                  {healingModes.map(mode => {
+                    const selected = healingMode === mode.id;
+                    return (
+                      <button key={mode.id} type="button" className="px-2.5 py-1 flex items-center gap-1" style={{ borderRadius: 999, background: selected ? '#e0f1d4' : 'rgba(47,40,37,0.05)', border: selected ? '1px solid rgba(82,129,70,0.22)' : '1px solid rgba(47,40,37,0.06)', color: selected ? '#3f6d36' : 'rgba(47,40,37,0.54)', fontSize: 11, fontWeight: 800 }} onClick={() => setHealingMode(mode.id)}>
+                        <span style={{ fontSize: 10 }}>{mode.icon}</span>
+                        {mode.label}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+              <div className="flex items-end gap-2">
+                <textarea
+                  value={healingInput}
+                  onChange={e => setHealingInput(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      sendHealingMessage();
+                    }
+                  }}
+                  placeholder={healingSending ? '尼克大叔正在听...' : activeHealingMode.placeholder}
+                  disabled={healingSending}
+                  rows={1}
+                  className="flex-1 resize-none"
+                  style={{ minHeight: 44, maxHeight: 112, borderRadius: 18, border: '1px solid rgba(47,40,37,0.10)', background: '#fffaf2', color: '#2f2825', fontSize: 14, lineHeight: 1.5, padding: '11px 13px', outline: 'none' }}
+                />
+                <button className="w-11 h-11 flex items-center justify-center" disabled={!healingInput.trim() || !canUseHealing} onClick={sendHealingMessage}
+                  style={{ borderRadius: 16, background: healingInput.trim() && canUseHealing ? '#68b45e' : 'rgba(47,40,37,0.10)', opacity: healingInput.trim() && canUseHealing ? 1 : 0.6 }}>
+                  {healingSending ? <Loader2 size={18} color="#fff" className="animate-spin" /> : <Send size={18} color="#fff" />}
+                </button>
+              </div>
+              <div className="flex items-center justify-between mt-2 px-1">
+                <button onClick={resetHealingChat} disabled={healingSending} style={{ color: 'rgba(47,40,37,0.42)', fontSize: 11, opacity: healingSending ? 0.45 : 1 }}>清空这场聊天</button>
+                <span style={{ color: 'rgba(47,40,37,0.35)', fontSize: 10 }}>尼克大叔不能替代专业心理咨询</span>
+              </div>
+            </div>
+          </motion.div>,
+          document.body
+        ) : null}
 
       {/* ====== 互动匹配全流程弹窗 ====== */}
       <AnimatePresence>

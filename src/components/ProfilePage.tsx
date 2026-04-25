@@ -11,9 +11,6 @@ import { SocialPage } from './SocialPage';
 import { badgePool } from './SocialPage';
 import { EquippedBadges } from './EquippedBadges';
 import DeepSpeciesTest from './DeepSpeciesTest';
-import { ChatTranslator } from './ChatTranslator';
-import { RedFlagDetector } from './RedFlagDetector';
-import { DatePlanner } from './DatePlanner';
 
 const menuItems = [
   { icon: <IcTrophy size={16} color="#fff" />, bg: gradients.coral, label: '我的成就' },
@@ -375,27 +372,6 @@ export function ProfilePage({ onLogout, onPracticeAction }: { onLogout?: () => v
           ))}
         </div>
 
-        {/* 妙妙工具 */}
-        <div className="mt-4 mb-4">
-          <div className="grid grid-cols-2 gap-3">
-            <motion.button
-              className="flex items-center gap-3 p-4 text-left"
-              style={{ background: '#453a60', borderRadius: 14, minWidth: 0 }}
-              whileTap={{ scale: 0.95 }}
-              initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }}
-              onClick={() => onPracticeAction?.({ type: 'openSos' })}
-            >
-              <IconBubble size={42} bg={gradients.rose}><IcShield size={20} color="#fff" /></IconBubble>
-              <div className="flex-1 min-w-0">
-                <span style={{ color: '#f5efe8', fontSize: 13, fontWeight: 600, display: 'block' }}>恋爱急诊室</span>
-                <span style={{ color: 'rgba(245,239,232,0.5)', fontSize: 11 }}>遇到问题马上问</span>
-              </div>
-            </motion.button>
-            <ChatTranslator delay={0.06} />
-            <RedFlagDetector delay={0.1} />
-            <DatePlanner delay={0.14} />
-          </div>
-        </div>
       </div>
 
       {/* Modals */}

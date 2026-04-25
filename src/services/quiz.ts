@@ -19,7 +19,7 @@ export type QuizType = 'single' | 'multi' | 'order' | 'cloze' | 'judge';
 export interface QuizOption {
   text: string;
   isCorrect: boolean;
-  explain: string;  // 无论对错都要解释，这是教育价值的核心
+  explain: string;  // 错误选项提交后拆解；正确选项的教学集中在 overallExplain
 }
 
 export interface Question {
