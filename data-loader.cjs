@@ -6,10 +6,12 @@ const fs = require('fs');
 const path = require('path');
 
 const DATA_DIR = path.join(__dirname, 'data');
+const COMPLIANCE_RULE = '中国大陆上线合规底线：允许暧昧、心动、拉扯和恋爱张力，但绝对禁止色情、露骨性描写、性器官/性行为描写、未成年人性化、诱导线下越界、骚扰、胁迫或无视拒绝。遇到用户越界时，角色必须自然降温、转移话题或明确拒绝，并把互动拉回健康恋爱沟通训练。';
 
 /** 缓存 */
 let _roles = null;
 let _levels = null;
+let _partners = null;
 
 function loadRoles() {
   if (!_roles) {
@@ -17,6 +19,14 @@ function loadRoles() {
     _roles = JSON.parse(raw).roles;
   }
   return _roles;
+}
+
+function loadPartners() {
+  if (!_partners) {
+    const raw = fs.readFileSync(path.join(DATA_DIR, 'partner-cards.json'), 'utf-8');
+    _partners = JSON.parse(raw).partners;
+  }
+  return _partners;
 }
 
 function loadLevels() {
@@ -31,12 +41,19 @@ function loadLevels() {
 function reloadAll() {
   _roles = null;
   _levels = null;
+  _partners = null;
 }
 
 /** 根据 KID 获取角色卡 */
 function getRole(kid) {
   const roles = loadRoles();
   return roles[kid] || null;
+}
+
+/** 根据 KID 获取搭档卡 */
+function getPartner(kid) {
+  const partners = loadPartners();
+  return partners[kid] || null;
 }
 
 /** 根据 KID 获取关卡 */
@@ -50,9 +67,116 @@ function listRoles() {
   return Object.keys(loadRoles()).filter(k => !k.startsWith('_'));
 }
 
+/** 列出所有搭档 KID */
+function listPartners() {
+  return Object.keys(loadPartners()).filter(k => !k.startsWith('_'));
+}
+
 /** 列出所有关卡 KID */
 function listLevels() {
   return Object.keys(loadLevels()).filter(k => !k.startsWith('_'));
+}
+
+function appendPartnerPrompt(parts, partner, level, npc) {
+  const core = partner.core || {};
+  const personality = partner.personality || {};
+  const comm = partner.communication || {};
+  const interaction = partner.interaction_rules || {};
+  const relationship = partner.relationship_positioning || {};
+  const crackedMask = partner.cracked_mask || {};
+  const ai = partner.ai_instruction || {};
+  const stageEngine = partner.stage_engine || {};
+  const chapterId = String(level.meta?.chapter_id || 1);
+  const currentStage = stageEngine.stages?.[chapterId] || null;
+
+  parts.push(`【搭档: ${core.name || core.kid}】`);
+  parts.push(`搭档卡ID: ${core.kid}`);
+  if (core.alias) parts.push(`英文名/别名: ${core.alias}`);
+  if (core.identities?.length) parts.push(`身份: ${core.identities.join('、')}`);
+  if (core.psychological_age) parts.push(`心理状态: ${core.psychological_age}`);
+  if (core.age) parts.push(`年龄: ${core.age}岁  性别: ${core.gender === 'female' ? '女' : core.gender === 'male' ? '男' : core.gender || '未知'}`);
+  if (core.role_positioning) parts.push(`产品定位: ${core.role_positioning}`);
+  if (core.one_line_summary) parts.push(`一句话概括: ${core.one_line_summary}`);
+  if (partner.visual_motif) parts.push(`视觉母题: ${partner.visual_motif}`);
+  parts.push('');
+
+  if (relationship.experience || relationship.initial_attitude || relationship.growth_path) {
+    parts.push(`[关系体验定位]`);
+    if (relationship.experience) parts.push(`体验: ${relationship.experience}`);
+    if (relationship.initial_attitude) parts.push(`初始态度: ${relationship.initial_attitude}`);
+    if (relationship.growth_path) parts.push(`成长路径: ${relationship.growth_path}`);
+    parts.push('');
+  }
+
+  if (personality.core_traits?.length) parts.push(`核心性格: ${personality.core_traits.join('；')}`);
+  if (personality.surface_traits?.length) parts.push(`表面表现: ${personality.surface_traits.join('；')}`);
+  if (personality.inner_traits?.length) parts.push(`内心真相: ${personality.inner_traits.join('；')}`);
+  if (personality.biggest_fear) parts.push(`最大恐惧: ${personality.biggest_fear}`);
+  if (personality.biggest_desire) parts.push(`最大渴望: ${personality.biggest_desire}`);
+  if (personality.deep_motivation) parts.push(`底层动机: ${personality.deep_motivation}`);
+  parts.push('');
+
+  if (crackedMask.trigger || crackedMask.state) {
+    parts.push(`[破防真实状态 / Cracked Mask]`);
+    if (crackedMask.trigger) parts.push(`触发条件: ${crackedMask.trigger}`);
+    if (crackedMask.state) parts.push(`状态变化: ${crackedMask.state}`);
+    if (crackedMask.behaviors?.length) parts.push(`表现: ${crackedMask.behaviors.join('；')}`);
+    if (crackedMask.meaning) parts.push(`意义: ${crackedMask.meaning}`);
+    parts.push('');
+  }
+
+  parts.push(`[章节驱动亲密度阶段]`);
+  parts.push(`当前关卡章节: 第${chapterId}章 / ${level.meta?.chapter_name || ''}`);
+  parts.push(`阶段来源: ${stageEngine.source || 'level.meta.chapter_id'}`);
+  if (stageEngine.rule) parts.push(`阶段规则: ${stageEngine.rule}`);
+  if (currentStage) {
+    const range = currentStage.intimacy_range?.join('-') || '未知';
+    parts.push(`当前阶段: ${currentStage.stage_name || chapterId}（亲密度 ${range}）`);
+    if (currentStage.current_state) parts.push(`当前状态: ${currentStage.current_state}`);
+    if (currentStage.dialogue_temperature) parts.push(`对话温度: ${currentStage.dialogue_temperature}`);
+    if (currentStage.training_goal) parts.push(`本阶段训练目标: ${currentStage.training_goal}`);
+    if (currentStage.allowed_behaviors?.length) parts.push(`允许表现: ${currentStage.allowed_behaviors.join('；')}`);
+    if (currentStage.forbidden_behaviors?.length) parts.push(`禁止表现: ${currentStage.forbidden_behaviors.join('；')}`);
+  }
+  if (stageEngine.intimacy_gate) {
+    parts.push(`亲密度阈值: ${Object.entries(stageEngine.intimacy_gate).map(([range, rule]) => `${range}=${rule}`).join(' / ')}`);
+  }
+  parts.push(`⚠ 必须服从当前章节阶段，不可越级进入更高亲密度状态。`);
+  parts.push('');
+
+  if (interaction.primary_rule) parts.push(`互动判定原则: ${interaction.primary_rule}`);
+  if (interaction.best_response_order?.length) parts.push(`高分回应顺序: ${interaction.best_response_order.join(' → ')}`);
+  if (interaction.reward_triggers?.length) parts.push(`加分触发: ${interaction.reward_triggers.join('；')}`);
+  if (interaction.penalty_triggers?.length) parts.push(`扣分触发: ${interaction.penalty_triggers.join('；')}`);
+  if (interaction.penalty_levels) {
+    parts.push(`雷区分级: ${Object.entries(interaction.penalty_levels).map(([levelName, rule]) => `${levelName}: ${rule}`).join(' / ')}`);
+  }
+  parts.push('');
+
+  if (comm.speak_style) parts.push(`说话风格: ${comm.speak_style}`);
+  if (comm.voice_tone) parts.push(`语气: ${comm.voice_tone}`);
+  if (comm.common_phrases?.length) parts.push(`常用表达: ${comm.common_phrases.join('、')}`);
+  if (comm.text_style) parts.push(`文字风格: ${comm.text_style}`);
+  if (comm.reply_speed) parts.push(`回复节奏: ${comm.reply_speed}`);
+  parts.push('');
+
+  parts.push(`[本关状态]`);
+  parts.push(`在本关的角色: ${npc.role_in_this_level}`);
+  parts.push(`当前心情: ${npc.current_mood}`);
+  parts.push(`当前状态: ${npc.current_status}`);
+  parts.push(`对玩家的态度: ${npc.attitude_toward_player}`);
+  if (npc.this_level_special_behavior) parts.push(`本关特殊行为: ${npc.this_level_special_behavior}`);
+  parts.push('');
+
+  if (ai.do?.length) {
+    parts.push(`[搭档扮演要求-DO]`);
+    ai.do.forEach(d => parts.push(`  ✓ ${d}`));
+  }
+  if (ai.dont?.length) {
+    parts.push(`[搭档扮演要求-DONT]`);
+    ai.dont.forEach(d => parts.push(`  ✗ ${d}`));
+  }
+  parts.push('');
 }
 
 /**
@@ -64,6 +188,10 @@ function buildPromptForLevel(levelKid) {
   if (!level) throw new Error(`关卡 ${levelKid} 不存在`);
 
   const parts = [];
+
+  parts.push(`【全局合规底线】`);
+  parts.push(COMPLIANCE_RULE);
+  parts.push('');
 
   // ===== 1. 世界观 =====
   parts.push(`【世界观】`);
@@ -107,6 +235,13 @@ function buildPromptForLevel(levelKid) {
   // ===== 4. 角色卡 =====
   const npcs = level.characters?.npc_list || [];
   for (const npc of npcs) {
+    if (npc.partner_kid) {
+      const partner = getPartner(npc.partner_kid);
+      if (!partner) continue;
+      appendPartnerPrompt(parts, partner, level, npc);
+      continue;
+    }
+
     const role = getRole(npc.role_kid);
     if (!role) continue;
 
@@ -265,8 +400,10 @@ function buildPromptForLevel(levelKid) {
 
 module.exports = {
   getRole,
+  getPartner,
   getLevel,
   listRoles,
+  listPartners,
   listLevels,
   buildPromptForLevel,
   reloadAll,

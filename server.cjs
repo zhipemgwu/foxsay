@@ -10,7 +10,7 @@ const app = express();
 app.use(cors());
 app.use(express.json({ limit: '1mb' }));
 
-const { getLevel, getRole, listRoles, listLevels, buildPromptForLevel, reloadAll } = require('./data-loader.cjs');
+const { getLevel, getRole, getPartner, listRoles, listPartners, listLevels, buildPromptForLevel, reloadAll } = require('./data-loader.cjs');
 
 const API_KEY = process.env.DEEPSEEK_API_KEY;
 const BASE_URL = process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com';
@@ -204,9 +204,16 @@ app.get('/api/role/:kid', (req, res) => {
   res.json(role);
 });
 
+/** 获取搭档卡信息 */
+app.get('/api/partner/:kid', (req, res) => {
+  const partner = getPartner(req.params.kid);
+  if (!partner) return res.status(404).json({ error: '搭档不存在' });
+  res.json(partner);
+});
+
 /** 列出所有关卡和角色 */
 app.get('/api/manifest', (_req, res) => {
-  res.json({ roles: listRoles(), levels: listLevels() });
+  res.json({ roles: listRoles(), partners: listPartners(), levels: listLevels() });
 });
 
 /** 热重载数据（开发用） */

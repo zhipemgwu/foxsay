@@ -27,8 +27,8 @@ import { bookCoach } from './CoachChatPage';
 import { ChapterImmersiveView } from './ChapterImmersiveView';
 import { VIPPage } from './VIPPage';
 import { KenBurnsImage } from './KenBurnsImage';
-import { chatStream, chatOnce, type ChatMessage } from '../services/ai';
-import { getAllRoleKids, roleCardToPartnerInfo, buildRolePersonaPrompt } from '../services/roleCards';
+import { chatOnce, chatStream, type ChatMessage } from '../services/ai';
+import { getAllPartnerKids, partnerCardToPartnerInfo, buildRolePersonaPrompt } from '../services/roleCards';
 import {
   getLevelCard, getMaxTurns, getMinTurnsForGoodEnding, getOpening,
   buildLevelScenePrompt, getScoringDims, getEndings,
@@ -38,7 +38,7 @@ import {
   type AffinityState, type AffinityDelta,
   emptyAffinity, mainAffinity, applyDelta, initAffinity, persistOnEnd,
 } from '../services/affinity';
-import { parseChatMeta, stripMetaFragments, type ChatMeta } from '../services/chatMeta';
+import { type ChatMeta } from '../services/chatMeta';
 import { beginAttempt, peekAttempts, type VipTier } from '../services/attemptLimit';
 import { scoreLevel, buildAffinityMetrics, xpRewardForStar, type HardMetrics } from '../services/levelScore';
 import { ChatSummary, type SummaryHighlight } from './ChatSummary';
@@ -119,6 +119,14 @@ const _bg = [gradients.coral, gradients.purple, gradients.mint, gradients.golden
 
 /** 单章最大关卡数（用于判定最后两关 & 图片映射） */
 const LEVELS_PER_CHAPTER = 6;
+
+function resolveChapterFromLevelKid(levelKid: string | null): number | undefined {
+  const match = /^L(\d+)$/.exec(levelKid || '');
+  if (!match) return undefined;
+  const levelNumber = Number(match[1]);
+  if (!Number.isFinite(levelNumber) || levelNumber < 1) return undefined;
+  return Math.max(1, Math.min(5, Math.ceil(levelNumber / LEVELS_PER_CHAPTER)));
+}
 
 /** 角色卡图池（来自 public/chapters/roles/），按关卡 id 确定性分配 */
 const _rolePool: string[] = (() => {
@@ -218,11 +226,11 @@ function getPartnerInfoByImg(img: string): { img: string; name: string; age: num
   return { img, name, age, signature, traits };
 }
 
-/** 每关候选搭档池（5 个完整人设，稳定分配）—— 绑定到真实角色卡 R001..R030 */
+/** 每关候选搭档池（5 个固定搭档，独立于普通角色卡 R001..R030） */
 function getPartnerCandidates(levelId: number, _chapter: number, _idxInChapter: number): { kid: string; img: string; name: string; age: number; signature: string; traits: string[] }[] {
-  const allKids = getAllRoleKids();            // ["R001", ..., "R030"]
+  const allKids = getAllPartnerKids();         // ["P001", ..., "P005"]
   if (allKids.length === 0) return [];
-  // 按 levelId 稳定挑 5 个不重复的 kid
+  // 按 levelId 稳定排序 5 个固定搭档，保持每关候选顺序有变化但人池不变
   const picked: string[] = [];
   const used = new Set<string>();
   for (let k = 0; picked.length < 5 && k < allKids.length * 3; k++) {
@@ -235,7 +243,7 @@ function getPartnerCandidates(levelId: number, _chapter: number, _idxInChapter: 
   }
   const out: { kid: string; img: string; name: string; age: number; signature: string; traits: string[] }[] = [];
   for (const kid of picked) {
-    const info = roleCardToPartnerInfo(kid);
+    const info = partnerCardToPartnerInfo(kid);
     if (info) out.push(info);
   }
   return out;
@@ -883,52 +891,28 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
   const startChat = (
     dialogueKey: string,
     title: string,
-    partner?: { kid?: string; img: string; name: string; age: number; signature: string; traits: string[] } | null,
-    opts?: { levelKid?: string | null; mode?: 'story' | 'challenge' | 'freestyle'; coverImage?: string | null; isFinale?: boolean; sceneSynopsis?: string | null }
+    partner: { kid?: string; img: string; name: string; age: number; signature: string; traits: string[] } | null = null,
+    opts?: { levelKid?: string | null; mode?: 'story' | 'challenge' | 'freestyle'; coverImage?: string | null; isFinale?: boolean; sceneSynopsis?: string },
   ) => {
-    const mode = opts?.mode ?? (opts?.levelKid ? 'story' : 'freestyle');
-    const levelKid = opts?.levelKid ?? null;
-
-    // ---- 次数闸门 ----
-    const tier: VipTier = user.subTier === 'proplus' ? 'proplus' : (user.subTier === 'pro' ? 'pro' : 'free');
-    if (levelKid) {
-      const res = beginAttempt(levelKid, tier);
-      if (!res.allowed) {
-        setAttemptGate({ reason: res.reason || '今日次数已用完，明天再来或升级会员获得更多次数。' });
-        return;
-      }
-      setAttemptBadge({ used: res.triesUsed, max: peekAttempts(levelKid, tier).maxPerDay, willGrantXP: res.willGrantXP });
-    } else {
-      setAttemptBadge(null);
-    }
-
     setChatTarget(dialogueKey);
     setChatTitle(title);
-    setChatPartner(partner ?? null);
-    setChatCoverImg(opts?.coverImage ?? null);
-    setChatLevelKid(levelKid);
-    setChatMode(mode);
+    setChatPartner(partner);
+    setChatCoverImg(opts?.coverImage ?? partner?.img ?? null);
+    setChatLevelKid(opts?.levelKid ?? null);
+    setChatMode(opts?.mode ?? 'freestyle');
     setChatIsFinale(!!opts?.isFinale);
     setChatSceneSynopsis(opts?.sceneSynopsis ?? '');
-    setEarlyFail(null);
-    setUnlockLetter(null);
-
-    // ---- 初始化轮数与好感 ----
-    const maxT = levelKid ? getMaxTurns(levelKid) : 20;
-    const minT = levelKid ? getMinTurnsForGoodEnding(levelKid) : 8;
-    setChatMaxTurns(maxT);
-    setChatMinTurnsGood(minT);
+    setChatMaxTurns(opts?.levelKid ? getMaxTurns(opts.levelKid) : 20);
+    setChatMinTurnsGood(opts?.levelKid ? getMinTurnsForGoodEnding(opts.levelKid) : 8);
     setTurnsUsed(0);
-    let initAff = initAffinity(mode === 'challenge' ? 'challenge' : 'story', partner?.kid);
-    // 开发期：每关起手 60，方便测试从中等好感往 80+ 爬
-    if (import.meta.env.DEV) {
-      initAff = { heart: 60, trust: 60, mind: 60, spark: 60 };
-    }
-    setAffinity(initAff);
-    setAffinityHistory([initAff]);
+    const initialAffinity = emptyAffinity();
+    setAffinity(initialAffinity);
+    setAffinityHistory([initialAffinity]);
     setHighlights([]);
     setRegrets([]);
     setRedflagHits(0);
+    setDeltaPopup(null);
+    setEarlyFail(null);
     setShowSummary(false);
     setCoachReview(null);
 
@@ -945,8 +929,8 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
       // 没有预写但有场景简介 → 生成一句泛化开场
       initialMessages = [{ role: 'ai', text: '（Ta 看到你，愣了一下，然后轻轻笑了）嗨。' }];
       setOpeningChoices([]);
-    } else if (levelKid) {
-      const opening = getOpening(levelKid);
+    } else if (opts?.levelKid) {
+      const opening = getOpening(opts.levelKid);
       if (opening.message) {
         initialMessages = [{ role: 'ai', text: opening.message }];
       }
@@ -960,7 +944,6 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
       ];
     }
     setMessages(initialMessages);
-
     setShowChat(true);
     setActivePractice(null);
   };
@@ -979,11 +962,21 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
    * 后端 /api/chat（vite 代理到 localhost:3001）
    */
   const abortRef = useRef<AbortController | null>(null);
+  const typingTimerRef = useRef<number | null>(null);
+  const clearTypingTimer = () => {
+    if (typingTimerRef.current == null) return;
+    window.clearTimeout(typingTimerRef.current);
+    typingTimerRef.current = null;
+  };
   const sendMessage = (overrideText?: string) => {
     const override = typeof overrideText === 'string' ? overrideText : undefined;
     const text = (override ?? chatInput).trim();
     if (!text) return;
     if (showSummary) return; // 已结束
+
+    clearTypingTimer();
+    abortRef.current?.abort();
+    abortRef.current = null;
 
     const userMsg = text;
     const nextMessages = [...messages, { role: 'user', text: userMsg }];
@@ -992,8 +985,7 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
     setOpeningChoices([]); // 用户一旦开口就撤掉预设选项
     setTurnsUsed(t => t + 1);
 
-    // 构造 system prompt：场景（关卡卡） + 搭档人设 + 好感度实时指令 + JSON tail 规则
-    const scenePrompt = chatLevelKid ? buildLevelScenePrompt(chatLevelKid) : '';
+    // 构造轻量 system prompt：只保留真实回复需要的上下文，评分由前端本地处理
     const sceneSystem = messages.find(m => m.role === 'system')?.text || '';
     const sceneHint = sceneSystem.replace(/^📍\s*场景：/, '').replace(/^🆘\s*/, '');
 
@@ -1001,7 +993,7 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
     let partnerBlock = '';
     if (chatPartner) {
       if (chatPartner.kid) {
-        partnerBlock = buildRolePersonaPrompt(chatPartner.kid);
+        partnerBlock = buildRolePersonaPrompt(chatPartner.kid, resolveChapterFromLevelKid(chatLevelKid));
       }
       if (!partnerBlock) {
         partnerBlock = [
@@ -1022,147 +1014,168 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
       : remaining <= Math.floor(chatMaxTurns / 3) ? 'climax（情绪高点，可以更有戏剧性）'
       : 'developing（正常推进，制造小冲突或小惊喜）';
 
-    // 好感维度实时状态
-    const affLine = `当前四维好感（0-100）：心动=${affinity.heart} / 信任=${affinity.trust} / 理解=${affinity.mind} / 暧昧=${affinity.spark}。主好感=${mainAffinity(affinity)}。`;
-
-    // 评分维度（引导 AI 在 meta 中体现）
-    const dims = chatLevelKid ? getScoringDims(chatLevelKid).map(d => d.name).join('、') : '自然度、情商、吸引力、分寸感';
-
     const systemPrompt = [
-      `你正在和用户进行恋爱场景的角色扮演。场景：${chatTitle || '自由练习'}。`,
-      chatSceneSynopsis
-        ? `【本关剧情（必须严格遵循）】\n${chatSceneSynopsis}\n你的所有回复都要发生在上述这个具体场景中，不能跑题到无关话题（比如天气闲聊、问对方从事什么工作等），除非剧情自然导向。`
-        : '',
-      scenePrompt,
-      sceneHint ? `补充背景：${sceneHint}` : '',
+      `你正在扮演恋爱练习场景中的对方，场景：${chatTitle || '自由练习'}。`,
+      sceneHint ? `当前开场/背景：${sceneHint}` : '',
+      chatSceneSynopsis ? `剧情摘要：${chatSceneSynopsis.slice(0, 140)}` : '',
       partnerBlock,
-      affLine,
-      `当前剧情阶段：${stage}。已进行 ${turnsUsed + 1}/${chatMaxTurns} 轮，还剩 ${remaining} 轮。`,
-      [
-        `【硬性规则 · 必须严格遵守】`,
-        `1. 你是真人聊天，不是剧本演员。绝对不要输出任何动作、表情、神态、心理的旁白描写。`,
-        `2. 严禁使用圆括号（）或方括号【】包裹的动作描述，例如"（微笑）""（低头思索）"一律不允许。`,
-        `3. 严禁出现"评分""分""提示""建议""你可以..."这种上帝视角元信息。你不是导师、不是系统，只是场景中的那个人。`,
-        `4. 直接用第一人称说话，像真实微信对话一样，口语化、短句为主。每次回复 1-3 句即可。`,
-        `5. 表情可以用 emoji 或"哈哈""嗯"这种语气词，但不要写"(笑)"。`,
-        `6. 根据用户刚才的那句话，基于你的性格和当前好感度，给出真实合理的反应。用户表现好则变暖；翻车则抽离/冷淡。`,
-        `7. 如果用户已经严重踩雷（如冒犯/油腻/骚扰），请在 meta 中将对应维度 delta 给到较大负值并考虑 suggest_end=true。`,
-      ].join('\n'),
-      [
-        `【输出格式 · 极其重要】`,
-        `在你的正文回复之后，必须**追加一个 JSON meta 块**，格式为：`,
-        `<meta>{"deltas":{"heart":<-10~+10整数>,"trust":<-10~+10整数>,"mind":<-10~+10整数>,"spark":<-10~+10整数>},"mood":"<当前情绪，如 开心/犹豫/尴尬/生气>","inner_os":"<对方此刻真实内心独白，一句话>","suggest_end":<true|false>}</meta>`,
-        `评分维度参考：${dims}。`,
-        `meta 必须是严格 JSON，不要换行在 JSON 内部，不要注释。正文和 meta 之间不要有其他标签。`,
-      ].join('\n'),
+      `当前阶段：${stage}；好感=${mainAffinity(affinity)}。`,
+      `只输出角色本人会说的话，1-2句，短、自然、像微信聊天。不要动作旁白，不要括号，不要评分/建议/系统说明，不要 meta。`,
     ].filter(Boolean).join('\n\n');
+
+    const buildLocalMeta = (input: string, reply: string): ChatMeta => {
+      const raw = `${input}\n${reply}`;
+      const positive = /谢谢|辛苦|理解|没事|慢慢|可以|当然|一起|陪|听|懂|喜欢|可爱|不错|对呀|好呀|你好/.test(raw);
+      const negative = /滚|烦|闭嘴|幼稚|麻烦|神经|随便|无所谓|约炮|睡你|性感|身材|胸|腿|骚|色/.test(raw);
+      const delta = negative ? -4 : positive ? 2 : 1;
+      return {
+        deltas: {
+          heart: delta > 0 ? 1 : delta,
+          trust: delta > 0 ? 1 : delta,
+          mind: delta > 0 ? 0 : Math.min(0, delta + 1),
+          spark: positive && !negative ? 1 : 0,
+        },
+        mood: negative ? '冷淡' : positive ? '放松' : '观察',
+        inner_os: negative ? '这句话让我有点防备。' : positive ? '这个回应还挺自然的，可以继续聊。' : '先看看他接下来怎么说。',
+        suggest_end: negative && turnsUsed + 1 >= chatMinTurnsGood,
+      };
+    };
 
     // API messages
     const apiMessages: ChatMessage[] = [
       { role: 'system', content: systemPrompt },
       ...nextMessages
         .filter(m => m.role !== 'system' && m.text.trim())
+        .slice(-8)
         .map(m => ({
           role: (m.role === 'user' ? 'user' : 'assistant') as 'user' | 'assistant',
           content: m.text,
         })),
     ];
 
+    let fullReply = '';
+    let hasChunk = false;
+    let streamSettled = false;
+    const requestStartedAt = Date.now();
+    const finishRealReply = (rawReply: string) => {
+      clearTypingTimer();
+      const finalText = stripRolePlayMarkers(rawReply).trim();
+      const meta = buildLocalMeta(userMsg, finalText);
+      const d = meta.deltas;
+      const newAff = applyDelta(affinity, d);
+      const deltaMain = mainAffinity(newAff) - mainAffinity(affinity);
+      setMessages(prev => {
+        const copy = [...prev];
+        const last = copy[copy.length - 1];
+        if (last && last.role === 'ai') {
+          copy[copy.length - 1] = {
+            role: 'ai',
+            text: finalText || '我在，刚刚有点卡。你再说一遍，我认真听。',
+            innerOS: meta.inner_os,
+            mood: meta.mood,
+            delta: deltaMain,
+          };
+        }
+        return copy;
+      });
+      setAffinity(newAff);
+      setAffinityHistory(h => [...h, newAff]);
+
+      if (deltaMain !== 0) {
+        const id = Date.now();
+        setDeltaPopup({ val: deltaMain, id });
+        setTimeout(() => setDeltaPopup(p => (p && p.id === id ? null : p)), 1800);
+      }
+
+      const userTurn = nextMessages[nextMessages.length - 1]?.text || '';
+      const snippet = (finalText || '').slice(0, 60);
+      if (deltaMain >= 2) {
+        setHighlights(h => [...h, { userText: userTurn, aiReply: snippet, deltaMain }].sort((a, b) => b.deltaMain - a.deltaMain).slice(0, 5));
+      } else if (deltaMain <= -2) {
+        setRegrets(r => [...r, { userText: userTurn, aiReply: snippet, deltaMain }].sort((a, b) => a.deltaMain - b.deltaMain).slice(0, 3));
+        setRedflagHits(n => n + 1);
+      }
+
+      const hitMaxTurns = turnsUsed + 1 >= chatMaxTurns;
+      const tooLow = mainAffinity(newAff) < 40 && turnsUsed + 1 >= 4;
+      const aiSuggestEnd = !!meta.suggest_end && turnsUsed + 1 >= chatMinTurnsGood;
+      if (hitMaxTurns || tooLow || aiSuggestEnd) {
+        if (tooLow && !hitMaxTurns && !aiSuggestEnd) {
+          const worstTurn = [...regrets].sort((a, b) => a.deltaMain - b.deltaMain)[0];
+          const tipText = mainAffinity(newAff) < 20
+            ? '她已经很安静了——你的回复里带了评价、说教或压力，让她感受不到温柔。换个语气再试一次？'
+            : '感觉稍微冷了点——好几次你跳过了她的情绪映射，直接给建议或换话题。先接住感觉，再说其他。';
+          const better = worstTurn
+            ? '下次你可以这么说：「听下来你也蛮累的，今天发生了什么了吗？」先让她不被评价，她才会开口。'
+            : '下次试试先带一句共情，再追问一个开放的问题。';
+          setEarlyFail({
+            affinity: mainAffinity(newAff),
+            tip: tipText,
+            wrongTurn: worstTurn ? { userText: worstTurn.userText, betterReply: better } : undefined,
+          });
+        } else {
+          setTimeout(() => finalizeChat(newAff), 600);
+        }
+      }
+    };
+
+    const revealFullReply = () => {
+      const minTypingMs = Math.min(2000, Math.max(1250, 980 + userMsg.length * 20));
+      const waitMs = Math.max(0, minTypingMs - (Date.now() - requestStartedAt));
+      typingTimerRef.current = window.setTimeout(() => {
+        typingTimerRef.current = null;
+        finishRealReply(fullReply);
+      }, waitMs);
+    };
+
+    const timeoutTimer = window.setTimeout(() => {
+      if (streamSettled || hasChunk) return;
+      streamSettled = true;
+      abortRef.current?.abort();
+      clearTypingTimer();
+      setMessages(prev => {
+        const copy = [...prev];
+        const last = copy[copy.length - 1];
+        if (last && last.role === 'ai') {
+          copy[copy.length - 1] = { role: 'ai', text: '网络这下真的卡住了，点一下重试吧。' };
+        }
+        return copy;
+      });
+      abortRef.current = null;
+    }, 12000);
+
     abortRef.current?.abort();
     abortRef.current = chatStream(
       apiMessages,
       (chunk) => {
-        setMessages(prev => {
-          const copy = [...prev];
-          const last = copy[copy.length - 1];
-          if (last && last.role === 'ai') {
-            const raw = last.text + chunk;
-            // 流途中实时把 meta 片段从显示中过滤掉
-            copy[copy.length - 1] = { ...last, text: stripMetaFragments(raw) };
-            (copy[copy.length - 1] as any)._raw = raw; // 临时存完整文本
-          }
-          return copy;
-        });
+        hasChunk = true;
+        fullReply += chunk;
       },
       () => {
-        // 流结束：解析 meta，更新 affinity，记录 highlight/regret，判断结束
-        setMessages(prev => {
-          const copy = [...prev];
-          const last = copy[copy.length - 1] as any;
-          if (last && last.role === 'ai') {
-            const raw = last._raw || last.text;
-            const { cleanText, meta } = parseChatMeta(raw);
-            const finalText = stripRolePlayMarkers(cleanText);
-            const d = meta.deltas;
-            const newAff = applyDelta(affinity, d);
-            const deltaMain = mainAffinity(newAff) - mainAffinity(affinity);
-            copy[copy.length - 1] = {
-              role: 'ai',
-              text: finalText || '……',
-              innerOS: meta.inner_os,
-              mood: meta.mood,
-              delta: deltaMain,
-            };
-
-            // 更新 affinity state（异步但用 functional 保证顺序）
-            setAffinity(newAff);
-            setAffinityHistory(h => [...h, newAff]);
-
-            // 飞字动画
-            if (deltaMain !== 0) {
-              const id = Date.now();
-              setDeltaPopup({ val: deltaMain, id });
-              setTimeout(() => setDeltaPopup(p => (p && p.id === id ? null : p)), 1800);
-            }
-
-            // 回放记录
-            const userTurn = nextMessages[nextMessages.length - 1]?.text || '';
-            const snippet = (finalText || '').slice(0, 60);
-            // 门槛放宽：≥+2 就算精彩；≤-2 就算踩雷（原 ±4 太少触发）
-            if (deltaMain >= 2) {
-              setHighlights(h => [...h, { userText: userTurn, aiReply: snippet, deltaMain }].sort((a, b) => b.deltaMain - a.deltaMain).slice(0, 5));
-            } else if (deltaMain <= -2) {
-              setRegrets(r => [...r, { userText: userTurn, aiReply: snippet, deltaMain }].sort((a, b) => a.deltaMain - b.deltaMain).slice(0, 3));
-              setRedflagHits(n => n + 1);
-            }
-
-            // 结束判定
-            const hitMaxTurns = turnsUsed + 1 >= chatMaxTurns;
-            // 中途好感度低于临界点 40 → 提前结束 + 触发指导（至少 4 轮后才判定）
-            const tooLow = mainAffinity(newAff) < 40 && turnsUsed + 1 >= 4;
-            const aiSuggestEnd = !!meta.suggest_end && turnsUsed + 1 >= chatMinTurnsGood;
-            if (hitMaxTurns || tooLow || aiSuggestEnd) {
-              if (tooLow && !hitMaxTurns && !aiSuggestEnd) {
-                // 找出掰分最低的那一回合作为误区示例
-                const worstTurn = [...regrets].sort((a, b) => a.deltaMain - b.deltaMain)[0];
-                const tipText = mainAffinity(newAff) < 20
-                  ? '她已经很安静了——你的回复里带了评价、说教或压力，让她感受不到温柔。换个语气再试一次？'
-                  : '感觉稍微冷了点——好几次你跳过了她的情绪映射，直接给建议或换话题。先接住感觉，再说其他。';
-                const better = worstTurn
-                  ? '下次你可以这么说：「听下来你也蛮累的，今天发生了什么了吗？」先让她不被评价，她才会开口。'
-                  : '下次试试先带一句共情，再追问一个开放的问题。';
-                setEarlyFail({
-                  affinity: mainAffinity(newAff),
-                  tip: tipText,
-                  wrongTurn: worstTurn ? { userText: worstTurn.userText, betterReply: better } : undefined,
-                });
-              } else {
-                setTimeout(() => finalizeChat(newAff), 600);
-              }
-            }
-          }
-          return copy;
-        });
+        if (streamSettled) return;
+        streamSettled = true;
+        window.clearTimeout(timeoutTimer);
+        if (!fullReply.trim()) {
+          finishRealReply('');
+        } else {
+          revealFullReply();
+        }
         abortRef.current = null;
       },
       (err) => {
+        if (streamSettled) return;
+        streamSettled = true;
+        window.clearTimeout(timeoutTimer);
+        clearTypingTimer();
         setMessages(prev => {
           const copy = [...prev];
-          copy[copy.length - 1] = { role: 'ai', text: `（AI 连接失败：${err.message}）` };
+          const last = copy[copy.length - 1];
+          if (last && last.role === 'ai') copy[copy.length - 1] = { role: 'ai', text: `网络连接失败：${err.message}` };
           return copy;
         });
         abortRef.current = null;
-      }
+      },
+      { model: 'deepseek-chat', temperature: 0.72, max_tokens: 120 }
     );
   };
 
@@ -2218,7 +2231,6 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
                   );
                 }
                 const isUser = msg.role === 'user';
-                const showInnerOS = !isUser && (msg as any).innerOS && user.subTier === 'proplus';
                 const isEmptyAi = !isUser && !msg.text;
                 const userAvatarSrc = (user as any).avatar || '/avatars/face5.webp';
                 const aiAvatarSrc = chatPartner?.img || chatCoverImg || null;
@@ -2268,30 +2280,7 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
                           ))}
                         </span>
                       ) : (
-                        <>
-                          {!isUser && (msg as any).mood && (() => {
-                            const m = String((msg as any).mood).toLowerCase();
-                            const map: Record<string, string> = {
-                              happy: '😊', smile: '😊', warm: '😊', glad: '😊',
-                              shy: '🥺', blush: '🥺', soft: '🥺', hurt: '🥺', sad: '🥺',
-                              calm: '😌', content: '😌', relieved: '😌', safe: '😌',
-                              cool: '😒', distant: '😒', cold: '😒', upset: '😒',
-                              curious: '🤨', suspect: '🤨', doubt: '🤨',
-                              tease: '😏', playful: '😏', flirt: '😏',
-                              love: '🥰', touched: '🥰',
-                            };
-                            const emoji = map[m] || (typeof (msg as any).delta === 'number'
-                              ? ((msg as any).delta > 3 ? '😊' : (msg as any).delta < -3 ? '😒' : '🙂‍↕️')
-                              : null);
-                            if (!emoji) return null;
-                            return (
-                              <span style={{ marginRight: 6, fontSize: 16, display: 'inline-block', verticalAlign: '-2px' }}>
-                                {emoji}
-                              </span>
-                            );
-                          })()}
-                          {msg.text}
-                        </>
+                        <>{msg.text}</>
                       )}
                     </div>
                     {isUser && (
@@ -2303,22 +2292,7 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
                       </div>
                     )}
                   </motion.div>
-                  {showInnerOS && (
-                    <motion.div
-                      initial={{ opacity: 0, y: -4 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}
-                      className="flex justify-start mb-3"
-                      style={{ paddingLeft: 46 }}
-                    >
-                      <div style={{
-                        fontSize: 11, color: 'rgba(0,0,0,0.45)', fontStyle: 'italic',
-                        background: 'rgba(155,126,222,0.08)', padding: '3px 8px', borderRadius: 4,
-                        maxWidth: '70%', lineHeight: 1.4,
-                      }}>
-                        💭 {(msg as any).innerOS}
-                      </div>
-                    </motion.div>
-                  )}
-                  {!isUser && (msg as any).delta != null && (msg as any).delta !== 0 && !showInnerOS && <div className="mb-2" />}
+                  {!isUser && (msg as any).delta != null && (msg as any).delta !== 0 && <div className="mb-2" />}
                   </div>
                 );
               })}

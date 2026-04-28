@@ -54,6 +54,7 @@ export function chatStream(
   onChunk: (text: string) => void,
   onDone: (fullText: string) => void,
   onError?: (err: Error) => void,
+  opts?: { model?: 'deepseek-chat' | 'deepseek-reasoner'; temperature?: number; max_tokens?: number },
 ): AbortController {
   const controller = new AbortController();
   let fullText = '';
@@ -63,7 +64,13 @@ export function chatStream(
       const res = await fetch(API_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages, stream: true }),
+        body: JSON.stringify({
+          messages,
+          stream: true,
+          ...(opts?.model ? { model: opts.model } : {}),
+          ...(opts?.temperature !== undefined ? { temperature: opts.temperature } : {}),
+          ...(opts?.max_tokens !== undefined ? { max_tokens: opts.max_tokens } : {}),
+        }),
         signal: controller.signal,
       });
 
@@ -125,7 +132,7 @@ export function chatStream(
  */
 export async function chatOnce(
   messages: ChatMessage[],
-  opts?: { model?: 'deepseek-chat' | 'deepseek-reasoner'; temperature?: number },
+  opts?: { model?: 'deepseek-chat' | 'deepseek-reasoner'; temperature?: number; max_tokens?: number },
 ): Promise<string> {
   const res = await fetch(API_URL, {
     method: 'POST',
@@ -135,6 +142,7 @@ export async function chatOnce(
       stream: false,
       ...(opts?.model ? { model: opts.model } : {}),
       ...(opts?.temperature !== undefined ? { temperature: opts.temperature } : {}),
+      ...(opts?.max_tokens !== undefined ? { max_tokens: opts.max_tokens } : {}),
     }),
   });
 
