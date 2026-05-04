@@ -15,7 +15,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronRight, ChevronLeft, Lock, X, Send, Users, Zap, Loader2, RefreshCw } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Lock, X, Send, Users, Zap, Loader2, RefreshCw, MapPin, Compass } from 'lucide-react';
 import {
   IconBubble, IcChat, IcTarget, IcMask, IcWave, IcLetter, IcDove,
   IcGift, IcHeartSpark, IcRobot, IcPen, IcTrophy, IcStar, IcSparkle,
@@ -41,43 +41,87 @@ import {
 import { type ChatMeta } from '../services/chatMeta';
 import { beginAttempt, peekAttempts, type VipTier } from '../services/attemptLimit';
 import { scoreLevel, buildAffinityMetrics, xpRewardForStar, type HardMetrics } from '../services/levelScore';
+import {
+  appendAbilityEvent,
+  applyAbilityDelta,
+  buildAbilityEventFromLevel,
+  hasAbilityDelta,
+  type AbilityEvent,
+} from '../services/ability';
 import { ChatSummary, type SummaryHighlight } from './ChatSummary';
 
 /* ---------- 故事系统 ---------- */
 
-/** 剧情故事章节 */
-const storyChapters = [
-  {
-    id: 1, name: '初遇', coverImage: '/chapters/cover/story-1.jpg',
-    narrative: '推开那扇门的时候，你不知道命运已经开始倒计时。',
-    readCount: '已读 4 节', vip: false,
-    synopsis: '一座夏天尾巴的城市，一个没有特别计划的下午。你为了躲雨拐进一家不起眼的咖啡馆，却在推门的一瞬间停住了。临窗的那个人抬起头，笑了一下——你以为只是擦肩而过，但接下来的六个瞬间，会让你明白什么叫「命中注定」并不是诗，而是一条来不及躲的绳索。',
+/** 剧情故事章节：从 level-cards.json 汇总，封面和 AI 共用同一份剧情源 */
+const STORY_LEVEL_COUNT = 30;
+const STORY_LEVEL_KIDS = Array.from({ length: STORY_LEVEL_COUNT }, (_, i) => `L${String(i + 1).padStart(3, '0')}`);
+const STORY_CHAPTER_COPY: Record<number, { name: string; narrative: string; synopsis: string }> = {
+  1: {
+    name: '初遇',
+    narrative: '从便利店、朋友局和一把伞开始，练会第一句话不冒犯。',
+    synopsis: '这一章把初遇拉回真实生活：雨夜便利店、朋友生日局、陌生人之间的第一句开口。训练重点不是惊艳，而是自然、低压、照顾边界。',
   },
-  {
-    id: 2, name: '破冰', coverImage: '/chapters/cover/story-2.jpg',
-    narrative: '沉默不是没有话说，是还没找到那个让你想开口的人。',
-    readCount: '已读 2 节', vip: false,
-    synopsis: '从注视到对话，中间隔着的从来不止一条街。你要学会在不显得冒失的前提下接近，要学会在冷场三秒里抢回节奏，要学会什么时候该收、什么时候该进。你以为破冰是对方的事，直到你发现——最难凿开的那块冰，其实在你自己心里。',
+  2: {
+    name: '第一次约会',
+    narrative: '迟到、AA、被纠正动作，第一次见面的小事最看人。',
+    synopsis: '第一次约会真正考验的不是会不会撩，而是迟到后怎么补救、钱和边界怎么聊、尴尬时是否还保有体面。',
   },
-  {
-    id: 3, name: '暧昧', coverImage: '/chapters/cover/story-3.jpg',
-    narrative: '那些心跳加速的瞬间，你以为对方听不见吗？',
-    readCount: '尚未翻开', vip: false,
-    synopsis: '连续六天的见面，没有一句越界的话。对话停在拐弯，眼神停在一秒半，指尖停在快要碰到的距离。你们都在试探，又都在装作不经意。这一章没有告白、没有结论，只有六个让血压升高的瞬间——谁先醒，谁先输，谁先说出那句话。',
+  3: {
+    name: '暧昧',
+    narrative: '朋友圈一句算了、半夜一句睡不着，都是关系信号。',
+    synopsis: '这一章练暧昧期最容易错过的信号：朋友圈、临时爽约、前任问题、深夜脆弱。重点是读懂对方没明说的感受。',
   },
-  {
-    id: 4, name: '热恋', coverImage: '/chapters/cover/story-4.jpg',
-    narrative: '从那天起，所有歌里唱的都有了画面。',
-    readCount: '尚未翻开', vip: false,
-    synopsis: '关系确定的那一刻，世界重新上了色。但噩梦也从同一天开始——第一次见家长、第一次审美分歧、第一次意识到「在一起」不等于「无条件合拍」。这一章不再是追逐的游戏，而是两个独立的人，如何不把彼此磨成对方。',
+  4: {
+    name: '热恋',
+    narrative: '女朋友生气不是背台词，是看你有没有真的在意。',
+    synopsis: '热恋里的爆点更生活化：迟到一小时、忘记纪念日、随便真随便、朋友面前没维护她、游戏三小时没回。每一关都练道歉、哄人和行动修复。',
   },
-  {
-    id: 5, name: '考验', coverImage: '/chapters/cover/story-5.jpg',
-    narrative: '真正的爱情不是没有风暴，是风暴过后你还在。',
-    readCount: '尚未翻开', vip: false,
-    synopsis: '糖开始发苦。异地、误会、旧人、日常的磨损——每一项都能压垮一段关系。这一章没有标准答案，只能告诉你一件事：有些人值得你穿过风暴，有些人不值得。怎么分辨？得自己走这一趟。走完的人会明白：留下来不是因为没吵过，而是吵完之后还愿意回头。',
+  5: {
+    name: '现实压力',
+    narrative: '加班、合租、异地、收入规划，关系终究要落到生活里。',
+    synopsis: '这一章开始讨论长期关系里的硬问题：工作崩溃、家务分工、异地视频、朋友提问收入、五年后的生活。重点是共担现实，而不是空口浪漫。',
   },
-];
+  6: {
+    name: '信任边界',
+    narrative: '前任、异性同事、公开和消费观，边界说清才有安全感。',
+    synopsis: '这一章把信任问题摊开讲：前任突然发消息、异性同事深夜聊天、朋友圈一直不公开、消费观第一次爆雷、见父母节奏。训练透明、尊重和边界。',
+  },
+  7: {
+    name: '爆点修复',
+    narrative: '见家长迟到、生日惊喜翻车、拉黑后谈话，关系危机看行动。',
+    synopsis: '最后一组是高压修复：堵车迟到见家长、生日惊喜变压力、吵架拉黑、不合适、分手边缘。重点是承担、复盘、具体承诺和尊重选择。',
+  },
+};
+
+function compactStoryText(text: string, max = 70): string {
+  const clean = String(text || '').replace(/\s+/g, ' ').trim();
+  return clean.length > max ? `${clean.slice(0, max)}...` : clean;
+}
+
+function getStoryLevelSummary(level: any, max = 70): string {
+  return compactStoryText(
+    level?.story_node?.premise || level?.dialogue?.opening_message || level?.meta?.title || '',
+    max,
+  );
+}
+
+const storyChapters = Array.from(new Set(
+  STORY_LEVEL_KIDS
+    .map(kid => getLevelCard(kid)?.meta?.chapter_id)
+    .filter((id): id is number => typeof id === 'number'),
+)).sort((a, b) => a - b).map((id) => {
+  const copy = STORY_CHAPTER_COPY[id];
+  const firstLevel = STORY_LEVEL_KIDS.map(kid => getLevelCard(kid)).find(lv => lv?.meta?.chapter_id === id);
+  return {
+    id,
+    name: copy?.name || String(firstLevel?.meta?.chapter_name || `第 ${id} 章`).split('·')[0],
+    coverImage: `/chapters/cover/story-${((id - 1) % 5) + 1}.jpg`,
+    narrative: copy?.narrative || getStoryLevelSummary(firstLevel, 48),
+    readCount: '尚未翻开',
+    vip: false,
+    synopsis: copy?.synopsis || getStoryLevelSummary(firstLevel, 180),
+  };
+});
 
 /** 人物邂逅分组 */
 const challengeGroups = [
@@ -123,9 +167,12 @@ const LEVELS_PER_CHAPTER = 6;
 function resolveChapterFromLevelKid(levelKid: string | null): number | undefined {
   const match = /^L(\d+)$/.exec(levelKid || '');
   if (!match) return undefined;
+  const levelCard = getLevelCard(levelKid || '');
+  const chapterFromCard = levelCard?.meta?.chapter_id;
+  if (typeof chapterFromCard === 'number' && Number.isFinite(chapterFromCard)) return chapterFromCard;
   const levelNumber = Number(match[1]);
   if (!Number.isFinite(levelNumber) || levelNumber < 1) return undefined;
-  return Math.max(1, Math.min(5, Math.ceil(levelNumber / LEVELS_PER_CHAPTER)));
+  return Math.max(1, Math.min(7, Math.ceil(levelNumber / LEVELS_PER_CHAPTER)));
 }
 
 /** 角色卡图池（来自 public/chapters/roles/），按关卡 id 确定性分配 */
@@ -250,9 +297,9 @@ function getPartnerCandidates(levelId: number, _chapter: number, _idxInChapter: 
 }
 
 /** 每大章节的独立进度（已通关的节数，单独计算不串联） */
-const STORY_PROGRESS: Record<number, number> = { 1: 4, 2: 2, 3: 0, 4: 0, 5: 0 };
+const STORY_PROGRESS: Record<number, number> = Object.fromEntries(storyChapters.map(ch => [ch.id, ch.id === 1 ? 1 : 0]));
 const CHALLENGE_PROGRESS: Record<number, number> = { 1: 3, 2: 1, 3: 0, 4: 0, 5: 0 };
-const ZERO_PROGRESS: Record<number, number> = { 1: 0, 2: 0, 3: 0, 4: 0, 5: 0 };
+const ZERO_PROGRESS: Record<number, number> = Object.fromEntries([...storyChapters, ...challengeGroups].map(ch => [ch.id, 0]));
 
 function buildLevels(raw: [string, string, number, boolean][], startId: number, progress: Record<number, number>) {
   // 统计每章级计数，用于定位"最后两关"
@@ -285,46 +332,140 @@ function buildLevels(raw: [string, string, number, boolean][], startId: number, 
   });
 }
 
-/** 剧情故事 × 30（5章 × 6节） */
-const storyRaw: [string, string, number, boolean][] = [
-  // 第1章：初遇
-  ['那杯拿铁的温度', '推门进去的瞬间，你闻到了烘焙的香气，还有一个低头微笑的人', 1, true],
-  ['第 14 层的三十秒', '电梯门合上，你们之间只剩一步的距离和无限的可能', 1, true],
-  ['同一本书的两只手', '你伸手去拿那本旅行指南，却碰到了另一只温热的手', 1, true],
-  ['角落里的目光', '吵闹的聚会里，你注意到角落安静坐着的那个人', 1, true],
-  ['输入框里的勇气', '打了又删，删了又打，手指悬在发送键上方', 1, true],
-  ['好巧，又是你', '这座城市这么大，为什么转角总能遇见同一个人', 1, true],
-  // 第2章：破冰
-  ['原来你也喜欢', '当你发现对方手机壳上印着你最爱的乐队', 2, true],
-  ['笑声是最好的桥梁', '气氛突然冻住了，你需要一个恰到好处的玩笑', 2, true],
-  ['从天气聊到了星星', '聊着聊着，你们不知不觉从浅水区游向了深海', 2, true],
-  ['已读不回的艺术', '有些等待是策略，有些等待是尊重', 2, true],
-  ['"嗯"字之后的拯救', '对话快要断气了，你还有三秒钟做出反应', 2, true],
-  ['临走前的回眸', '告别的方式决定了下一次见面的概率', 2, true],
-  // 第3章：暧昧
-  ['只想和你走这段路', '"要不我送你？"看似随意的一句话，你排练了一整天', 3, true],
-  ['眼神不会说谎', '你偷看对方的时候，发现对方也在偷看你', 3, true],
-  ['措辞开始小心翼翼', '你开始在每句话里反复斟酌用词——朋友不会这样', 3, true],
-  ['"这周六有空吗"', '表面在约饭，其实是在赌整个未来', 3, true],
-  ['指尖的距离', '走路时手背不经意碰到一起，谁都没有躲开', 3, true],
-  ['月光下的试探', '"你觉得我们算什么呢？"——这个问题你在心里问了一百遍', 3, true],
-  // 第4章：热恋
-  ['紧张到手心出汗', '提前了四十分钟到，在镜子前整理了第三次衣领', 4, true],
-  ['藏在外套口袋里的', '有些心意不用说出口，放在触手可及的地方就好', 4, true],
-  ['三点半的秘密', '凌晨的视频电话，你们聊到了谁都不知道的童年', 4, true],
-  ['心跳盖过了背景音乐', '"我想说一件事，你听完再回答好不好"', 4, true],
-  ['在他们面前的你', '这是第一次以"对象"的身份出现在另一个世界', 4, true],
-  ['"以后就是我们了"', '不再是"我"和"你"，而是"我们"', 4, true],
-  // 第5章：考验
-  ['摔门之后的十分钟', '坐在门的两边，谁也不说话，但都没有走远', 5, true],
-  ['2000 公里的晚安', '屏幕那头的呼吸声，是今天最温柔的声音', 5, true],
-  ['那条消息通知', '你看见了不该看的内容，手指开始发抖', 5, true],
-  ['第一次觉得陌生', '"我以为你会理解"——这句话两个人同时说了出来', 5, true],
-  ['沙发两端的距离', '同一个屋檐下，什么时候开始不目光相接了', 5, true],
-  ['平凡日子里的光', '没有烟火，没有惊喜，但你看着对方发呆的样子会笑', 5, true],
-];
+/** 剧情故事 × 30：封面标题/简介直接同步 level-cards.json */
+const storyRaw: [string, string, number, boolean][] = STORY_LEVEL_KIDS.map((kid) => {
+  const level = getLevelCard(kid);
+  const levelNumber = Number(kid.slice(1));
+  return [
+    level?.meta?.title || `第 ${levelNumber} 关`,
+    getStoryLevelSummary(level, 62),
+    level?.meta?.chapter_id || Math.max(1, Math.ceil(levelNumber / LEVELS_PER_CHAPTER)),
+    true,
+  ];
+});
 const storyLevels = buildLevels([...storyRaw], 1, STORY_PROGRESS);
 const storyLevelsNew = buildLevels([...storyRaw], 1, ZERO_PROGRESS);
+
+const STORY_NODE_LABELS: Record<number, string> = {
+  1: '借伞', 2: '朋友局', 3: '迟到', 4: 'AA争议', 5: '纠动作', 6: '算了',
+  7: '加班', 8: '前任', 9: '失眠', 10: '等一小时', 11: '纪念日', 12: '真随便',
+  13: '没维护', 14: '没回信', 15: '多喝水', 16: '崩溃', 17: '卫生', 18: '异地',
+  19: '问规划', 20: '五年后', 21: '前任消息', 22: '同事聊天', 23: '不公开', 24: '消费观',
+  25: '见父母', 26: '大堵车', 27: '惊喜翻车', 28: '拉黑', 29: '不合适', 30: '分手边缘',
+};
+
+const CHALLENGE_NODE_LABELS: Record<number, string> = {
+  101: '小纸条', 102: '歌声', 103: '多把伞', 104: '旧车票', 105: '冰水', 106: '草莓',
+  107: '流浪猫', 108: '叹息', 109: '公式', 110: '第六稿', 111: '夜灯', 112: '偷拍',
+  113: '派对', 114: '眼神', 115: '滤镜外', 116: '热情', 117: '第三杯', 118: '名片',
+  119: '落花', 120: '纸巾', 121: '沉默', 122: '夜电话', 123: '手链', 124: '草稿',
+  125: '随便问', 126: '已读', 127: '新人', 128: '迟到', 129: '否定', 130: '完美感',
+};
+
+const CITY_MAP_POINTS = [
+  { left: 14, top: 72 },
+  { left: 30, top: 47 },
+  { left: 46, top: 64 },
+  { left: 61, top: 38 },
+  { left: 76, top: 55 },
+  { left: 88, top: 31 },
+];
+
+function getCityMapBackground(mode: 'story' | 'challenge') {
+  return mode === 'story' ? '/chapters/maps/story-city-map-source.jpg' : '/chapters/maps/encounter-city-map-source.jpg';
+}
+
+const CITY_LANDMARK_PALETTES = {
+  story: [
+    { roof: '#FF8A80', front: '#FFE8D8', side: '#E8C0B4', sign: '#FFB199', glass: '#8ED9F8', base: '#F6F0E5' },
+    { roof: '#FFD166', front: '#FFF4CA', side: '#E0B85F', sign: '#FF9F70', glass: '#78C9F3', base: '#F6F0E5' },
+    { roof: '#B39DDB', front: '#F1E8FF', side: '#BBA9DE', sign: '#CDBBFF', glass: '#9BE7F2', base: '#F6F0E5' },
+    { roof: '#7EE0D6', front: '#DDF8F5', side: '#76BFB8', sign: '#88EFE7', glass: '#67B7FF', base: '#F6F0E5' },
+    { roof: '#FFCF78', front: '#FFF1D0', side: '#D4A757', sign: '#FFB199', glass: '#93D7F7', base: '#F6F0E5' },
+    { roof: '#AEE1A0', front: '#ECFFE8', side: '#88BE7B', sign: '#7EE0D6', glass: '#8BC8FF', base: '#F6F0E5' },
+  ],
+  challenge: [
+    { roof: '#7EE0D6', front: '#E3FBFF', side: '#5DA8B8', sign: '#B8FFF8', glass: '#5C7DFF', base: '#EEF4FF' },
+    { roof: '#CDBBFF', front: '#F1E9FF', side: '#9F86D9', sign: '#B39DDB', glass: '#7EE0D6', base: '#EEF4FF' },
+    { roof: '#FFB199', front: '#FFE8DF', side: '#C88777', sign: '#FF8A80', glass: '#8ED9F8', base: '#EEF4FF' },
+    { roof: '#93C5FD', front: '#E7F1FF', side: '#658FC8', sign: '#7EE0D6', glass: '#B39DDB', base: '#EEF4FF' },
+    { roof: '#FFD166', front: '#FFF2C7', side: '#D0A241', sign: '#FFCF78', glass: '#72CDE8', base: '#EEF4FF' },
+    { roof: '#FF7AA2', front: '#FFE3EC', side: '#B75E7B', sign: '#FFB199', glass: '#7EE0D6', base: '#EEF4FF' },
+  ],
+};
+
+function CityLandmarkIcon({ mode, index, locked, current, completed, accent }: { mode: 'story' | 'challenge'; index: number; locked: boolean; current: boolean; completed: boolean; accent: string }) {
+  const palette = CITY_LANDMARK_PALETTES[mode][index % CITY_LANDMARK_PALETTES[mode].length];
+  const variant = index % 6;
+  const idPrefix = `landmark-${mode}-${index}`;
+  return (
+    <div aria-hidden style={{ position: 'relative', width: current ? 98 : 90, height: current ? 88 : 82, filter: locked ? 'saturate(0.74) brightness(0.92)' : undefined }}>
+      <svg viewBox="0 0 96 88" width="100%" height="100%" style={{ display: 'block', overflow: 'visible', filter: `drop-shadow(0 13px 15px rgba(0,0,0,0.34)) ${current ? `drop-shadow(0 0 13px ${accent}72)` : ''}` }}>
+        <defs>
+          <linearGradient id={`${idPrefix}-base`} x1="18" y1="26" x2="70" y2="72" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stopColor="#FFFFFF" />
+            <stop offset="0.48" stopColor={palette.base} />
+            <stop offset="1" stopColor="#C9D3DE" />
+          </linearGradient>
+          <linearGradient id={`${idPrefix}-front`} x1="22" y1="31" x2="54" y2="68" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stopColor="#FFFFFF" />
+            <stop offset="0.58" stopColor={palette.front} />
+            <stop offset="1" stopColor="#E4E8F2" />
+          </linearGradient>
+          <linearGradient id={`${idPrefix}-side`} x1="50" y1="30" x2="72" y2="65" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stopColor={palette.side} />
+            <stop offset="1" stopColor="#5F5872" />
+          </linearGradient>
+          <linearGradient id={`${idPrefix}-roof`} x1="28" y1="12" x2="64" y2="40" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stopColor="#FFFFFF" />
+            <stop offset="0.22" stopColor={palette.roof} />
+            <stop offset="1" stopColor={palette.sign} />
+          </linearGradient>
+        </defs>
+        {current && <ellipse cx="48" cy="65" rx="37" ry="17" fill={accent} opacity="0.26" />}
+        <ellipse cx="48" cy="70" rx="38" ry="12" fill="rgba(28,24,39,0.25)" />
+        <polygon points="48 42 84 58 48 78 12 58" fill={`url(#${idPrefix}-base)`} stroke="rgba(255,255,255,0.88)" strokeWidth="1.5" />
+        <polygon points="12 58 48 78 48 84 12 64" fill="#B6C2CE" opacity="0.86" />
+        <polygon points="84 58 48 78 48 84 84 64" fill="#8FA0B3" opacity="0.86" />
+        <path d="M24 57 L39 49 L73 64" fill="none" stroke="#D0D9E4" strokeWidth="2" strokeLinecap="round" opacity="0.75" />
+        <circle cx="24" cy="59" r="4.8" fill="#75C97B" />
+        <rect x="23.2" y="61" width="1.5" height="7" fill="#6D7B55" />
+        <circle cx="74" cy="58" r="4.5" fill="#6FCC7D" />
+        <rect x="73.3" y="60" width="1.4" height="7" fill="#6D7B55" />
+        <polygon points="30 29 56 40 56 64 30 51" fill={`url(#${idPrefix}-front)`} stroke="rgba(255,255,255,0.72)" strokeWidth="0.9" />
+        <polygon points="56 40 71 32 71 55 56 64" fill={`url(#${idPrefix}-side)`} stroke="rgba(255,255,255,0.35)" strokeWidth="0.8" />
+        <polygon points="30 29 45 20 71 32 56 40" fill={`url(#${idPrefix}-roof)`} stroke="rgba(255,255,255,0.75)" strokeWidth="1.2" />
+        <polygon points="28 40 56 53 56 59 28 46" fill={palette.sign} opacity="0.96" />
+        <polygon points="31 41.5 36 43.8 36 49.5 31 47.1" fill="#FFF7E8" />
+        <polygon points="38 44.7 43 47 43 52.7 38 50.4" fill={palette.roof} opacity="0.9" />
+        <polygon points="45 47.9 50 50.1 50 55.8 45 53.6" fill="#FFF7E8" />
+        <polygon points="34 53 40 56 40 63 34 60" fill="#4B3F5E" />
+        <polygon points="44 43 50 46 50 51 44 48" fill={palette.glass} opacity="0.92" />
+        <polygon points="58 43 64 40 64 45 58 48" fill={palette.glass} opacity="0.72" />
+        <polygon points="58 51 64 48 64 53 58 56" fill={palette.glass} opacity="0.62" />
+        {variant === 0 && <path d="M44 18 C41 12 45 8 49 11 C52 7 58 10 57 16 C56 23 49 25 49 25 C49 25 46 22 44 18Z" fill={palette.roof} stroke="#fff" strokeWidth="1.2" />}
+        {variant === 1 && <path d="M50 7 L56 21 L49 19 L45 28 L42 17 L36 15Z" fill={palette.roof} stroke="#fff" strokeWidth="1.2" />}
+        {variant === 2 && <circle cx="50" cy="15" r="10" fill={palette.roof} stroke="#fff" strokeWidth="1.4" />}
+        {variant === 3 && <polygon points="49 6 54 17 66 18 56 25 59 36 49 29 39 36 42 25 32 18 44 17" fill={palette.roof} stroke="#fff" strokeWidth="1.2" />}
+        {variant === 4 && <path d="M38 25 C38 15 45 8 52 11 C60 14 62 25 57 32 C51 27 45 27 38 32Z" fill={palette.roof} stroke="#fff" strokeWidth="1.2" />}
+        {variant === 5 && <path d="M39 25 L45 12 L51 24 L58 11 L62 27 Z" fill={palette.roof} stroke="#fff" strokeWidth="1.2" />}
+        <circle cx="20" cy="53" r="2" fill={palette.sign} />
+        <circle cx="76" cy="55" r="2" fill={palette.roof} />
+      </svg>
+      {completed && <div style={{ position: 'absolute', right: 2, top: 13, width: 17, height: 17, borderRadius: 999, background: '#7EE0D6', color: '#203142', fontSize: 11, fontWeight: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 8px rgba(0,0,0,0.2)' }}>✓</div>}
+      {locked && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span style={{ width: 28, height: 28, borderRadius: 999, background: 'rgba(32,26,42,0.78)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 7px 14px rgba(0,0,0,0.32)' }}><Lock size={15} color="#FFCF78" strokeWidth={2.8} /></span></div>}
+    </div>
+  );
+}
+
+const ENTRY_STORY_COVER = '/chapters/cover/story-1.jpg';
+const ENTRY_CHALLENGE_COVER = '/chapters/cover/challenge-1.jpg';
+
+const FEATURED_LEVELS = [
+  { id: 3, tag: '今日热门', label: '约会补救', accent: '#FF8A80' },
+  { id: 10, tag: '哄人必练', label: '热恋危机', accent: '#FFD166' },
+  { id: 27, tag: '爆点修复', label: '高压复盘', accent: '#7EE0D6' },
+];
 
 /** 人物邂逅 × 30（5组 × 6节） */
 const challengeRaw: [string, string, number, boolean][] = [
@@ -626,12 +767,18 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
   const healingTier = getHealingTier(user);
   const healingTierLabel = getHealingTierLabel(healingTier);
   const healingEnergyLimit = getHealingEnergyLimit(healingTier);
+  const entryPressTimerRef = useRef<number | null>(null);
 
   // 进入练习场自动打卡
   useEffect(() => { user.checkIn?.(); }, []); // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => () => {
+    if (entryPressTimerRef.current) window.clearTimeout(entryPressTimerRef.current);
+  }, []);
   const [practiceMode, setPracticeMode] = useState<'story' | 'challenge'>(() =>
     pendingAction ? (pendingAction.mode === 'challenge' ? 'challenge' : 'story') : 'story'
   ); // 关卡模式
+  const [entryPressMode, setEntryPressMode] = useState<'story' | 'challenge' | null>(null);
+  const [featuredIndex, setFeaturedIndex] = useState(0);
   const [immersive, setImmersive] = useState<{ mode: 'story' | 'challenge'; index: number } | null>(null); // 章节沉浸页
   const [showVIP, setShowVIP] = useState(false); // VIP 弹层
   const [activePractice, setActivePractice] = useState<typeof storyLevels[0] | null>(null); // 练习详情弹窗
@@ -660,6 +807,7 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
   const [unlockLetter, setUnlockLetter] = useState<null | { partnerName: string; partnerImg: string; body: string[]; growth: string }>(null); // 通关解锁的角色信
   const [attemptBadge, setAttemptBadge] = useState<{ used: number; max: number; willGrantXP: boolean } | null>(null);
   const [deltaPopup, setDeltaPopup] = useState<{ val: number; id: number } | null>(null);
+  const [summaryAbilityEvent, setSummaryAbilityEvent] = useState<AbilityEvent | null>(null);
   const [openingChoices, setOpeningChoices] = useState<string[]>([]);
   /** 当前聊天的关卡散文式剧情简介（注入 system prompt，保证 AI 贴合关卡） */
   const [chatSceneSynopsis, setChatSceneSynopsis] = useState<string>('');
@@ -742,6 +890,55 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
   const _challengeLevels = isNewUser ? challengeLevelsNew : challengeLevels;
   const currentLevels = practiceMode === 'story' ? _storyLevels : _challengeLevels;
   const currentGroups = practiceMode === 'story' ? storyChapters : challengeGroups;
+  const userIsProForMaps = user.isVip || user.isPro();
+  const activeGroup = expandedChapter == null ? null : currentGroups.find(group => group.id === expandedChapter) ?? currentGroups[0] ?? null;
+  const activeGroupLevels = activeGroup ? currentLevels.filter(level => level.chapter === activeGroup.id) : [];
+  const activeCompletedCount = activeGroupLevels.filter(level => level.completed).length;
+  const featuredRecommendations = FEATURED_LEVELS.map(feature => {
+    const level = _storyLevels.find(item => item.id === feature.id) ?? _storyLevels.find(item => !item.vip) ?? _storyLevels[0];
+    if (!level) return null;
+    return { ...feature, level };
+  }).filter(Boolean) as Array<typeof FEATURED_LEVELS[number] & { level: typeof storyLevels[number] }>;
+  const activeFeaturedIndex = featuredRecommendations.length ? featuredIndex % featuredRecommendations.length : 0;
+  const activeFeatured = featuredRecommendations[activeFeaturedIndex] ?? null;
+
+  const openEntryMap = (mode: 'story' | 'challenge') => {
+    if (entryPressTimerRef.current) window.clearTimeout(entryPressTimerRef.current);
+    setEntryPressMode(mode);
+    entryPressTimerRef.current = window.setTimeout(() => {
+      setPracticeMode(mode);
+      setExpandedChapter(mode === 'story' ? (storyChapters[0]?.id ?? 1) : (challengeGroups[0]?.id ?? 1));
+      setEntryPressMode(null);
+      entryPressTimerRef.current = null;
+    }, 160);
+  };
+
+  const getMapNodeLabel = (level: typeof storyLevels[number]) => {
+    const label = practiceMode === 'story' ? STORY_NODE_LABELS[level.id] : CHALLENGE_NODE_LABELS[level.id];
+    if (label) return label;
+    return compactStoryText(level.title, 5).replace('...', '');
+  };
+
+  const openLevelPreview = (level: typeof storyLevels[number], levelIndex: number) => {
+    const isLocked = level.vip && !userIsProForMaps;
+    if (isLocked) {
+      setShowVIP(true);
+      return;
+    }
+    setLevelImmersive({ chapterId: level.chapter, index: levelIndex });
+  };
+
+  useEffect(() => {
+    if (featuredRecommendations.length <= 1) return;
+    const timer = window.setInterval(() => {
+      setFeaturedIndex(prev => (prev + 1) % featuredRecommendations.length);
+    }, 4200);
+    return () => window.clearInterval(timer);
+  }, [featuredRecommendations.length]);
+
+  useEffect(() => {
+    if (featuredIndex >= featuredRecommendations.length) setFeaturedIndex(0);
+  }, [featuredIndex, featuredRecommendations.length]);
 
   /* ---------- 来自首页推荐的 pending action（初始化已在 useState 中完成） ---------- */
 
@@ -862,13 +1059,15 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
       const confirmedPartner = levelPartners[lv.id] ?? null;
       // 已锁定搭档则立绘使用它的图，否则使用默认 lv.image
       const immersiveImage = confirmedPartner?.img ?? lv.image;
-      const synopsis = levelSynopsis[lv.id] ?? lv.desc;
+      const levelCard = practiceMode === 'story' && lv.id >= 1 && lv.id <= STORY_LEVEL_COUNT ? getLevelCard(lv.id) : null;
+      const synopsis = levelCard ? getStoryLevelSummary(levelCard, 220) : (levelSynopsis[lv.id] ?? lv.desc);
+      const narrative = levelCard ? getStoryLevelSummary(levelCard, 86) : lv.desc;
       return {
         id: lv.id,
         name: lv.title,
         coverImage: immersiveImage,
         immersiveImage,
-        narrative: lv.desc,
+        narrative,
         synopsis,
         readCount: lv.completed ? '已完成' : (isLocked ? '会员专享' : '待挑战'),
         vip: isLocked,
@@ -915,13 +1114,20 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
     setEarlyFail(null);
     setShowSummary(false);
     setCoachReview(null);
+    setSummaryAbilityEvent(null);
 
     // ---- 开场白 ----
     let initialMessages: { role: string; text: string }[] = [];
     const sceneSyn = opts?.sceneSynopsis ?? '';
     const levelIdNum = parseInt(dialogueKey, 10);
-    const fixedOpen = Number.isFinite(levelIdNum) ? getFixedOpening(levelIdNum) : null;
-    if (fixedOpen) {
+    const fixedOpen = !opts?.levelKid && Number.isFinite(levelIdNum) ? getFixedOpening(levelIdNum) : null;
+    if (opts?.levelKid) {
+      const opening = getOpening(opts.levelKid);
+      if (opening.message) {
+        initialMessages = [{ role: 'ai', text: opening.message }];
+      }
+      setOpeningChoices(opening.choices || []);
+    } else if (fixedOpen) {
       // 关卡有预写开场白 → 进入即显示，无需等 AI 流
       initialMessages = [{ role: 'ai', text: fixedOpen }];
       setOpeningChoices([]);
@@ -929,12 +1135,6 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
       // 没有预写但有场景简介 → 生成一句泛化开场
       initialMessages = [{ role: 'ai', text: '（Ta 看到你，愣了一下，然后轻轻笑了）嗨。' }];
       setOpeningChoices([]);
-    } else if (opts?.levelKid) {
-      const opening = getOpening(opts.levelKid);
-      if (opening.message) {
-        initialMessages = [{ role: 'ai', text: opening.message }];
-      }
-      setOpeningChoices(opening.choices || []);
     } else {
       setOpeningChoices([]);
     }
@@ -988,6 +1188,7 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
     // 构造轻量 system prompt：只保留真实回复需要的上下文，评分由前端本地处理
     const sceneSystem = messages.find(m => m.role === 'system')?.text || '';
     const sceneHint = sceneSystem.replace(/^📍\s*场景：/, '').replace(/^🆘\s*/, '');
+    const levelSceneBlock = chatLevelKid ? buildLevelScenePrompt(chatLevelKid) : '';
 
     // 搭档人设段
     let partnerBlock = '';
@@ -1016,10 +1217,12 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
 
     const systemPrompt = [
       `你正在扮演恋爱练习场景中的对方，场景：${chatTitle || '自由练习'}。`,
+      levelSceneBlock ? `【完整关卡剧情】\n${levelSceneBlock}` : '',
       sceneHint ? `当前开场/背景：${sceneHint}` : '',
-      chatSceneSynopsis ? `剧情摘要：${chatSceneSynopsis.slice(0, 140)}` : '',
+      chatSceneSynopsis ? `封面剧情摘要：${chatSceneSynopsis.slice(0, 220)}` : '',
       partnerBlock,
       `当前阶段：${stage}；好感=${mainAffinity(affinity)}。`,
+      levelSceneBlock ? `必须严格读取并延续【完整关卡剧情】中的地点、冲突、人物状态、玩家目标和关键节拍，不要回到旧封面剧情或泛化搭讪场景。` : '',
       `只输出角色本人会说的话，1-2句，短、自然、像微信聊天。不要动作旁白，不要括号，不要评分/建议/系统说明，不要 meta。`,
     ].filter(Boolean).join('\n\n');
 
@@ -1276,9 +1479,27 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
     // 保存 summary 到 ref 以供 UI 读取（已经用多个 state，直接组装渲染时读取即可）
     (window as any).__foxsayLastScoring = scoring;
 
+    const xp = attemptBadge?.willGrantXP ? xpRewardForStar(scoring.star, chatMode === 'challenge' ? 'challenge' : 'story') : 0;
+    const abilityEvent = buildAbilityEventFromLevel({
+      userId: (user as any).userId,
+      levelKid: chatLevelKid || 'L001',
+      mode: chatMode,
+      partnerKid: chatPartner?.kid ?? null,
+      title: chatTitle,
+      scoring,
+      affinityStart: affinityHistory[0] || emptyAffinity(),
+      affinityEnd: finalAffinity,
+      xpGranted: xp,
+    });
+    setSummaryAbilityEvent(abilityEvent);
+    if (hasAbilityDelta(abilityEvent)) {
+      appendAbilityEvent((user as any).userId, abilityEvent);
+      const nextAbilityScores = applyAbilityDelta((user as any).abilityScores, abilityEvent.deltas);
+      user.updateUser?.({ abilityScores: nextAbilityScores });
+    }
+
     // 给 XP
-    if (attemptBadge?.willGrantXP) {
-      const xp = xpRewardForStar(scoring.star, chatMode === 'challenge' ? 'challenge' : 'story');
+    if (xp > 0) {
       if (xp > 0) user.updateUser?.({ xp: (user.xp || 0) + xp });
     }
 
@@ -1489,10 +1710,6 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
     setMatchWeeklyUsed(prev => prev + 1);
   };
 
-  /* ---------- 今日推荐场景（取第一个未完成且非 VIP 的场景） ---------- */
-  /** @API 后端接口：GET /api/practice/recommendation */
-  const todayRecommend = _storyLevels.find(l => !l.completed && !l.vip) ?? _storyLevels[0];
-
   /* ========================================
    *  渲染
    * ======================================== */
@@ -1507,7 +1724,7 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
         }} />
 
         {/* ====== 1. 页面标题 ====== */}
-        <motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
+        {!activeGroup && (<motion.div initial={{ opacity: 0, y: 8 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.4 }}>
           <div className="flex items-center justify-between mb-5">
             <div>
               <p style={{ color: 'rgba(245,239,232,0.58)', fontSize: 14, marginBottom: 4 }}>训练中心</p>
@@ -1520,494 +1737,343 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
               <span style={{ color: '#FF8A80', fontSize: 12, fontWeight: 600 }}>{user.streak || 0}天连续</span>
             </div>
           </div>
-        </motion.div>
+        </motion.div>)}
 
-        {/* ====== 2. 今日精选体验（沉浸式封面卡） ====== */}
-        <motion.div
+        {/* ====== 2. 今日精选体验（三关轮播） ====== */}
+        {!activeGroup && (<motion.div
           className="mb-5"
           initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ duration: 0.5, delay: 0.05 }}
         >
-          {/* 顶部标题行 */}
           <div className="flex items-center justify-between mb-3">
-            <span style={{ color: '#FF8A80', fontSize: 16, fontWeight: 700 }}>今日精选体验</span>
-            <button className="flex items-center gap-1" onClick={() => {}}>
-              <span style={{ color: 'rgba(245,239,232,0.45)', fontSize: 12 }}>查看全部</span>
+            <div className="flex items-center gap-2">
+              <IcFire size={14} color="#FF8A80" />
+              <span style={{ color: '#FF8A80', fontSize: 16, fontWeight: 800 }}>今日精选体验</span>
+            </div>
+            <button
+              className="flex items-center gap-1"
+              onClick={() => {
+                setPracticeMode('story');
+                setExpandedChapter(storyChapters[0]?.id ?? 1);
+              }}
+            >
+              <span style={{ color: 'rgba(245,239,232,0.45)', fontSize: 12 }}>三关轮播</span>
               <ChevronRight size={12} color="rgba(245,239,232,0.35)" strokeWidth={2} />
             </button>
           </div>
 
-          {/* 封面卡片 */}
-          <motion.button
-            className="w-full text-left overflow-hidden"
-            style={{ borderRadius: 20, background: '#453a60' }}
-            whileTap={{ scale: 0.98 }}
-            onClick={() => {
-              // 与首页"今日推荐"一致：直接打开该关卡的沉浸式预览（而不是弹窗）
-              cameFromHomeRef.current = true;
-              setLevelImmersive({ chapterId: todayRecommend.chapter, index: todayRecommend.idxInChapter });
-            }}
-          >
-            {/* 封面图区域 */}
-            <div className="relative" style={{ height: 180 }}>
-              {/* 真实人物图 + Ken Burns + 倾斜 + 呼吸光斑 */}
-              <div style={{ position: 'absolute', inset: 0 }}>
-                <KenBurnsImage
-                  src={todayRecommend.image}
-                  alt="今日精选"
-                  seed={todayRecommend.id * 11}
-                  duration={12}
-                  tilt
-                  tiltStrength={4}
-                  glow
-                  glowColor="rgba(255,180,170,0.45)"
-                  loading="eager"
-                />
-                {/* 色相覆盖 */}
-                <div style={{
-                  position: 'absolute', inset: 0,
-                  background: todayRecommend.bg,
-                  opacity: 0.35, mixBlendMode: 'soft-light', pointerEvents: 'none',
-                }} />
-                {/* 装饰性大 emoji 背景 */}
-                <span style={{ fontSize: 100, opacity: 0.15, position: 'absolute', right: -10, top: -10, lineHeight: 1, pointerEvents: 'none' }}>💑</span>
-                <span style={{ fontSize: 60, opacity: 0.08, position: 'absolute', left: 10, bottom: -5, transform: 'rotate(-12deg)', lineHeight: 1, pointerEvents: 'none' }}>☕</span>
-              </div>
-
-              {/* 中心播放按钮：呼吸脉冲 */}
-              <motion.div
-                className="flex items-center justify-center"
-                style={{
-                  position: 'absolute', left: '50%', top: '50%',
-                  width: 64, height: 64, borderRadius: 20,
-                  background: 'rgba(255,255,255,0.2)',
-                  backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
-                  x: '-50%', y: '-50%',
-                  boxShadow: '0 0 0 0 rgba(255,255,255,0.3)',
-                }}
-                initial={{ scale: 0.6, opacity: 0 }}
-                animate={{
-                  scale: [1, 1.08, 1], opacity: 1,
-                  boxShadow: [
-                    '0 0 0 0 rgba(255,255,255,0.35)',
-                    '0 0 0 18px rgba(255,255,255,0)',
-                    '0 0 0 0 rgba(255,255,255,0)',
-                  ],
-                }}
-                transition={{ duration: 2.4, repeat: Infinity, ease: 'easeInOut' }}
-              >
-                <span style={{ fontSize: 32 }}>▶</span>
-              </motion.div>
-
-              {/* 左上标签 */}
-              <div style={{
-                position: 'absolute', top: 12, left: 12,
-                display: 'inline-flex', alignItems: 'center', gap: 4,
-                background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
-                borderRadius: 8, padding: '4px 10px',
-                border: '1px solid rgba(255,255,255,0.1)',
-              }}>
-                <span style={{ fontSize: 11 }}>🔥</span>
-                <span style={{ color: '#fff', fontSize: 11, fontWeight: 600 }}>今日热门</span>
-              </div>
-
-              {/* 右上收藏 */}
-              <div style={{
-                position: 'absolute', top: 12, right: 12,
-                width: 32, height: 32, borderRadius: 10,
-                background: 'rgba(0,0,0,0.3)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                border: '1px solid rgba(255,255,255,0.1)',
-              }}>
-                <IcHeart size={14} color="rgba(255,255,255,0.7)" />
-              </div>
-
-              {/* 底部渐变蒙版 + 标题 */}
-              <div style={{
-                position: 'absolute', bottom: 0, left: 0, right: 0,
-                background: 'linear-gradient(transparent, rgba(0,0,0,0.6))',
-                padding: '30px 16px 12px',
-              }}>
-                <h3 style={{ color: '#fff', fontSize: 18, fontWeight: 700, marginBottom: 2, textShadow: '0 1px 6px rgba(0,0,0,0.3)' }}>
-                  AI 约会模拟
-                </h3>
-                <span style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12 }}>
-                  {todayRecommend.title}
-                </span>
-              </div>
-            </div>
-
-            {/* 卡片底部信息区 */}
-            <div className="p-4">
-              {/* 评分行 */}
-              <div className="flex items-center gap-2 mb-2">
-                <IcStar size={12} color="#FFD93D" />
-                <span style={{ color: '#FFD93D', fontSize: 13, fontWeight: 700 }}>推荐</span>
-                <span style={{ color: 'rgba(245,239,232,0.4)', fontSize: 12 }}>沉浸式恋爱故事</span>
-              </div>
-              {/* 描述 */}
-              <p style={{ color: 'rgba(245,239,232,0.65)', fontSize: 13, lineHeight: 1.6, marginBottom: 14 }}>
-                与 AI 进行沉浸式约会情景演练，锻炼开场白与话题延展能力
-              </p>
-              {/* 底部操作行 */}
-              <div className="flex items-center justify-end">
-                <div className="flex items-center gap-2 px-4 py-2"
-                  style={{ background: 'rgba(245,239,232,0.08)', borderRadius: 10, border: '1px solid rgba(245,239,232,0.1)' }}>
-                  <span style={{ color: '#f5efe8', fontSize: 13, fontWeight: 600 }}>开始练习</span>
-                </div>
-              </div>
-            </div>
-          </motion.button>
-        </motion.div>
-
-        {/* ====== 3. 快速工具箱已迁至首页「妙妙工具」 ====== */}
-
-        {/* ====== 5. 关卡模式切换 + 章节标签 + 关卡列表 ====== */}
-
-        {/* 模式切换：剧情关卡 / 人物挑战 */}
-        <div className="flex gap-0 mb-3 p-1" style={{ background: '#3d3358', borderRadius: 12 }}>
-          {(['story', 'challenge'] as const).map(m => (
-            <button key={m} className="flex-1 py-2.5 text-center"
-              style={{
-                background: practiceMode === m ? '#FF8A80' : 'transparent',
-                borderRadius: 10,
-                color: practiceMode === m ? '#2b2535' : 'rgba(245,239,232,0.55)',
-                fontSize: 13, fontWeight: practiceMode === m ? 700 : 400,
-                transition: 'all 0.2s',
-              }}
-              onClick={() => { setPracticeMode(m); }}
-            >
-              {m === 'story' ? '📖 我的故事' : '💫 人物邂逅'}
-              <span style={{ marginLeft: 4, fontSize: 11, opacity: 0.7 }}>
-                {(m === 'story' ? _storyLevels : _challengeLevels).length}
-              </span>
-            </button>
-          ))}
-        </div>
-
-        {/* 故事章节列表（点击展开小章节，右下入口进入沉浸式立绘页） */}
-        <div className="flex flex-col gap-4">
-        {currentGroups.map((g, gIdx) => {
-          const groupLevels = currentLevels.filter(l => l.chapter === g.id);
-          const completedCount = groupLevels.filter(l => l.completed).length;
-          const isOpen = expandedChapter === g.id;
-          return (
-            <div key={g.id} data-chapter-id={g.id}>
-              {/* 章节封面卡（点击展开/收起小章节） */}
-              <button className="w-full overflow-hidden relative block"
-                style={{
-                  borderRadius: 18,
-                  border: '1px solid rgba(245,239,232,0.08)',
-                }}
-                onClick={() => setExpandedChapter(isOpen ? null : g.id)}
-              >
-                {/* 封面图 */}
-                <div style={{ position: 'relative', height: 150, overflow: 'hidden' }}>
+          {activeFeatured && (
+            <div className="relative overflow-hidden" style={{ height: 256, borderRadius: 24, background: '#332b45', border: '1px solid rgba(245,239,232,0.1)', boxShadow: '0 18px 48px rgba(0,0,0,0.24)' }}>
+              <AnimatePresence mode="wait">
+                <motion.button
+                  key={`featured-slide-${activeFeatured.level.id}`}
+                  className="absolute inset-0 text-left overflow-hidden"
+                  style={{ zIndex: 1 }}
+                  initial={{ opacity: 0, scale: 1.035, x: 18 }}
+                  animate={{ opacity: 1, scale: 1, x: 0 }}
+                  exit={{ opacity: 0, scale: 0.985, x: -18 }}
+                  transition={{ duration: 0.42, ease: 'easeOut' }}
+                  whileTap={{ scale: 0.985 }}
+                  onClick={() => {
+                    cameFromHomeRef.current = true;
+                    openLevelPreview(activeFeatured.level, activeFeatured.level.idxInChapter);
+                  }}
+                >
                   <KenBurnsImage
-                    src={g.coverImage}
-                    alt={g.name}
-                    seed={g.id * 7 + (practiceMode === 'story' ? 0 : 100)}
-                    duration={14}
+                    src={activeFeatured.level.image}
+                    alt={activeFeatured.level.title}
+                    seed={activeFeatured.level.id * 13}
+                    duration={16}
                     tilt
                     tiltStrength={3}
                     glow
-                    glowColor={g.vip ? 'rgba(255,200,120,0.28)' : 'rgba(255,255,255,0.14)'}
+                    glowColor={`${activeFeatured.accent}66`}
+                    loading="eager"
+                    imgStyle={{ filter: 'saturate(1.16) contrast(1.08) brightness(0.82)' }}
                   />
-                  {/* 渐变暗色叠层 */}
-                  <div style={{
-                    position: 'absolute', inset: 0,
-                    background: 'linear-gradient(to top, rgba(43,37,53,0.95) 0%, rgba(43,37,53,0.5) 50%, rgba(43,37,53,0.15) 100%)',
-                    pointerEvents: 'none',
-                  }} />
+                  <div aria-hidden style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg, rgba(23,20,32,0.92) 0%, rgba(23,20,32,0.58) 48%, rgba(23,20,32,0.24) 100%)' }} />
+                  <div aria-hidden style={{ position: 'absolute', inset: 0, background: `radial-gradient(circle at 18% 22%, ${activeFeatured.accent}4d 0%, transparent 32%), linear-gradient(140deg, rgba(255,255,255,0.13), transparent 38%)`, mixBlendMode: 'screen' }} />
+                  <div aria-hidden style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: 100, background: 'linear-gradient(180deg, transparent, rgba(30,25,42,0.96))' }} />
 
-                  {/* 左上 VIP 锁角标（章节级，已废弃） */}
-                  {g.vip && (
-                    <div style={{
-                      position: 'absolute', top: 12, left: 12,
-                      display: 'flex', alignItems: 'center', gap: 4,
-                      background: 'linear-gradient(135deg, rgba(255,193,96,0.95), rgba(255,155,70,0.95))',
-                      borderRadius: 10, padding: '4px 10px',
-                      border: '1px solid rgba(255,215,140,0.55)',
-                      boxShadow: '0 4px 14px rgba(255,155,70,0.35)',
-                    }}>
-                      <Lock size={10} color="#2b1a0a" strokeWidth={2.6} />
-                      <span style={{ color: '#2b1a0a', fontSize: 10, fontWeight: 800, letterSpacing: 1 }}>VIP</span>
-                    </div>
-                  )}
-
-                  {/* 右上章节序号 */}
-                  <div style={{
-                    position: 'absolute', top: 12, right: 12,
-                    background: 'rgba(0,0,0,0.4)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)',
-                    borderRadius: 10, padding: '4px 12px',
-                    border: '1px solid rgba(255,255,255,0.12)',
-                  }}>
-                    <span style={{ color: '#fff', fontSize: 11, fontWeight: 600, letterSpacing: 1 }}>
-                      {practiceMode === 'story' ? `第${g.id}章` : `第${g.id}组`}
-                    </span>
-                  </div>
-
-                  {/* 底部文字区 */}
-                  <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, padding: '0 16px 14px' }}>
-                    <h3 style={{
-                      color: '#fff', fontSize: 19, fontWeight: 700, marginBottom: 4,
-                      textShadow: '0 2px 10px rgba(0,0,0,0.6)',
-                      letterSpacing: 0.5,
-                    }}>
-                      {g.name}
-                    </h3>
-                    <p style={{
-                      color: 'rgba(255,255,255,0.75)', fontSize: 12, lineHeight: 1.5,
-                      textShadow: '0 1px 4px rgba(0,0,0,0.5)',
-                      fontStyle: 'italic',
-                    }}>
-                      "{g.narrative}"
-                    </p>
-                    {/* 进度 + 展开指示 */}
-                    <div className="flex items-center justify-between" style={{ marginTop: 8 }}>
-                      <div className="flex items-center gap-2.5">
-                        <div style={{ width: 80, height: 3, borderRadius: 2, background: 'rgba(255,255,255,0.15)' }}>
-                          <div style={{
-                            height: '100%', borderRadius: 2,
-                            background: completedCount === groupLevels.length ? '#4ECDC4' : 'linear-gradient(90deg, #FF8A80, #FFB199)',
-                            width: `${(completedCount / groupLevels.length) * 100}%`, transition: 'width 0.3s',
-                          }} />
-                        </div>
-                        <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 10 }}>
-                          {completedCount}/{groupLevels.length} 节
-                        </span>
-                      </div>
+                  <div style={{ position: 'absolute', inset: 16, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+                    <div className="flex items-center justify-between">
                       <div className="flex items-center gap-2">
-                        {/* 剧情简介入口 */}
-                        <span
-                          role="button"
-                          onClick={(e) => { e.stopPropagation(); setImmersive({ mode: practiceMode, index: gIdx }); }}
-                          className="flex items-center gap-1 px-2 py-1"
-                          style={{
-                            background: 'rgba(0,0,0,0.35)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)',
-                            borderRadius: 8, border: '1px solid rgba(255,255,255,0.12)',
-                            color: 'rgba(255,255,255,0.85)', fontSize: 10, fontWeight: 600,
-                          }}
-                        >
-                          剧情简介
-                          <ChevronRight size={10} color="rgba(255,255,255,0.85)" strokeWidth={2.2} />
-                        </span>
-                        <motion.span animate={{ rotate: isOpen ? 90 : 0 }} style={{ display: 'inline-flex' }}>
-                          <ChevronRight size={14} color="rgba(255,255,255,0.6)" strokeWidth={2} />
-                        </motion.span>
+                        <span style={{ color: '#fff', fontSize: 11, fontWeight: 900, padding: '6px 10px', borderRadius: 999, background: 'rgba(0,0,0,0.34)', border: '1px solid rgba(255,255,255,0.16)', backdropFilter: 'blur(10px)' }}>{activeFeatured.tag}</span>
+                        <span style={{ color: '#2b2535', fontSize: 11, fontWeight: 1000, padding: '6px 10px', borderRadius: 999, background: activeFeatured.accent }}>{activeFeatured.label}</span>
+                      </div>
+                      <span style={{ color: 'rgba(245,239,232,0.68)', fontSize: 12, fontWeight: 800 }}>{activeFeaturedIndex + 1}/{featuredRecommendations.length}</span>
+                    </div>
+
+                    <div style={{ maxWidth: 268 }}>
+                      <div className="flex items-center gap-1.5 mb-2">
+                        <Compass size={13} color={activeFeatured.accent} strokeWidth={2.6} />
+                        <span style={{ color: 'rgba(245,239,232,0.68)', fontSize: 11, fontWeight: 800 }}>第 {activeFeatured.level.chapter} 章 · 第 {activeFeatured.level.idxInChapter + 1} 节</span>
+                      </div>
+                      <h3 style={{ color: '#f5efe8', fontSize: 22, fontWeight: 1000, lineHeight: 1.18, marginBottom: 8, textShadow: '0 2px 12px rgba(0,0,0,0.32)' }}>{activeFeatured.level.title}</h3>
+                      <p style={{ color: 'rgba(245,239,232,0.72)', fontSize: 12, lineHeight: 1.58, marginBottom: 14, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>
+                        {activeFeatured.level.desc}
+                      </p>
+                      <div className="inline-flex items-center gap-2" style={{ color: '#f5efe8', fontSize: 12, fontWeight: 900, padding: '8px 12px', borderRadius: 12, background: 'rgba(245,239,232,0.13)', border: '1px solid rgba(245,239,232,0.16)', backdropFilter: 'blur(10px)' }}>
+                        <MapPin size={13} color={activeFeatured.accent} strokeWidth={2.5} />
+                        进入这一关
                       </div>
                     </div>
                   </div>
-                </div>
-              </button>
-
-              {/* ---------- 小章节网格（点击章节展开） ---------- */}
-              <AnimatePresence initial={false}>
-                {isOpen && (
-                  <motion.div
-                    key="sublevels"
-                    initial={{ height: 0, opacity: 0 }}
-                    animate={{ height: 'auto', opacity: 1 }}
-                    exit={{ height: 0, opacity: 0 }}
-                    transition={{ duration: 0.28, ease: 'easeOut' }}
-                    style={{ overflow: 'hidden' }}
-                  >
-                    <div className="grid grid-cols-2 gap-3 pt-3">
-                      {groupLevels.map((lv, li) => {
-                        const userIsPro = user.isVip || user.isPro();
-                        const isLocked = lv.vip && !userIsPro;
-                        const isCurrent = !lv.completed && !isLocked && li === completedCount;
-                        const isEnc = lv.isEncounter;
-                        return (
-                          <motion.button
-                            key={lv.id}
-                            className="relative overflow-hidden text-left flex flex-col"
-                            style={{
-                              borderRadius: 14,
-                              border: '1px solid rgba(245,239,232,0.08)',
-                              background: '#3a3152',
-                              minHeight: isEnc ? 290 : 260,
-                            }}
-                            whileTap={{ scale: 0.97 }}
-                            initial={{ opacity: 0, y: 6 }}
-                            animate={{ opacity: 1, y: 0 }}
-                            transition={{ delay: li * 0.035 }}
-                            onClick={() => {
-                              if (isLocked) { setShowVIP(true); return; }
-                              setLevelImmersive({ chapterId: g.id, index: li });
-                            }}
-                          >
-                            {/* 关卡图：真人模式加高至 180，剧情模式 150 */}
-                            <div style={{
-                              position: 'relative',
-                              height: isEnc ? 180 : 150,
-                              overflow: 'hidden',
-                            }}>
-                              <KenBurnsImage
-                                src={lv.image}
-                                alt={lv.title}
-                                seed={lv.id}
-                                duration={13}
-                                tilt={!isLocked}
-                                tiltStrength={3}
-                                glow={isCurrent}
-                                glowColor="rgba(255,180,170,0.35)"
-                                dimmed={isLocked}
-                                imgStyle={isEnc ? { objectPosition: 'center 12%' } : undefined}
-                              />
-                              {/* 底部渐变过渡到卡片下半 */}
-                              <div style={{
-                                position: 'absolute', left: 0, right: 0, bottom: 0,
-                                height: isEnc ? 50 : 40,
-                                background: isEnc
-                                  ? 'linear-gradient(to bottom, rgba(58,49,82,0) 0%, rgba(58,49,82,0.6) 55%, #3a3152 100%)'
-                                  : 'linear-gradient(to bottom, rgba(58,49,82,0) 0%, #3a3152 100%)',
-                                pointerEvents: 'none',
-                              }} />
-
-                              {/* VIP 锁覆盖（非VIP用户才锁定） */}
-                              {isLocked && (
-                                <>
-                                  <div style={{
-                                    position: 'absolute', inset: 0,
-                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                    pointerEvents: 'none',
-                                  }}>
-                                    <div style={{
-                                      width: 44, height: 44, borderRadius: '50%',
-                                      background: 'linear-gradient(135deg, #FFCF78, #FFA050)',
-                                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                      boxShadow: '0 6px 18px rgba(255,160,80,0.45)',
-                                    }}>
-                                      <Lock size={18} color="#2b1a0a" strokeWidth={2.4} />
-                                    </div>
-                                  </div>
-                                </>
-                              )}
-                              {/* VIP 标识（VIP关卡始终显示） */}
-                              {lv.vip && (
-                                <div style={{
-                                  position: 'absolute', top: 8, left: 8,
-                                  display: 'inline-flex', alignItems: 'center', gap: 3,
-                                  background: 'linear-gradient(135deg, rgba(255,207,120,0.95), rgba(255,160,80,0.95))',
-                                  borderRadius: 6, padding: '2px 7px',
-                                  border: '1px solid rgba(255,220,150,0.7)',
-                                }}>
-                                  <span style={{ color: '#2b1a0a', fontSize: 9, fontWeight: 800, letterSpacing: 1 }}>VIP</span>
-                                </div>
-                              )}
-
-                              {/* 已完成 ✓ */}
-                              {lv.completed && (
-                                <div style={{
-                                  position: 'absolute', top: 8, left: 8,
-                                  width: 22, height: 22, borderRadius: '50%',
-                                  background: '#4ECDC4',
-                                  display: 'flex', alignItems: 'center', justifyContent: 'center',
-                                  boxShadow: '0 2px 8px rgba(78,205,196,0.55)',
-                                }}>
-                                  <span style={{ color: '#fff', fontSize: 12, fontWeight: 800, lineHeight: 1 }}>✓</span>
-                                </div>
-                              )}
-
-                              {/* 当前推进关闪亮角标 */}
-                              {isCurrent && (
-                                <div style={{
-                                  position: 'absolute', top: 8, right: 8,
-                                  padding: '2px 7px', borderRadius: 6,
-                                  background: 'linear-gradient(135deg, #FF8A80, #FFB199)',
-                                  color: '#fff', fontSize: 9, fontWeight: 800, letterSpacing: 1,
-                                  boxShadow: '0 2px 8px rgba(255,138,128,0.5)',
-                                }}>
-                                  NEXT
-                                </div>
-                              )}
-
-                              {/* 关卡序号徽章 */}
-                              <div style={{
-                                position: 'absolute', bottom: 8, left: 10,
-                                display: 'inline-flex', alignItems: 'center', gap: 4,
-                                padding: '2px 8px', borderRadius: 6,
-                                background: 'rgba(0,0,0,0.5)', backdropFilter: 'blur(6px)',
-                                border: '1px solid rgba(255,255,255,0.14)',
-                                color: 'rgba(255,255,255,0.92)', fontSize: 10, fontWeight: 700, letterSpacing: 0.8,
-                              }}>
-                                <span style={{ opacity: 0.6 }}>第</span>
-                                {lv.idxInChapter + 1}
-                                <span style={{ opacity: 0.6 }}>节</span>
-                              </div>
-                            </div>
-
-                            {/* 下半：标题 + 叙事钩子 + 状态 */}
-                            <div className="flex-1 flex flex-col" style={{ padding: '8px 12px 12px' }}>
-                              {/* 状态徽章 */}
-                              <div style={{ marginBottom: 6 }}>
-                                {isLocked ? (
-                                  <span style={{
-                                    display: 'inline-block', padding: '1px 7px', borderRadius: 5,
-                                    background: 'linear-gradient(135deg, rgba(255,207,120,0.22), rgba(255,160,80,0.18))',
-                                    border: '1px solid rgba(255,207,120,0.45)',
-                                    color: '#FFCF78', fontSize: 9, fontWeight: 700, letterSpacing: 1,
-                                  }}>◆ 会员专享</span>
-                                ) : lv.completed ? (
-                                  <span style={{
-                                    display: 'inline-block', padding: '1px 7px', borderRadius: 5,
-                                    background: 'rgba(78,205,196,0.16)',
-                                    border: '1px solid rgba(78,205,196,0.4)',
-                                    color: '#7EE0D6', fontSize: 9, fontWeight: 700, letterSpacing: 1,
-                                  }}>✦ 已破关</span>
-                                ) : isCurrent ? (
-                                  <span style={{
-                                    display: 'inline-block', padding: '1px 7px', borderRadius: 5,
-                                    background: 'rgba(255,138,128,0.16)',
-                                    border: '1px solid rgba(255,138,128,0.45)',
-                                    color: '#FFB199', fontSize: 9, fontWeight: 700, letterSpacing: 1,
-                                  }}>● 进行中</span>
-                                ) : (
-                                  <span style={{
-                                    display: 'inline-block', padding: '1px 7px', borderRadius: 5,
-                                    background: 'rgba(255,255,255,0.06)',
-                                    border: '1px solid rgba(255,255,255,0.18)',
-                                    color: 'rgba(255,255,255,0.6)', fontSize: 9, fontWeight: 700, letterSpacing: 1,
-                                  }}>○ 未开始</span>
-                                )}
-                              </div>
-
-                              {/* 标题 */}
-                              <p style={{
-                                color: '#f5efe8', fontSize: 13.5, fontWeight: 700,
-                                lineHeight: 1.3, margin: 0, marginBottom: 4,
-                                display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical',
-                                overflow: 'hidden',
-                              }}>
-                                {lv.title}
-                              </p>
-
-                              {/* 叙事钩子（desc） */}
-                              <p style={{
-                                color: 'rgba(245,239,232,0.55)', fontSize: 11, lineHeight: 1.55,
-                                margin: 0, fontStyle: 'italic',
-                                display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical',
-                                overflow: 'hidden',
-                              }}>
-                                {lv.desc}
-                              </p>
-                            </div>
-                          </motion.button>
-                        );
-                      })}
-                    </div>
-                  </motion.div>
-                )}
+                </motion.button>
               </AnimatePresence>
+
             </div>
-          );
-        })}
-        </div>
+          )}
+        </motion.div>)}
+
+        {/* ====== 3. 快速工具箱已迁至首页「妙妙工具」 ====== */}
+
+        {/* ====== 5. 双入口 ====== */}
+        {!activeGroup && (<motion.div
+          className="relative overflow-hidden mb-4"
+          style={{
+            height: 232,
+            borderRadius: 26,
+            background: '#261f35',
+            border: '1px solid rgba(245,239,232,0.13)',
+            boxShadow: '0 22px 56px rgba(0,0,0,0.28)',
+          }}
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.45, delay: 0.08 }}
+        >
+          <motion.button
+            aria-label="进入我的故事"
+            className="absolute text-left overflow-hidden"
+            whileTap={{ scale: 0.982 }}
+            whileHover={{ filter: 'brightness(1.06)' }}
+            animate={{ scale: entryPressMode === 'story' ? 0.986 : 1 }}
+            transition={{ type: 'spring', stiffness: 420, damping: 28 }}
+            style={{
+              left: 0,
+              top: 0,
+              bottom: 0,
+              width: '54%',
+              zIndex: 2,
+              padding: 0,
+              clipPath: 'polygon(0 0, 100% 0, 86.5% 100%, 0 100%)',
+              background: '#4f2538',
+              boxShadow: 'inset 0 0 0 1px rgba(255,214,190,0.28), inset -28px 0 44px rgba(255,138,128,0.25)',
+            }}
+            onClick={() => openEntryMap('story')}
+          >
+            <img aria-hidden src={ENTRY_STORY_COVER} alt="" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: '54% center', filter: 'saturate(1.12) contrast(1.05) brightness(0.82)', pointerEvents: 'none' }} />
+            <div aria-hidden style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg, rgba(83,34,55,0.76) 0%, rgba(83,34,55,0.36) 54%, rgba(255,138,128,0.26) 100%)' }} />
+            <div aria-hidden style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(255,177,153,0.13) 0%, transparent 46%, rgba(30,22,36,0.28) 100%)' }} />
+            <AnimatePresence>
+              {entryPressMode === 'story' && (
+                <>
+                  <motion.div
+                    aria-hidden
+                    initial={{ opacity: 0.72, scale: 0.18 }}
+                    animate={{ opacity: 0, scale: 1.85 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.42, ease: 'easeOut' }}
+                    style={{ position: 'absolute', left: '50%', top: '54%', width: 174, height: 174, marginLeft: -87, marginTop: -87, borderRadius: 999, background: 'radial-gradient(circle, rgba(255,245,220,0.58) 0%, rgba(255,177,153,0.34) 34%, rgba(255,138,128,0.13) 54%, transparent 76%)', pointerEvents: 'none', zIndex: 1 }}
+                  />
+                </>
+              )}
+            </AnimatePresence>
+            <div style={{ position: 'absolute', left: 18, bottom: 18, width: 158, zIndex: 2 }}>
+              <div className="inline-flex items-center gap-1.5 mb-2" style={{ padding: '5px 9px', borderRadius: 999, background: 'rgba(63,31,48,0.66)', border: '1px solid rgba(255,214,190,0.3)', backdropFilter: 'blur(10px)' }}>
+                <IcPen size={12} color="#FFD166" />
+                <span style={{ color: '#FFE4C7', fontSize: 10, fontWeight: 900, letterSpacing: 1 }}>生活主线</span>
+              </div>
+              <h2 style={{ color: '#f5efe8', fontSize: 24, fontWeight: 1000, lineHeight: 1.08, margin: 0, textShadow: '0 3px 14px rgba(0,0,0,0.35)' }}>我的故事</h2>
+              <div className="flex items-center gap-2 mt-2">
+                <span style={{ color: '#2b2535', fontSize: 11, fontWeight: 1000, padding: '5px 8px', borderRadius: 999, background: '#FFB199' }}>{_storyLevels.length} 关</span>
+                {expandedChapter != null && practiceMode === 'story' && <span style={{ color: '#FFD166', fontSize: 11, fontWeight: 900 }}>已进入</span>}
+              </div>
+            </div>
+          </motion.button>
+
+          <motion.button
+            aria-label="进入人物邂逅"
+            className="absolute text-right overflow-hidden"
+            whileTap={{ scale: 0.982 }}
+            whileHover={{ filter: 'brightness(1.06)' }}
+            animate={{ scale: entryPressMode === 'challenge' ? 0.986 : 1 }}
+            transition={{ type: 'spring', stiffness: 420, damping: 28 }}
+            style={{
+              right: 0,
+              top: 0,
+              bottom: 0,
+              width: '54%',
+              zIndex: 2,
+              padding: 0,
+              clipPath: 'polygon(13.5% 0, 100% 0, 100% 100%, 0 100%)',
+              background: '#18324a',
+              boxShadow: 'inset 0 0 0 1px rgba(178,245,239,0.26), inset 28px 0 44px rgba(126,224,214,0.23)',
+            }}
+            onClick={() => openEntryMap('challenge')}
+          >
+            <img aria-hidden src={ENTRY_CHALLENGE_COVER} alt="" draggable={false} style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: '48% center', filter: 'saturate(1.1) contrast(1.04) brightness(0.78)', pointerEvents: 'none' }} />
+            <div aria-hidden style={{ position: 'absolute', inset: 0, background: 'linear-gradient(270deg, rgba(20,45,67,0.78) 0%, rgba(20,45,67,0.38) 54%, rgba(126,224,214,0.24) 100%)' }} />
+            <div aria-hidden style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(126,224,214,0.12) 0%, transparent 46%, rgba(18,24,35,0.35) 100%)' }} />
+            <AnimatePresence>
+              {entryPressMode === 'challenge' && (
+                <>
+                  <motion.div
+                    aria-hidden
+                    initial={{ opacity: 0.72, scale: 0.18 }}
+                    animate={{ opacity: 0, scale: 1.85 }}
+                    exit={{ opacity: 0 }}
+                    transition={{ duration: 0.42, ease: 'easeOut' }}
+                    style={{ position: 'absolute', left: '50%', top: '54%', width: 174, height: 174, marginLeft: -87, marginTop: -87, borderRadius: 999, background: 'radial-gradient(circle, rgba(232,255,252,0.58) 0%, rgba(126,224,214,0.34) 34%, rgba(126,224,214,0.13) 54%, transparent 76%)', pointerEvents: 'none', zIndex: 1 }}
+                  />
+                </>
+              )}
+            </AnimatePresence>
+            <div style={{ position: 'absolute', right: 18, bottom: 18, width: 162, zIndex: 2 }}>
+              <div className="inline-flex items-center gap-1.5 mb-2" style={{ padding: '5px 9px', borderRadius: 999, background: 'rgba(18,45,59,0.68)', border: '1px solid rgba(178,245,239,0.27)', backdropFilter: 'blur(10px)' }}>
+                <Users size={12} color="#7EE0D6" strokeWidth={2.5} />
+                <span style={{ color: '#E5F8FF', fontSize: 10, fontWeight: 900, letterSpacing: 1 }}>实时邂逅</span>
+              </div>
+              <h2 style={{ color: '#f5efe8', fontSize: 24, fontWeight: 1000, lineHeight: 1.08, margin: 0, textShadow: '0 3px 14px rgba(0,0,0,0.35)' }}>人物邂逅</h2>
+              <div className="flex items-center justify-end gap-2 mt-2">
+                {expandedChapter != null && practiceMode === 'challenge' && <span style={{ color: '#7EE0D6', fontSize: 11, fontWeight: 900 }}>已进入</span>}
+                <span style={{ color: '#192433', fontSize: 11, fontWeight: 1000, padding: '5px 8px', borderRadius: 999, background: '#7EE0D6' }}>{_challengeLevels.length} 关</span>
+              </div>
+            </div>
+          </motion.button>
+          <div aria-hidden style={{ position: 'absolute', inset: 0, zIndex: 4, pointerEvents: 'none', clipPath: 'polygon(52.72% 0, 53% 0, 47.28% 100%, 47% 100%)', background: 'linear-gradient(180deg, rgba(255,245,220,0.6), rgba(255,177,153,0.9) 42%, rgba(126,224,214,0.88))', filter: 'drop-shadow(0 0 3px rgba(255,177,153,0.45)) drop-shadow(0 0 3px rgba(126,224,214,0.36))' }} />
+        </motion.div>)}
+
+        {activeGroup && (
+          <motion.div
+            className="relative overflow-hidden"
+            style={{ minHeight: 'calc(100vh - 82px)', margin: '-10px -20px -32px', padding: '18px 16px 112px', background: '#151b2d' }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.35 }}
+          >
+            <img
+              aria-hidden
+              src={getCityMapBackground(practiceMode)}
+              alt=""
+              draggable={false}
+              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center top', filter: practiceMode === 'story' ? 'saturate(1.08) contrast(1.02) brightness(0.92)' : 'saturate(1.08) contrast(1.05) brightness(0.88)' }}
+            />
+            <div aria-hidden style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(18,17,28,0.62) 0%, rgba(18,17,28,0.1) 30%, rgba(18,17,28,0.56) 100%)' }} />
+
+            <div className="relative z-10 flex items-center justify-between gap-3" style={{ marginBottom: 14 }}>
+              <button
+                className="flex items-center gap-1.5"
+                style={{ color: '#f5efe8', fontSize: 13, fontWeight: 900, padding: '8px 11px', borderRadius: 999, background: 'rgba(21,18,31,0.58)', border: '1px solid rgba(255,255,255,0.14)', backdropFilter: 'blur(12px)' }}
+                onClick={() => setExpandedChapter(null)}
+              >
+                <ChevronLeft size={16} color="#f5efe8" strokeWidth={2.6} />
+                返回入口
+              </button>
+              <button
+                className="flex items-center gap-1.5"
+                style={{ color: '#f5efe8', fontSize: 12, fontWeight: 800, padding: '8px 10px', borderRadius: 999, background: 'rgba(21,18,31,0.48)', border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(12px)' }}
+                onClick={() => setImmersive({ mode: practiceMode, index: Math.max(0, currentGroups.findIndex(group => group.id === activeGroup.id)) })}
+              >
+                简介
+                <ChevronRight size={13} color="rgba(245,239,232,0.78)" strokeWidth={2.5} />
+              </button>
+            </div>
+
+            <div className="relative z-10" style={{ marginBottom: 14 }}>
+              <div className="flex items-center gap-2 mb-2">
+                <span style={{ color: practiceMode === 'story' ? '#FFB199' : '#9BF0EA', fontSize: 12, fontWeight: 1000, padding: '5px 9px', borderRadius: 999, background: 'rgba(21,18,31,0.56)', border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(10px)' }}>{practiceMode === 'story' ? '我的故事' : '人物邂逅'}</span>
+                <span style={{ color: 'rgba(245,239,232,0.72)', fontSize: 12, fontWeight: 900 }}>{practiceMode === 'story' ? `第 ${activeGroup.id} 章` : `第 ${activeGroup.id} 组`}</span>
+              </div>
+              <h1 style={{ color: '#f5efe8', fontSize: 30, lineHeight: 1.08, fontWeight: 1000, margin: 0, textShadow: '0 4px 20px rgba(0,0,0,0.42)' }}>{activeGroup.name}</h1>
+              <p style={{ color: 'rgba(245,239,232,0.74)', fontSize: 13, lineHeight: 1.58, maxWidth: 320, marginTop: 8, textShadow: '0 2px 12px rgba(0,0,0,0.42)' }}>{activeGroup.narrative}</p>
+            </div>
+
+            <div className="relative z-10 flex gap-2 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', marginBottom: 6 }}>
+              {currentGroups.map(group => {
+                const selected = activeGroup?.id === group.id;
+                return (
+                  <button
+                    key={`${practiceMode}-${group.id}`}
+                    data-chapter-id={group.id}
+                    className="flex-shrink-0 text-left"
+                    style={{
+                      minWidth: 104,
+                      borderRadius: 16,
+                      padding: '10px 12px',
+                      background: selected ? 'rgba(245,239,232,0.9)' : 'rgba(20,17,30,0.48)',
+                      border: selected ? '1px solid rgba(245,239,232,0.85)' : '1px solid rgba(255,255,255,0.14)',
+                      backdropFilter: 'blur(12px)',
+                      boxShadow: selected ? '0 12px 26px rgba(0,0,0,0.22)' : 'none',
+                    }}
+                    onClick={() => setExpandedChapter(group.id)}
+                  >
+                    <div style={{ color: selected ? '#2b2535' : 'rgba(245,239,232,0.58)', fontSize: 11, fontWeight: 1000, marginBottom: 3 }}>
+                      {practiceMode === 'story' ? `第 ${group.id} 章` : `第 ${group.id} 组`}
+                    </div>
+                    <div style={{ color: selected ? '#2b2535' : '#f5efe8', fontSize: 13, fontWeight: 900, whiteSpace: 'nowrap' }}>{group.name}</div>
+                  </button>
+                );
+              })}
+            </div>
+
+            <div className="absolute" data-chapter-id={activeGroup.id} style={{ left: 0, right: 0, top: 232, bottom: 104, zIndex: 2 }}>
+              {activeGroupLevels.map((level, levelIndex) => {
+                const point = CITY_MAP_POINTS[levelIndex % CITY_MAP_POINTS.length];
+                const isLocked = level.vip && !userIsProForMaps;
+                const isCurrent = !level.completed && !isLocked && levelIndex === activeCompletedCount;
+                const isCompleted = level.completed;
+                const accent = isLocked ? '#FFCF78' : isCompleted ? '#7EE0D6' : isCurrent ? '#FF8A80' : (practiceMode === 'story' ? '#FFB199' : '#CDBBFF');
+                return (
+                  <div key={level.id} style={{ position: 'absolute', left: `${point.left}%`, top: `${point.top}%`, transform: 'translate(-50%, -50%)' }}>
+                    <motion.button
+                      className="flex flex-col items-center"
+                      style={{ width: 112, minHeight: 100 }}
+                      initial={{ opacity: 0, scale: 0.82, y: 10 }}
+                      animate={{ opacity: 1, scale: 1, y: 0 }}
+                      transition={{ delay: levelIndex * 0.045, type: 'spring', damping: 16, stiffness: 260 }}
+                      whileTap={{ scale: 0.94 }}
+                      onClick={() => openLevelPreview(level, levelIndex)}
+                    >
+                      <CityLandmarkIcon mode={practiceMode} index={levelIndex} locked={isLocked} current={isCurrent} completed={isCompleted} accent={accent} />
+                      <span style={{
+                        marginTop: 3,
+                        maxWidth: 96,
+                        padding: '5px 9px',
+                        borderRadius: 999,
+                        color: '#f5efe8',
+                        fontSize: 12,
+                        fontWeight: 1000,
+                        lineHeight: 1.1,
+                        background: 'rgba(18,16,25,0.74)',
+                        border: '1px solid rgba(255,255,255,0.18)',
+                        backdropFilter: 'blur(10px)',
+                        boxShadow: '0 8px 18px rgba(0,0,0,0.24)',
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
+                      }}>
+                        {getMapNodeLabel(level)}
+                      </span>
+                    </motion.button>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div style={{ position: 'absolute', left: 16, right: 16, bottom: 30, zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderRadius: 18, background: 'rgba(20,17,28,0.72)', border: '1px solid rgba(255,255,255,0.14)', backdropFilter: 'blur(14px)', boxShadow: '0 18px 38px rgba(0,0,0,0.3)' }}>
+                <div className="flex items-center gap-2">
+                  <div style={{ width: 74, height: 5, borderRadius: 999, background: 'rgba(255,255,255,0.16)', overflow: 'hidden' }}>
+                    <div style={{ width: `${activeGroupLevels.length ? (activeCompletedCount / activeGroupLevels.length) * 100 : 0}%`, height: '100%', borderRadius: 999, background: practiceMode === 'story' ? '#FF8A80' : '#B39DDB' }} />
+                  </div>
+                  <span style={{ color: 'rgba(245,239,232,0.78)', fontSize: 12, fontWeight: 900 }}>{activeCompletedCount}/{activeGroupLevels.length} 节</span>
+                </div>
+                <span style={{ color: 'rgba(245,239,232,0.56)', fontSize: 12, fontWeight: 800 }}>{practiceMode === 'story' ? '主线剧情' : '人物挑战'}</span>
+              </div>
+          </motion.div>
+        )}
 
         <div style={{ height: 20 }} />
 
         {/* ====== 6. 尼克大叔的树洞 ====== */}
-        <div className="mb-6">
+        {!activeGroup && (<div className="mb-6">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <IcHeartSpark size={14} color="#FFB6C1" />
@@ -2073,7 +2139,7 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
             </div>
           </motion.div>
 
-        </div>
+        </div>)}
 
       </div>
 
@@ -2378,7 +2444,8 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
                   affinityEnd={affinity}
                   scoring={scoring}
                   xpGranted={xp}
-                  abilityGained={scoring.star === 3 ? 1 : 0}
+                  abilityGained={0}
+                  abilityEvent={summaryAbilityEvent}
                   ending={{ title: endingInfo.title || '对话结束', description: endingInfo.description || '' }}
                   highlights={highlights}
                   regrets={regrets}
@@ -3165,7 +3232,8 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
           setLevelImmersive(null);
           if (lv) {
             const kid = practiceMode === 'story' && lv.id >= 1 && lv.id <= 30 ? 'L' + String(lv.id).padStart(3, '0') : null;
-            const isFinale = lv.idxInChapter === LEVELS_PER_CHAPTER - 1;
+            const sameChapterLevels = currentLevels.filter(item => item.chapter === lv.chapter);
+            const isFinale = sameChapterLevels[sameChapterLevels.length - 1]?.id === lv.id;
             const synopsis = levelImmersiveData?.chapters.find(c => c.id === lv.id)?.synopsis || lv.desc || '';
             startChat(String(lv.id), lv.title, levelPartners[lv.id] ?? null, { levelKid: kid, mode: practiceMode, coverImage: lv.image || null, isFinale, sceneSynopsis: synopsis });
           }

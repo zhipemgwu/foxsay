@@ -8,7 +8,7 @@
  */
 import {  useMemo, useState  } from 'react';
 import { Play, FileText, BookOpen, Crown, BrainCircuit, ArrowRight, Star, Clock } from 'lucide-react';
-import { QuizSession } from './QuizSession';
+import { QuizSession, type QuizSessionResult } from './QuizSession';
 import { QuizResult } from './QuizResult';
 import { GreetingSection } from './GreetingSection';
 import { TodayScene } from './TodayScene';
@@ -23,6 +23,7 @@ import {
   type QuizCategory,
   shuffle,
 } from '../services/quiz';
+import { settleMicroPracticeGrowth, type MicroGrowthResult, type MicroSessionKind } from '../services/microGrowth';
 import { QUIZ_BANK, getByCategory, getQuestionById } from '../data/quizBank';
 
 const FREE_POOL_COUNT = 10;
@@ -31,8 +32,8 @@ const MICRO_TRIAL_EXPIRE_KEY = 'foxsay:micro_week_trial_expire_at';
 
 type Mode =
   | { kind: 'hub' }
-  | { kind: 'quiz'; questions: Question[]; title: string }
-  | { kind: 'result'; total: number; correct: number; wrong: Question[]; combo: number; retryQs: Question[]; retryTitle: string };
+  | { kind: 'quiz'; questions: Question[]; title: string; sessionKind: MicroSessionKind }
+  | { kind: 'result'; total: number; correct: number; wrong: Question[]; combo: number; retryQs: Question[]; retryTitle: string; retryKind: MicroSessionKind; growth?: MicroGrowthResult | null };
 
 interface MicroPracticePageProps {
   onPracticeAction?: (action: any) => void;
@@ -68,9 +69,25 @@ export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps =
   const wrongIds = useMemo(() => getWrongBook(), [version]);
   const dailyPicks = useMemo(() => getDailyPicks(activeBank, 30), [version, hasMicroVip]);
 
-  const startSession = (qs: Question[], title: string) => {
+  const startSession = (qs: Question[], title: string, sessionKind: MicroSessionKind = 'practice') => {
     if (qs.length === 0) return;
-    setMode({ kind: 'quiz', questions: qs, title });
+    setMode({ kind: 'quiz', questions: qs, title, sessionKind });
+  };
+
+  const applyGrowthResult = (result: QuizSessionResult, title: string, sessionKind: MicroSessionKind) => {
+    const growth = settleMicroPracticeGrowth({
+      userId: (user as any).userId,
+      title,
+      sessionKind,
+      attempts: result.attempts,
+      completed: result.completed,
+      plannedTotal: result.plannedTotal,
+      abilityScores: (user as any).abilityScores,
+    });
+    if (growth.applied) {
+      (user as any).updateUser?.({ abilityScores: growth.nextAbilityScores });
+    }
+    return growth;
   };
 
   const startDaily = () => {
@@ -150,7 +167,7 @@ export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps =
   };
 
   const startMock = () => {
-    if (activeBank.length < 5) {
+    if (QUIZ_BANK.length < 50) {
       flash('题库还在建设中，先多刷几道吧');
       return;
     }
@@ -162,12 +179,12 @@ export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps =
       }
       markFreeMockUsed();
     }
-    const pool = buildStratifiedMockPool(activeBank, 50);
+    const pool = buildStratifiedMockPool(QUIZ_BANK, 50);
     if (pool.length === 0) {
       flash('题库还在建设中。');
       return;
     }
-    startSession(pool, `模拟考 · 全量 ${pool.length} 题`);
+    startSession(pool, `模拟考 · 全量 ${pool.length} 题`, 'mock');
   };
 
   const startAdvancedBank = () => {
@@ -180,7 +197,7 @@ export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps =
       flash('进阶题库正在扩充中。');
       return;
     }
-    startSession(shuffle(advancedPool).slice(0, Math.min(30, advancedPool.length)), '进阶题库 · 30 题');
+    startSession(shuffle(advancedPool).slice(0, Math.min(30, advancedPool.length)), '进阶题库 · 30 题', 'advanced');
   };
 
   const activateMicroWeekTrial = () => {
@@ -203,14 +220,24 @@ export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps =
       <QuizSession
         questions={mode.questions}
         title={mode.title}
-        onExit={() => { setMode({ kind: 'hub' }); setVersion(v => v + 1); }}
+        onExit={(partial) => {
+          if (partial) {
+            const growth = applyGrowthResult(partial, mode.title, mode.sessionKind);
+            flash(growth.summary);
+          }
+          setMode({ kind: 'hub' });
+          setVersion(v => v + 1);
+        }}
         onFinish={(r) => {
+          const growth = applyGrowthResult(r, mode.title, mode.sessionKind);
           setVersion(v => v + 1);
           setMode({
             kind: 'result',
             ...r,
             retryQs: mode.questions,
             retryTitle: mode.title,
+            retryKind: mode.sessionKind,
+            growth,
           });
         }}
       />
@@ -224,7 +251,8 @@ export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps =
         correct={mode.correct}
         wrong={mode.wrong}
         combo={mode.combo}
-        onRetry={() => { setMode({ kind: 'quiz', questions: mode.retryQs, title: mode.retryTitle }); }}
+        growth={mode.growth}
+        onRetry={() => { setMode({ kind: 'quiz', questions: mode.retryQs, title: mode.retryTitle, sessionKind: mode.retryKind }); }}
         onExit={() => setMode({ kind: 'hub' })}
         onReviewWrong={mode.wrong.length > 0 ? () => {
           setMode({ kind: 'quiz', questions: mode.wrong, title: '错题重刷' });

@@ -16,6 +16,8 @@ import { Sparkles, Heart, Star, X, RotateCcw, ArrowRight } from 'lucide-react';
 import type { AffinityState } from '../services/affinity';
 import { mainAffinity } from '../services/affinity';
 import type { ScoringResult } from '../services/levelScore';
+import type { AbilityEvent } from '../services/ability';
+import { ABILITY_KEYS, ABILITY_META } from '../services/ability';
 
 export interface SummaryHighlight {
   userText: string;   // 用户当时那句话
@@ -32,7 +34,8 @@ interface Props {
   affinityEnd: AffinityState;
   scoring: ScoringResult;
   xpGranted: number;        // 0 或 正数
-  abilityGained?: number;   // 能力点数，仅 3 星给
+  abilityGained?: number;   // 兼容旧字段，五维成长以 abilityEvent 为准
+  abilityEvent?: AbilityEvent | null;
   ending: {
     title: string;
     description: string;
@@ -62,6 +65,7 @@ export function ChatSummary({
   scoring,
   xpGranted,
   abilityGained,
+  abilityEvent,
   ending,
   highlights,
   regrets,
@@ -76,6 +80,9 @@ export function ChatSummary({
   const mainStart = mainAffinity(affinityStart);
   const mainEnd = mainAffinity(affinityEnd);
   const mainDelta = mainEnd - mainStart;
+  const abilityRows = abilityEvent
+    ? ABILITY_KEYS.map(key => ({ key, delta: abilityEvent.deltas[key] ?? 0, meta: ABILITY_META[key] })).filter(item => item.delta !== 0)
+    : [];
 
   const endingColor = (() => {
     switch (scoring.ending) {
@@ -206,6 +213,30 @@ export function ChatSummary({
             ))}
           </div>
         </motion.div>
+
+        {/* 五维能力成长 */}
+        {abilityRows.length > 0 && (
+          <motion.div
+            className="mb-4 p-4"
+            style={{ background: '#453a60', borderRadius: 16, border: '1px solid rgba(245,239,232,0.08)' }}
+            initial={{ y: 10, opacity: 0 }} animate={{ y: 0, opacity: 1 }} transition={{ delay: 0.32 }}
+          >
+            <div className="mb-3" style={{ color: '#f5efe8', fontSize: 13, fontWeight: 700 }}>五维能力成长</div>
+            <div className="grid grid-cols-2 gap-2">
+              {abilityRows.map(item => (
+                <div key={item.key} className="flex items-center justify-between gap-2" style={{ padding: '9px 10px', borderRadius: 12, background: 'rgba(245,239,232,0.045)', border: `1px solid ${item.meta.color}33` }}>
+                  <div className="min-w-0">
+                    <div style={{ color: item.meta.color, fontSize: 13, fontWeight: 800 }}>{item.meta.label}</div>
+                    <div style={{ color: 'rgba(245,239,232,0.46)', fontSize: 10, marginTop: 2, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{item.meta.description}</div>
+                  </div>
+                  <div style={{ color: item.delta > 0 ? '#7EE0D6' : '#FF8A80', fontSize: 16, fontWeight: 900 }}>
+                    {item.delta > 0 ? '+' : ''}{item.delta}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </motion.div>
+        )}
 
         {/* 奖励 */}
         {(xpGranted > 0 || (abilityGained ?? 0) > 0) && (

@@ -7,6 +7,7 @@ import { useUser } from '../context/UserContext';
 import DeepSpeciesTest from './DeepSpeciesTest';
 import { WeeklyReportFull } from './WeeklyReportFull';
 import { VIPPage } from './VIPPage';
+import { getSpeciesVerdict } from '../data/lztiVerdicts';
 
 const radarMeta = [
   { key: 'opener',  label: '开场白', icon: <IcChat size={18} color="#fff" />, bg: gradients.coral, barColor: ['#FF8A80', '#FFB199'], tips: '你的开场白越来越自然了，建议多尝试不同风格。' },
@@ -36,41 +37,104 @@ const weeklyHistory = [
   { week: '第5周', score: 82 },
 ];
 
-const aiSuggestions = [
-  { icon: <IcShield size={20} color="#fff" />, bg: gradients.purpleSoft, title: '提升安全感表达', desc: '练习在对话中传递稳定和可靠的感觉', action: '去练习' },
-  { icon: <IcEye size={20} color="#fff" />, bg: gradients.skySoft, title: '观察力专项训练', desc: '学习解读微表情和肢体语言', action: '去练习' },
-  { icon: <IcBook size={20} color="#fff" />, bg: gradients.mintSoft, title: '话题库扩展', desc: '收集20个有趣的深度话题', action: '查看' },
-];
+type AbilityKey = 'opener' | 'empathy' | 'observe' | 'topic' | 'safety';
+
+const abilitySuggestionMeta: Record<AbilityKey, { icon: JSX.Element; bg: string; title: string; desc: string; levelKid: string; chapterId: number; levelIndex: number }> = {
+  opener: {
+    icon: <IcChat size={20} color="#fff" />,
+    bg: gradients.coral,
+    title: '开场白专项训练',
+    desc: '推荐关卡：便利店雨夜借伞',
+    levelKid: 'L001',
+    chapterId: 1,
+    levelIndex: 0,
+  },
+  empathy: {
+    icon: <IcHeart size={20} color="#fff" />,
+    bg: gradients.rose,
+    title: '共情力专项训练',
+    desc: '推荐关卡：女朋友等了你一小时',
+    levelKid: 'L010',
+    chapterId: 4,
+    levelIndex: 0,
+  },
+  observe: {
+    icon: <IcEye size={20} color="#fff" />,
+    bg: gradients.skySoft,
+    title: '观察力专项训练',
+    desc: '推荐关卡：她发了“算了”的朋友圈',
+    levelKid: 'L006',
+    chapterId: 3,
+    levelIndex: 0,
+  },
+  topic: {
+    icon: <IcBook size={20} color="#fff" />,
+    bg: gradients.mintSoft,
+    title: '话题力专项训练',
+    desc: '推荐关卡：第一次约会你迟到了八分钟',
+    levelKid: 'L003',
+    chapterId: 2,
+    levelIndex: 0,
+  },
+  safety: {
+    icon: <IcShield size={20} color="#fff" />,
+    bg: gradients.purpleSoft,
+    title: '提升安全感表达',
+    desc: '推荐关卡：前任突然发消息',
+    levelKid: 'L021',
+    chapterId: 6,
+    levelIndex: 0,
+  },
+};
+
+const abilityTiePriority: AbilityKey[] = ['safety', 'observe', 'empathy', 'opener', 'topic'];
+
+function buildAiSuggestions(abilityScores: Record<string, number> | null | undefined) {
+  const defaults: Record<AbilityKey, number> = { opener: 25, empathy: 25, observe: 25, topic: 25, safety: 25 };
+  const scores = { ...defaults, ...(abilityScores || {}) };
+  return (Object.keys(defaults) as AbilityKey[])
+    .map(key => {
+      const numericScore = Number(scores[key]);
+      return { key, score: Number.isFinite(numericScore) ? numericScore : defaults[key], ...abilitySuggestionMeta[key] };
+    })
+    .sort((a, b) => (a.score - b.score) || (abilityTiePriority.indexOf(a.key) - abilityTiePriority.indexOf(b.key)))
+    .slice(0, 2)
+    .map(item => ({
+      ...item,
+      action: '去练习',
+      practiceAction: { type: 'openLevel' as const, mode: 'story' as const, chapterId: item.chapterId, levelIndex: item.levelIndex, levelKid: item.levelKid },
+    }));
+}
 
 /* ========================================
  *  恋爱物种鉴定 — 数据 & 组件
  * ======================================== */
 const traitData = [
-  { label: '嘴替指数', value: 72, color: '#FF8A80', icon: '💬', desc: '替所有人说完想说的话' },
-  { label: '心软指数', value: 58, color: '#B39DDB', icon: '🫠', desc: '一秒被攻破的豆腐心' },
-  { label: '抖包袱值', value: 45, color: '#FFD93D', icon: '😆', desc: '行走的快乐制造机' },
-  { label: '树洞指数', value: 80, color: '#4ECDC4', icon: '🕳️', desc: '让人想说完所有秘密' },
-  { label: '救场指数', value: 63, color: '#81D4FA', icon: '⚡', desc: '冷场克星·名场面制造' },
-  { label: '整活指数', value: 35, color: '#F48FB1', icon: '🎪', desc: '突然浪漫不讲道理' },
+  { label: '嘴替表达', value: 72, color: '#FF8A80', icon: '💬', desc: '替所有人说完想说的话', tone: '会把暧昧话说得像玩笑，又不完全像玩笑。' },
+  { label: '心软共情', value: 58, color: '#B39DDB', icon: '🫠', desc: '一秒被攻破的豆腐心', tone: '嘴上保持从容，心里已经替对方找好台阶。' },
+  { label: '抖包袱感', value: 45, color: '#FFD93D', icon: '😆', desc: '行走的快乐制造机', tone: '不靠密集搞笑，而是关键时刻来一句破冰。' },
+  { label: '树洞倾听', value: 80, color: '#4ECDC4', icon: '🕳️', desc: '让人想说完所有秘密', tone: '别人容易对你卸下防备，把真话慢慢讲出来。' },
+  { label: '救场反应', value: 63, color: '#81D4FA', icon: '⚡', desc: '冷场克星·名场面制造', tone: '空气快冷掉时，你通常能把场子轻轻托回来。' },
+  { label: '整活氛围', value: 35, color: '#F48FB1', icon: '🎪', desc: '突然浪漫不讲道理', tone: '你不走纯闹腾路线，更擅长稳定里带一点坏笑。' },
 ];
 
 const loveSpecies = [
   // 🔥 疯狂输出组
-  { id: 'haiwanghu',  emoji: '🦊', name: '海王狐', camp: '疯狂输出组', campIcon: '🔥', desc: '鱼塘太大管不过来了', soulQuote: '你不是花心，你只是每条鱼都真心喜欢', avatar: '/species/haiwanghu.jpg', color: '#1B9CFC', bg: 'linear-gradient(135deg, #1B9CFC 0%, #25CCF7 100%)' },
-  { id: 'tiantianhu', emoji: '🦊', name: '舔舔狐', camp: '疯狂输出组', campIcon: '🔥', desc: '你骂我我都说好的亲亲', soulQuote: '你以为的真诚，在对方眼里叫廉价', avatar: '/species/tiantianhu.jpg', color: '#FF9FF3', bg: 'linear-gradient(135deg, #FF9FF3 0%, #f368e0 100%)' },
-  { id: 'laosihu',    emoji: '🦊', name: '老司狐', camp: '疯狂输出组', campIcon: '🔥', desc: '开车从不翻车，就是乘客换得勤', soulQuote: '技术越好越孤独，因为没人敢上你的车', avatar: '/species/laosihu.jpg', color: '#c23616', bg: 'linear-gradient(135deg, #c23616 0%, #e84118 100%)' },
+  { id: 'haiwanghu',  code: 'TIDE', englishName: 'Tidecaller', emoji: '🦊', name: '海王狐', camp: '疯狂输出组', campIcon: '🔥', desc: '鱼塘太大管不过来了', soulQuote: '你不是花心，你只是每条鱼都真心喜欢', avatar: '/species/haiwanghu.jpg', color: '#1B9CFC', bg: 'linear-gradient(135deg, #1B9CFC 0%, #25CCF7 100%)' },
+  { id: 'tiantianhu', code: 'HONE', englishName: 'Honeydrift', emoji: '🦊', name: '舔舔狐', camp: '疯狂输出组', campIcon: '🔥', desc: '你骂我我都说好的亲亲', soulQuote: '你以为的真诚，在对方眼里叫廉价', avatar: '/species/tiantianhu.jpg', color: '#FF9FF3', bg: 'linear-gradient(135deg, #FF9FF3 0%, #f368e0 100%)' },
+  { id: 'laosihu',    code: 'CTRL', englishName: 'Smooth Operator', emoji: '🦊', name: '老司狐', camp: '疯狂输出组', campIcon: '🔥', desc: '开车从不翻车，就是乘客换得勤', soulQuote: '技术越好越孤独，因为没人敢上你的车', avatar: '/species/laosihu.jpg', color: '#c23616', bg: 'linear-gradient(135deg, #c23616 0%, #e84118 100%)' },
   // 💀 已读不回组
-  { id: 'zhuangsihu', emoji: '🦊', name: '装死狐', camp: '已读不回组', campIcon: '💀', desc: '恋爱？先让我死一会儿', soulQuote: '你不是不心动，你只是害怕心动之后的剧情', avatar: '/species/zhuangsihu.jpg', color: '#8c7ae6', bg: 'linear-gradient(135deg, #8c7ae6 0%, #9c88ff 100%)' },
-  { id: 'songsonghu', emoji: '🦊', name: '怂怂狐', camp: '已读不回组', campIcon: '💀', desc: '有感觉就跑，没感觉又来', soulQuote: '逃避虽然可耻但有用——直到对方不等了', avatar: '/species/songsonghu.jpg', color: '#40407a', bg: 'linear-gradient(135deg, #40407a 0%, #706fd3 100%)' },
-  { id: 'zhiwuhu',    emoji: '🦊', name: '植物狐', camp: '已读不回组', campIcon: '💀', desc: '所有恋爱信号对我无效', soulQuote: '不是收不到信号，是你把天线拔了', avatar: '/species/zhiwuhu.jpg', color: '#44bd32', bg: 'linear-gradient(135deg, #44bd32 0%, #4cd137 100%)' },
+  { id: 'zhuangsihu', code: 'VOID', englishName: 'Ghost Mode', emoji: '🦊', name: '装死狐', camp: '已读不回组', campIcon: '💀', desc: '恋爱？先让我死一会儿', soulQuote: '你不是不心动，你只是害怕心动之后的剧情', avatar: '/species/zhuangsihu.jpg', color: '#8c7ae6', bg: 'linear-gradient(135deg, #8c7ae6 0%, #9c88ff 100%)' },
+  { id: 'songsonghu', code: 'HUSH', englishName: 'Soft Retreat', emoji: '🦊', name: '怂怂狐', camp: '已读不回组', campIcon: '💀', desc: '有感觉就跑，没感觉又来', soulQuote: '逃避虽然可耻但有用——直到对方不等了', avatar: '/species/songsonghu.jpg', color: '#40407a', bg: 'linear-gradient(135deg, #40407a 0%, #706fd3 100%)' },
+  { id: 'zhiwuhu',    code: 'OFFL', englishName: 'Signal Offline', emoji: '🦊', name: '植物狐', camp: '已读不回组', campIcon: '💀', desc: '所有恋爱信号对我无效', soulQuote: '不是收不到信号，是你把天线拔了', avatar: '/species/zhiwuhu.jpg', color: '#44bd32', bg: 'linear-gradient(135deg, #44bd32 0%, #4cd137 100%)' },
   // 🤡 自我感动组
-  { id: 'xiaochouhu', emoji: '🦊', name: '小丑狐', camp: '自我感动组', campIcon: '🤡', desc: '以为是主角，其实送了个助攻', soulQuote: '你感动了自己，但对方只觉得有压力', avatar: '/species/xiaochouhu.jpg', color: '#0097e6', bg: 'linear-gradient(135deg, #0097e6 0%, #00a8ff 100%)' },
-  { id: 'lianfeihu',  emoji: '🦊', name: '恋废狐', camp: '自我感动组', campIcon: '🤡', desc: '不谈恋爱会死，谈了更死', soulQuote: '你缺的不是恋爱，是跟自己好好相处', avatar: '/species/lianfeihu.jpg', color: '#718093', bg: 'linear-gradient(135deg, #718093 0%, #7f8fa6 100%)' },
-  { id: 'guizuhu',    emoji: '🦊', name: '跪族狐', camp: '自我感动组', campIcon: '🤡', desc: '你说跪就跪，你说滚我问往哪滚', soulQuote: '越卑微越掉价，你值得被平等对待', avatar: '/species/guizuhu.jpg', color: '#192a56', bg: 'linear-gradient(135deg, #192a56 0%, #273c75 100%)' },
+  { id: 'xiaochouhu', code: 'SHOW', englishName: 'Spotlight Heart', emoji: '🦊', name: '小丑狐', camp: '自我感动组', campIcon: '🤡', desc: '以为是主角，其实送了个助攻', soulQuote: '你感动了自己，但对方只觉得有压力', avatar: '/species/xiaochouhu.jpg', color: '#0097e6', bg: 'linear-gradient(135deg, #0097e6 0%, #00a8ff 100%)' },
+  { id: 'lianfeihu',  code: 'LOOP', englishName: 'Love Spiral', emoji: '🦊', name: '恋废狐', camp: '自我感动组', campIcon: '🤡', desc: '不谈恋爱会死，谈了更死', soulQuote: '你缺的不是恋爱，是跟自己好好相处', avatar: '/species/lianfeihu.jpg', color: '#718093', bg: 'linear-gradient(135deg, #718093 0%, #7f8fa6 100%)' },
+  { id: 'guizuhu',    code: 'YLD', englishName: 'Yielding Heart', emoji: '🦊', name: '跪族狐', camp: '自我感动组', campIcon: '🤡', desc: '你说跪就跪，你说滚我问往哪滚', soulQuote: '越卑微越掉价，你值得被平等对待', avatar: '/species/guizuhu.jpg', color: '#192a56', bg: 'linear-gradient(135deg, #192a56 0%, #273c75 100%)' },
   // 😈 表面无害组
-  { id: 'caonihu',    emoji: '🦊', name: '草泥狐', camp: '表面无害组', campIcon: '😈', desc: '嘴上全是随便，心里全是你', soulQuote: '你以为的高冷，其实是不敢先开口', avatar: '/species/caonihu.jpg', color: '#e1b12c', bg: 'linear-gradient(135deg, #e1b12c 0%, #fbc531 100%)' },
-  { id: 'lvchahu',    emoji: '🦊', name: '绿茶狐', camp: '表面无害组', campIcon: '😈', desc: '人畜无害就是我的大招', soulQuote: '善良是真的，算计也是真的', avatar: '/species/lvchahu.jpg', color: '#B33771', bg: 'linear-gradient(135deg, #B33771 0%, #FD7272 100%)' },
-  { id: 'xinjihu',    emoji: '🦊', name: '心机狐', camp: '表面无害组', campIcon: '😈', desc: '看似佛系聊天，每句都在下钩子', soulQuote: '你不是在聊天，你是在布局', avatar: '/species/xinjihu.jpg', color: '#EAB543', bg: 'linear-gradient(135deg, #EAB543 0%, #F8EFBA 100%)' },
+  { id: 'caonihu',    code: 'COOL', englishName: 'Hidden Softie', emoji: '🦊', name: '草泥狐', camp: '表面无害组', campIcon: '😈', desc: '嘴上全是随便，心里全是你', soulQuote: '你以为的高冷，其实是不敢先开口', avatar: '/species/caonihu.jpg', color: '#e1b12c', bg: 'linear-gradient(135deg, #e1b12c 0%, #fbc531 100%)' },
+  { id: 'lvchahu',    code: 'MIST', englishName: 'Velvet Strategist', emoji: '🦊', name: '绿茶狐', camp: '表面无害组', campIcon: '😈', desc: '人畜无害就是我的大招', soulQuote: '善良是真的，算计也是真的', avatar: '/species/lvchahu.jpg', color: '#B33771', bg: 'linear-gradient(135deg, #B33771 0%, #FD7272 100%)' },
+  { id: 'xinjihu',    code: 'PLAN', englishName: 'Silent Tactician', emoji: '🦊', name: '心机狐', camp: '表面无害组', campIcon: '😈', desc: '看似佛系聊天，每句都在下钩子', soulQuote: '你不是在聊天，你是在布局', avatar: '/species/xinjihu.jpg', color: '#EAB543', bg: 'linear-gradient(135deg, #EAB543 0%, #F8EFBA 100%)' },
 ];
 
 const defaultUserSpecies = {
@@ -193,10 +257,7 @@ function LoveRadarChart({ data, themeColor }: { data: typeof traitData; themeCol
 
       {labelPositions.map((pos, i) => (
         <g key={i}>
-          <text x={pos.x} y={pos.y - 6} textAnchor="middle" fill="#fff" fontSize={11} fontWeight={800}>
-            {data[i].value}
-          </text>
-          <text x={pos.x} y={pos.y + 7} textAnchor="middle" fill="rgba(245,239,232,0.8)" fontSize={9}>
+          <text x={pos.x} y={pos.y + 3} textAnchor="middle" fill="rgba(245,239,232,0.82)" fontSize={9} fontWeight={700}>
             {data[i].icon} {data[i].label}
           </text>
         </g>
@@ -206,54 +267,13 @@ function LoveRadarChart({ data, themeColor }: { data: typeof traitData; themeCol
 }
 
 /* ========================================
- *  组件：匹配度圆环
- * ======================================== */
-function MatchRing({ value, color }: { value: number; color: string }) {
-  const r = 32;
-  const circumference = 2 * Math.PI * r;
-  const offset = circumference * (1 - value / 100);
-  const gid = useId();
-
-  return (
-    <div style={{ position: 'relative', width: 80, height: 80, flexShrink: 0 }}>
-      <svg width={80} height={80} viewBox="0 0 80 80">
-        <defs>
-          <linearGradient id={`${gid}-ring`} x1="0%" y1="0%" x2="100%" y2="100%">
-            <stop offset="0%" stopColor={color} />
-            <stop offset="100%" stopColor="#fff" stopOpacity="0.6" />
-          </linearGradient>
-        </defs>
-        <circle cx={40} cy={40} r={r} fill="none" stroke="rgba(255,255,255,0.08)" strokeWidth={5} />
-        <motion.circle
-          cx={40} cy={40} r={r}
-          fill="none"
-          stroke={`url(#${gid}-ring)`}
-          strokeWidth={5}
-          strokeLinecap="round"
-          strokeDasharray={circumference}
-          initial={{ strokeDashoffset: circumference }}
-          animate={{ strokeDashoffset: offset }}
-          transition={{ duration: 1.2, ease: 'easeOut' }}
-          style={{ transform: 'rotate(-90deg)', transformOrigin: '40px 40px' }}
-        />
-      </svg>
-      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center' }}>
-        <span style={{ color: '#fff', fontSize: 20, fontWeight: 800, lineHeight: 1 }}>{value}%</span>
-        <span style={{ color: 'rgba(255,255,255,0.5)', fontSize: 8, marginTop: 2 }}>契合度</span>
-      </div>
-    </div>
-  );
-}
-
-/* ========================================
  *  组件：恋爱物种鉴定卡
  * ======================================== */
 function SpeciesCard({ onRetest, onDeepTest, onReDeep, onShare, userSpecies, hasDeepTest, subSpeciesId }: { onRetest: () => void; onDeepTest: () => void; onReDeep: () => void; onShare: () => void; userSpecies: { speciesId: string; matchRate: number }; hasDeepTest: boolean; subSpeciesId?: string | null }) {
   const species = loveSpecies.find(s => s.id === userSpecies.speciesId) || loveSpecies[0];
   const camp = campStyles[species.camp] || campStyles['表面无害组'];
-  const maxTrait = traitData.reduce((a, b) => a.value > b.value ? a : b);
-  const minTrait = traitData.reduce((a, b) => a.value < b.value ? a : b);
   const subSpecies = subSpeciesId ? loveSpecies.find(s => s.id === subSpeciesId) : null;
+  const verdict = getSpeciesVerdict(species.id, species.name, species.code, species.englishName);
 
   return (
     <div>
@@ -298,12 +318,22 @@ function SpeciesCard({ onRetest, onDeepTest, onReDeep, onShare, userSpecies, has
               }} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ duration: 0.6, delay: 0.1 }}>
                 {species.name}
               </motion.div>
-              <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 10, marginTop: 4, letterSpacing: 1 }}>
-                LOVE SPECIES · {species.id.toUpperCase()}
+              <div style={{ color: 'rgba(255,255,255,0.72)', fontSize: 10, marginTop: 5, letterSpacing: 1, lineHeight: 1.35 }}>
+                <div>LZTI · {species.code}</div>
+                <div style={{ color: 'rgba(255,255,255,0.58)', fontSize: 9, letterSpacing: 0.5 }}>{species.englishName}</div>
               </div>
             </div>
           </div>
-          <MatchRing value={userSpecies.matchRate} color={species.color} />
+          <div style={{
+            width: 82, minHeight: 78, borderRadius: 18,
+            background: 'rgba(255,255,255,0.12)', border: '1px solid rgba(255,255,255,0.18)',
+            display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
+            boxShadow: 'inset 0 1px 0 rgba(255,255,255,0.12)', backdropFilter: 'blur(10px)', WebkitBackdropFilter: 'blur(10px)',
+          }}>
+            <span style={{ color: 'rgba(255,255,255,0.58)', fontSize: 9, letterSpacing: 1.4, fontWeight: 800 }}>LZTI</span>
+            <span style={{ color: '#fff', fontSize: 22, fontWeight: 900, letterSpacing: 1.2, lineHeight: 1.1 }}>{species.code}</span>
+            <span style={{ color: 'rgba(255,255,255,0.55)', fontSize: 8, marginTop: 3, textTransform: 'uppercase', letterSpacing: 0.6 }}>TYPE</span>
+          </div>
         </div>
 
         <motion.div style={{ color: '#fff', fontSize: 16, fontWeight: 600, marginTop: 18, lineHeight: 1.7, letterSpacing: 0.5, position: 'relative', zIndex: 1, textShadow: '0 1px 4px rgba(0,0,0,0.3)' }}
@@ -340,50 +370,30 @@ function SpeciesCard({ onRetest, onDeepTest, onReDeep, onShare, userSpecies, has
         </div>
       </div>
 
-      {/* 第二屏：6维度雷达图 */}
+      {/* 第二屏：LZTI 风格判词 */}
       <div style={{ marginTop: 20 }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6, marginBottom: 12 }}>
           <span style={{ color: 'rgba(245,239,232,0.5)', fontSize: 10, letterSpacing: 4 }}>──</span>
-          <span style={{ color: '#f5efe8', fontSize: 13, fontWeight: 700, letterSpacing: 2 }}>恋爱属性图谱</span>
+          <span style={{ color: '#f5efe8', fontSize: 13, fontWeight: 700, letterSpacing: 2 }}>LZTI 风格判词</span>
           <span style={{ color: 'rgba(245,239,232,0.5)', fontSize: 10, letterSpacing: 4 }}>──</span>
         </div>
-        <LoveRadarChart data={traitData} themeColor={species.color} />
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 12 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(245,239,232,0.06)', borderRadius: 12, padding: '6px 14px' }}>
-            <span style={{ fontSize: 11 }}>🔥</span>
-            <span style={{ color: maxTrait.color, fontSize: 11, fontWeight: 700 }}>MAX</span>
-            <span style={{ color: 'rgba(245,239,232,0.75)', fontSize: 10 }}>{maxTrait.icon} {maxTrait.label} {maxTrait.value}</span>
+        <div style={{
+          padding: '16px 15px 17px', borderRadius: 18,
+          background: `linear-gradient(135deg, rgba(245,239,232,0.07), ${species.color}12)`,
+          border: `1px solid ${species.color}2e`, boxShadow: `0 12px 30px ${species.color}10`,
+        }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, marginBottom: 10 }}>
+            <div>
+              <div style={{ color: '#f5efe8', fontSize: 14, fontWeight: 900, letterSpacing: 0.6 }}>风格判词</div>
+              <div style={{ color: 'rgba(245,239,232,0.48)', fontSize: 10, marginTop: 2 }}>{species.englishName}</div>
+            </div>
+            <div style={{ color: '#fff', fontSize: 13, fontWeight: 900, letterSpacing: 1, padding: '6px 10px', borderRadius: 999, background: `${species.color}24`, border: `1px solid ${species.color}38` }}>
+              LZTI · {species.code}
+            </div>
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(245,239,232,0.06)', borderRadius: 12, padding: '6px 14px' }}>
-            <span style={{ fontSize: 11 }}>💤</span>
-            <span style={{ color: 'rgba(245,239,232,0.55)', fontSize: 11, fontWeight: 700 }}>MIN</span>
-            <span style={{ color: 'rgba(245,239,232,0.55)', fontSize: 10 }}>{minTrait.icon} {minTrait.label} {minTrait.value}</span>
+          <div style={{ color: 'rgba(245,239,232,0.74)', fontSize: 13, lineHeight: 1.82, letterSpacing: 0.2 }}>
+            {verdict}
           </div>
-        </div>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px 12px', marginTop: 14 }}>
-          {traitData.map(t => {
-            const isMax = t === maxTrait;
-            const isMin = t === minTrait;
-            return (
-              <div key={t.label} style={{
-                display: 'flex', alignItems: 'center', gap: 8, padding: '8px 10px',
-                borderRadius: 10, background: isMax ? `${t.color}18` : 'rgba(245,239,232,0.04)',
-                border: isMax ? `1px solid ${t.color}30` : '1px solid transparent',
-              }}>
-                <div style={{ fontSize: 16, opacity: isMin ? 0.4 : 1 }}>{t.icon}</div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ color: isMin ? 'rgba(245,239,232,0.5)' : 'rgba(245,239,232,0.85)', fontSize: 11, fontWeight: 600 }}>{t.label}</span>
-                    <span style={{ color: isMin ? 'rgba(245,239,232,0.4)' : t.color, fontSize: 12, fontWeight: 800 }}>{t.value}</span>
-                  </div>
-                  <div style={{ height: 3, borderRadius: 2, background: 'rgba(245,239,232,0.08)', marginTop: 4 }}>
-                    <motion.div style={{ height: '100%', borderRadius: 2, background: isMin ? 'rgba(245,239,232,0.15)' : t.color, opacity: isMin ? 0.5 : 1 }}
-                      initial={{ width: 0 }} animate={{ width: `${t.value}%` }} transition={{ duration: 0.8, ease: 'easeOut', delay: 0.2 }} />
-                  </div>
-                </div>
-              </div>
-            );
-          })}
         </div>
       </div>
 
@@ -1382,10 +1392,11 @@ function TrainingTab({ isVip, radarData, onOpenVip }: { isVip: boolean; radarDat
   );
 }
 
-export function DiagnosticPage() {
+export function DiagnosticPage({ onPracticeAction }: { onPracticeAction?: (action: any) => void } = {}) {
   const user = useUser();
   const { speciesId: userSpeciesId, matchRate: userMatchRate, updateUser } = user as any;
   const radarData = buildRadarData((user as any).abilityScores);
+  const aiSuggestions = buildAiSuggestions((user as any).abilityScores);
   const [selectedSkill, setSelectedSkill] = useState<(typeof radarData)[0] | null>(null);
   const [showHistory, setShowHistory] = useState(false);
   const [showQuiz, setShowQuiz] = useState(false);
@@ -1455,11 +1466,32 @@ export function DiagnosticPage() {
 
   const generateShareImage = (us: typeof userSpecies) => {
     const species = loveSpecies.find(s => s.id === us.speciesId) || loveSpecies[0];
+    const verdict = getSpeciesVerdict(species.id, species.name, species.code, species.englishName);
     const w = 750, h = 1334;
     const canvas = document.createElement('canvas');
     canvas.width = w; canvas.height = h;
     const ctx = canvas.getContext('2d');
     if (!ctx) return;
+
+    const drawWrappedText = (text: string, x: number, y: number, maxW: number, lineHeight: number) => {
+      let line = '';
+      let currentY = y;
+      for (const ch of text.split('')) {
+        const testLine = line + ch;
+        if (ctx.measureText(testLine).width > maxW) {
+          ctx.fillText(line, x, currentY);
+          line = ch;
+          currentY += lineHeight;
+        } else {
+          line = testLine;
+        }
+      }
+      if (line) {
+        ctx.fillText(line, x, currentY);
+        currentY += lineHeight;
+      }
+      return currentY;
+    };
 
     // Background gradient
     const grad = ctx.createLinearGradient(0, 0, w, h);
@@ -1480,7 +1512,7 @@ export function DiagnosticPage() {
     ctx.fillStyle = 'rgba(245,239,232,0.4)';
     ctx.font = '600 22px system-ui, -apple-system, sans-serif';
     ctx.textAlign = 'center';
-    ctx.fillText('FoxSay · 恋爱物种鉴定', w / 2, 80);
+    ctx.fillText('FoxSay · LZTI 恋爱物种鉴定', w / 2, 80);
 
     // Species emoji (large)
     ctx.font = '120px system-ui';
@@ -1496,69 +1528,46 @@ export function DiagnosticPage() {
     ctx.font = '700 24px system-ui, -apple-system, sans-serif';
     ctx.fillText(`${species.campIcon} ${species.camp}`, w / 2, 430);
 
-    // Match rate ring (simplified)
-    const cx = w / 2, cy = 560, r = 60;
-    ctx.strokeStyle = 'rgba(245,239,232,0.1)';
-    ctx.lineWidth = 8;
-    ctx.beginPath(); ctx.arc(cx, cy, r, 0, Math.PI * 2); ctx.stroke();
-    ctx.strokeStyle = species.color;
-    ctx.lineWidth = 8;
-    ctx.lineCap = 'round';
-    ctx.beginPath(); ctx.arc(cx, cy, r, -Math.PI / 2, -Math.PI / 2 + (Math.PI * 2 * us.matchRate / 100)); ctx.stroke();
+    // LZTI type badge
+    const badgeX = w / 2 - 145, badgeY = 490;
+    ctx.fillStyle = 'rgba(255,255,255,0.08)';
+    ctx.beginPath(); ctx.roundRect(badgeX, badgeY, 290, 98, 24); ctx.fill();
+    ctx.strokeStyle = 'rgba(255,255,255,0.16)';
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(badgeX, badgeY, 290, 98, 24); ctx.stroke();
+    ctx.fillStyle = 'rgba(245,239,232,0.48)';
+    ctx.font = '800 18px system-ui';
+    ctx.fillText('LZTI TYPE', w / 2, badgeY + 30);
     ctx.fillStyle = '#fff';
-    ctx.font = '900 36px system-ui';
-    ctx.fillText(`${us.matchRate}%`, cx, cy + 12);
+    ctx.font = '900 42px system-ui';
+    ctx.fillText(species.code, w / 2, badgeY + 70);
     ctx.fillStyle = 'rgba(245,239,232,0.5)';
-    ctx.font = '500 16px system-ui';
-    ctx.fillText('匹配度', cx, cy + 38);
+    ctx.font = '500 18px system-ui';
+    ctx.fillText(species.englishName, w / 2, badgeY + 92);
 
-    // Description
-    ctx.fillStyle = 'rgba(255,255,255,0.8)';
-    ctx.font = '500 26px system-ui, -apple-system, sans-serif';
-    const desc = `「${species.desc}」`;
-    // Word wrap
-    const maxW = w - 120;
-    let words = desc.split('');
-    let line = '', ly = 720;
-    for (const ch of words) {
-      const testLine = line + ch;
-      if (ctx.measureText(testLine).width > maxW) {
-        ctx.fillText(line, w / 2, ly);
-        line = ch; ly += 40;
-      } else {
-        line = testLine;
-      }
-    }
-    if (line) ctx.fillText(line, w / 2, ly);
+    // LZTI verdict
+    const cardX = 60, cardY = 600, cardW = w - 120, cardH = 520;
+    ctx.fillStyle = 'rgba(255,255,255,0.07)';
+    ctx.beginPath(); ctx.roundRect(cardX, cardY, cardW, cardH, 28); ctx.fill();
+    ctx.strokeStyle = `${species.color}55`;
+    ctx.lineWidth = 2;
+    ctx.beginPath(); ctx.roundRect(cardX, cardY, cardW, cardH, 28); ctx.stroke();
 
-    // Soul quote
-    ctx.fillStyle = 'rgba(255,255,255,0.45)';
-    ctx.font = 'italic 20px system-ui, -apple-system, sans-serif';
-    ctx.fillText(`灵魂拷问：${species.soulQuote}`, w / 2, ly + 70);
+    ctx.textAlign = 'left';
+    ctx.fillStyle = '#fff';
+    ctx.font = '900 28px system-ui, -apple-system, sans-serif';
+    ctx.fillText('风格判词', cardX + 36, cardY + 58);
+    ctx.fillStyle = species.color;
+    ctx.font = '800 18px system-ui, -apple-system, sans-serif';
+    ctx.fillText(`${species.code} · ${species.englishName}`, cardX + 36, cardY + 88);
 
-    // Trait bars
-    const barStartY = ly + 140;
-    traitData.forEach((t, i) => {
-      const by = barStartY + i * 50;
-      ctx.textAlign = 'left';
-      ctx.fillStyle = 'rgba(245,239,232,0.7)';
-      ctx.font = '500 20px system-ui';
-      ctx.fillText(`${t.icon} ${t.label}`, 80, by);
-      ctx.textAlign = 'right';
-      ctx.fillStyle = t.color;
-      ctx.font = '800 20px system-ui';
-      ctx.fillText(`${t.value}`, w - 80, by);
-      // Bar
-      ctx.fillStyle = 'rgba(245,239,232,0.08)';
-      const bx = 80, bw = w - 160, bh = 6, bby = by + 10;
-      ctx.beginPath(); ctx.roundRect(bx, bby, bw, bh, 3); ctx.fill();
-      ctx.fillStyle = t.color;
-      ctx.beginPath(); ctx.roundRect(bx, bby, bw * t.value / 100, bh, 3); ctx.fill();
-    });
+    ctx.fillStyle = 'rgba(255,255,255,0.76)';
+    ctx.font = '500 18px system-ui, -apple-system, sans-serif';
+    drawWrappedText(verdict, cardX + 36, cardY + 132, cardW - 72, 30);
 
     // QR code placeholder (draw a simple QR-like square)
     ctx.textAlign = 'center';
-    const qrY = h - 200;
+    const qrY = h - 180;
     ctx.strokeStyle = 'rgba(245,239,232,0.3)';
     ctx.lineWidth = 2;
     ctx.strokeRect(w / 2 - 45, qrY, 90, 90);
@@ -1679,7 +1688,7 @@ export function DiagnosticPage() {
               <motion.button key={s.title} className="flex-shrink-0 p-4 text-left"
                 style={{ background: '#453a60', borderRadius: 14, width: 200, scrollSnapAlign: 'start', border: '1px solid rgba(245,239,232,0.08)' }}
                 initial={{ opacity: 0, x: 12 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: i * 0.08 }}
-                whileTap={{ scale: 0.98 }}>
+                whileTap={{ scale: 0.98 }} onClick={() => onPracticeAction?.(s.practiceAction)}>
                 <IconBubble size={40} bg={s.bg}>{s.icon}</IconBubble>
                 <p style={{ color: '#f5efe8', fontSize: '14px', fontWeight: 600, marginBottom: 4, marginTop: 10 }}>{s.title}</p>
                 <p style={{ color: 'rgba(245,239,232,0.55)', fontSize: '12px', lineHeight: 1.4, marginBottom: 10 }}>{s.desc}</p>
@@ -1893,6 +1902,7 @@ export function DiagnosticPage() {
                           <div>
                             <div style={{ color: '#fff', fontSize: 28, fontWeight: 900, textShadow: `0 0 20px ${quizResult.color}80` }}>{quizResult.name}</div>
                             <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 11, marginTop: 2 }}>{quizResult.campIcon} {quizResult.camp}</div>
+                            <div style={{ color: 'rgba(255,255,255,0.58)', fontSize: 10, marginTop: 4, letterSpacing: 1 }}>LZTI · {quizResult.code} · {quizResult.englishName}</div>
                           </div>
                         </div>
                         <p className="relative" style={{ color: '#fff', fontSize: 15, fontWeight: 600, lineHeight: 1.6, textShadow: '0 1px 4px rgba(0,0,0,0.3)' }}>

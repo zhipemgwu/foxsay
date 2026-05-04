@@ -9,6 +9,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { ChevronRight } from 'lucide-react';
 import { IconBubble, IcHeart, IcChart, IcTarget, IcLightbulb, IcSparkle, gradients } from './CuteIcons';
 import { useUser } from '../context/UserContext';
+import { ABILITY_META, normalizeAbilityScores, type AbilityKey } from '../services/ability';
 
 type Insight = {
   id: string;
@@ -19,11 +20,9 @@ type Insight = {
   priority: number; // 数字越大越优先展示
 };
 
-const abilityLabel: Record<string, string> = {
-  opener: '开场力', empathy: '共情力', observe: '观察力', topic: '话题力', safety: '安全感',
-};
+const abilityLabel = Object.fromEntries(Object.entries(ABILITY_META).map(([key, meta]) => [key, meta.label])) as Record<AbilityKey, string>;
 
-const abilityAdvice: Record<string, string> = {
+const abilityAdvice: Record<AbilityKey, string> = {
   opener: '试试从对方当下的状态切入，比硬聊天气自然得多',
   empathy: '下次对话先复述对方感受再给建议，效果翻倍',
   observe: '练习捕捉对方的细节变化，比如头发、语气、表情',
@@ -47,7 +46,8 @@ function generateInsights(
   history: Array<{ date: string; scores: [number, number, number] }>
 ): Insight[] {
   const out: Insight[] = [];
-  const abilityScores = user.abilityScores as Record<string, number> | null;
+  const rawAbilityScores = user.abilityScores as Record<string, number> | null;
+  const abilityScores = rawAbilityScores ? normalizeAbilityScores(rawAbilityScores) : null;
   const streak = user.streak || 0;
 
   // —— 规则 1：未 check-in 提醒（优先级最高）
@@ -64,7 +64,7 @@ function generateInsights(
 
   // —— 规则 2：能力弱项建议
   if (abilityScores) {
-    const entries = Object.entries(abilityScores);
+    const entries = Object.entries(abilityScores) as [AbilityKey, number][];
     entries.sort((a, b) => a[1] - b[1]);
     const [weakKey, weakVal] = entries[0];
     const [strongKey, strongVal] = entries[entries.length - 1];

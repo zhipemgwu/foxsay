@@ -1,0 +1,70 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 430 430" role="img" aria-label="Anime city story map">
+  <defs>
+    <linearGradient id="sky" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#2f2a4b"/>
+      <stop offset="0.48" stop-color="#44345a"/>
+      <stop offset="1" stop-color="#1f3044"/>
+    </linearGradient>
+    <linearGradient id="road" x1="0" y1="0" x2="1" y2="0">
+      <stop offset="0" stop-color="#5c617b"/>
+      <stop offset="0.55" stop-color="#394056"/>
+      <stop offset="1" stop-color="#272d40"/>
+    </linearGradient>
+    <radialGradient id="warm" cx="0.28" cy="0.22" r="0.72">
+      <stop offset="0" stop-color="#ffb199" stop-opacity="0.72"/>
+      <stop offset="0.45" stop-color="#ff8a80" stop-opacity="0.18"/>
+      <stop offset="1" stop-color="#ff8a80" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feMerge>
+        <feMergeNode in="blur"/>
+        <feMergeNode in="SourceGraphic"/>
+      </feMerge>
+    </filter>
+  </defs>
+
+  <rect width="430" height="430" fill="url(#sky)"/>
+  <rect width="430" height="430" fill="url(#warm)"/>
+
+  <g opacity="0.66">
+    <path d="M-20 331 C92 282 128 238 238 210 C326 188 360 148 456 120" fill="none" stroke="url(#road)" stroke-width="48" stroke-linecap="round"/>
+    <path d="M-18 332 C92 282 128 238 238 210 C326 188 360 148 456 120" fill="none" stroke="#99a3bd" stroke-opacity="0.18" stroke-width="4" stroke-dasharray="18 18"/>
+    <path d="M71 -18 C94 96 121 170 111 278 C104 348 133 390 160 456" fill="none" stroke="#30384d" stroke-width="34" stroke-linecap="round"/>
+    <path d="M335 -16 C308 82 289 150 307 226 C325 304 292 359 254 452" fill="none" stroke="#30384d" stroke-width="31" stroke-linecap="round"/>
+  </g>
+
+  <g opacity="0.82">
+    <rect x="20" y="36" width="68" height="96" rx="9" fill="#293149"/>
+    <rect x="103" y="30" width="88" height="72" rx="10" fill="#3c3654"/>
+    <rect x="213" y="38" width="66" height="108" rx="10" fill="#28374f"/>
+    <rect x="310" y="30" width="86" height="84" rx="12" fill="#353653"/>
+    <rect x="34" y="165" width="82" height="76" rx="12" fill="#3c3857"/>
+    <rect x="157" y="130" width="80" height="78" rx="11" fill="#2c3b52"/>
+    <rect x="258" y="154" width="105" height="70" rx="14" fill="#443650"/>
+    <rect x="48" y="283" width="78" height="86" rx="13" fill="#30354d"/>
+    <rect x="162" y="282" width="84" height="72" rx="12" fill="#3d3855"/>
+    <rect x="292" y="270" width="92" height="94" rx="14" fill="#2c3a50"/>
+  </g>
+
+  <g fill="#ffe4c7" opacity="0.72">
+    <rect x="37" y="54" width="9" height="14" rx="2"/><rect x="56" y="54" width="9" height="14" rx="2"/><rect x="37" y="82" width="9" height="14" rx="2"/><rect x="56" y="82" width="9" height="14" rx="2"/>
+    <rect x="126" y="49" width="32" height="6" rx="3"/><rect x="126" y="70" width="42" height="6" rx="3"/>
+    <rect x="232" y="62" width="9" height="12" rx="2"/><rect x="251" y="62" width="9" height="12" rx="2"/><rect x="232" y="92" width="9" height="12" rx="2"/><rect x="251" y="92" width="9" height="12" rx="2"/>
+    <rect x="330" y="55" width="42" height="7" rx="3"/><rect x="330" y="77" width="30" height="7" rx="3"/>
+    <rect x="70" y="302" width="35" height="7" rx="3"/><rect x="188" y="305" width="30" height="7" rx="3"/><rect x="318" y="293" width="42" height="7" rx="3"/>
+  </g>
+
+  <g filter="url(#softGlow)">
+    <circle cx="85" cy="280" r="5" fill="#ffd166"/>
+    <circle cx="202" cy="250" r="4" fill="#7ee0d6"/>
+    <circle cx="328" cy="236" r="5" fill="#ff8a80"/>
+    <circle cx="364" cy="137" r="4" fill="#ffd166"/>
+    <path d="M18 387 C86 367 130 376 186 350 C249 320 295 333 398 300" fill="none" stroke="#ffb199" stroke-opacity="0.42" stroke-width="3" stroke-linecap="round"/>
+  </g>
+
+  <g opacity="0.35" stroke="#ffffff" stroke-width="1">
+    <path d="M0 120 H430"/><path d="M0 220 H430"/><path d="M0 320 H430"/>
+    <path d="M92 0 V430"/><path d="M202 0 V430"/><path d="M314 0 V430"/>
+  </g>
+</svg>

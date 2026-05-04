@@ -10,6 +10,7 @@ import {
   type DeepTestResult,
 } from '../data/deepSpeciesTest';
 import { useUser } from '../context/UserContext';
+import { getSpeciesTypeCode, getSpeciesVerdict } from '../data/lztiVerdicts';
 
 /* ────────── constants ────────── */
 
@@ -380,6 +381,8 @@ export default function DeepSpeciesTest({ onClose }: { onClose: () => void }) {
   if (phase === 'result' && result) {
     const main = speciesDescriptionMap[result.mainSpecies];
     const sub = speciesDescriptionMap[result.subSpecies];
+    const typeCode = getSpeciesTypeCode(result.mainSpecies);
+    const verdict = getSpeciesVerdict(result.mainSpecies, main?.title || '恋爱物种', typeCode);
     return (
       <motion.div className="fixed inset-0 z-[9999] overflow-y-auto" style={{ background: '#0D0D0D' }}
         initial={{ opacity: 0 }} animate={{ opacity: 1 }}>
@@ -398,7 +401,7 @@ export default function DeepSpeciesTest({ onClose }: { onClose: () => void }) {
             </h2>
             <p className="mt-1 text-sm" style={{ color: 'rgba(255,255,255,0.5)' }}>{main?.desc}</p>
             <div className="mt-3 inline-block px-3 py-1 rounded-full" style={{ background: 'rgba(124,77,255,0.15)' }}>
-              <span style={{ color: '#B39DDB', fontSize: 13, fontWeight: 600 }}>匹配度 {result.matchRate}%</span>
+              <span style={{ color: '#B39DDB', fontSize: 13, fontWeight: 800, letterSpacing: 1 }}>LZTI · {typeCode}</span>
             </div>
           </motion.div>
 
@@ -414,24 +417,15 @@ export default function DeepSpeciesTest({ onClose }: { onClose: () => void }) {
             </div>
           </motion.div>
 
-          {/* 雷达图 */}
-          <motion.div className="mt-6 flex flex-col items-center"
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: 0.45 }}>
-            <p className="text-xs mb-2" style={{ color: 'rgba(255,255,255,0.4)' }}>五维能力雷达</p>
-            <RadarChart data={result.abilities} />
-          </motion.div>
-
-          {/* 优劣势 */}
-          <motion.div className="mt-4 w-full grid grid-cols-2 gap-3"
+          {/* LZTI 风格判词 */}
+          <motion.div className="mt-5 w-full rounded-2xl p-4"
+            style={{ background: 'linear-gradient(135deg, rgba(124,77,255,0.10), rgba(255,255,255,0.035))', border: '1px solid rgba(179,157,219,0.14)' }}
             initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.55 }}>
-            <div className="rounded-xl p-3" style={{ background: 'rgba(0,230,118,0.06)', border: '1px solid rgba(0,230,118,0.1)' }}>
-              <p className="text-xs font-semibold" style={{ color: '#69F0AE' }}>💪 优势</p>
-              <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.5)' }}>{main?.strengths}</p>
+            <div className="flex items-center justify-between gap-3 mb-3">
+              <p className="text-sm font-bold" style={{ color: '#E0E0E0' }}>风格判词</p>
+              <span className="px-2.5 py-1 rounded-full" style={{ color: '#B39DDB', background: 'rgba(179,157,219,0.10)', fontSize: 11, fontWeight: 800, letterSpacing: 1 }}>LZTI · {typeCode}</span>
             </div>
-            <div className="rounded-xl p-3" style={{ background: 'rgba(255,64,129,0.06)', border: '1px solid rgba(255,64,129,0.1)' }}>
-              <p className="text-xs font-semibold" style={{ color: '#FF80AB' }}>⚠ 短板</p>
-              <p className="text-xs mt-1" style={{ color: 'rgba(255,255,255,0.5)' }}>{main?.weakness}</p>
-            </div>
+            <p className="text-sm text-left" style={{ color: 'rgba(255,255,255,0.66)', lineHeight: 1.75 }}>{verdict}</p>
           </motion.div>
 
           {/* 操作按钮 */}

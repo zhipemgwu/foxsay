@@ -3,6 +3,7 @@ import { motion, AnimatePresence } from 'motion/react';
 import { X, ChevronRight, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import { IconBubble, IcHeart, IcSparkle, gradients } from './CuteIcons';
 import { useUser } from '../context/UserContext';
+import { ABILITY_META, normalizeAbilityScores, type AbilityKey } from '../services/ability';
 
 /* ═══════════════════════════════════════
  *  题库 — 每日轮换
@@ -59,17 +60,17 @@ function getDailyQuestions(): typeof questionPool {
 const resultDimensions = [
   {
     key: 'temperature', title: '恋爱温度计', icon: '🌡️', color: '#FF8A80',
-    abilityKeys: ['opener', 'topic'],
+    abilityKeys: ['opener', 'topic'] as AbilityKey[],
     descriptions: { high: '你的感情热度很高，保持主动和热情是你的优势', mid: '感情温度适中，试着增加一些甜蜜的小互动', low: '感情需要加温，建议每天至少一次主动关心' },
   },
   {
     key: 'intimacy', title: '亲密度报告', icon: '💗', color: '#F48FB1',
-    abilityKeys: ['empathy', 'safety'],
+    abilityKeys: ['empathy', 'safety'] as AbilityKey[],
     descriptions: { high: '你们的亲密度很高，共情力和安全感建设都很棒', mid: '亲密关系还有成长空间，多练习深度倾听', low: '需要在情感连接上多下功夫，先从理解对方开始' },
   },
   {
     key: 'growth', title: '成长方向', icon: '🧭', color: '#B39DDB',
-    abilityKeys: ['observe', 'topic', 'empathy'],
+    abilityKeys: ['observe', 'topic', 'empathy'] as AbilityKey[],
     descriptions: { high: '你的成长意愿很强，保持这个学习节奏！', mid: '学习态度不错，试着更系统地提升', low: '建议制定一个小目标，每天花 10 分钟学习' },
   },
 ];
@@ -81,7 +82,7 @@ const streakMilestones = [
   { days: 30, badge: '👑', title: '月度王者', desc: '连续30天check-in' },
 ];
 
-const expertRecommendations: Record<string, Array<{ expert: string; title: string; icon: string }>> = {
+const expertRecommendations: Record<AbilityKey, Array<{ expert: string; title: string; icon: string }>> = {
   opener: [
     { expert: '汪俊豪', title: '开场白不尬聊的5个秘诀', icon: '💬' },
     { expert: '张小鱼', title: '搭讪艺术：3秒打开局面', icon: '🎤' },
@@ -125,7 +126,7 @@ function saveHistory(record: DayRecord) {
  * ═══════════════════════════════════════ */
 export function HeatUpCard() {
   const user = useUser() as any;
-  const abilityScores = user.abilityScores || { opener: 25, empathy: 25, observe: 25, topic: 25, safety: 25 };
+  const abilityScores = normalizeAbilityScores(user.abilityScores);
   const streak = user.streak || 0;
 
   const todayKey = `heatup_${new Date().toDateString()}`;
@@ -158,8 +159,8 @@ export function HeatUpCard() {
 
   const scores = useMemo(() => computeScores(answers), [answers, abilityScores]);
 
-  const weakestAbilityKey = useMemo(() => {
-    const entries = Object.entries(abilityScores) as [string, number][];
+  const weakestAbilityKey = useMemo<AbilityKey>(() => {
+    const entries = Object.entries(abilityScores) as [AbilityKey, number][];
     if (!entries.length) return 'opener';
     entries.sort((a, b) => a[1] - b[1]);
     return entries[0][0];
@@ -200,7 +201,7 @@ export function HeatUpCard() {
     return { dir: diff > 0 ? 'up' : diff < 0 ? 'down' : 'flat', val: Math.abs(diff) };
   };
   const unlockedMilestones = streakMilestones.filter(m => streak >= m.days);
-  const abilityLabel: Record<string, string> = { opener: '开场力', empathy: '共情力', observe: '观察力', topic: '话题力', safety: '安全感' };
+  const abilityLabel = Object.fromEntries(Object.entries(ABILITY_META).map(([key, meta]) => [key, meta.label])) as Record<AbilityKey, string>;
 
   return (
     <div className="px-5 mb-2">
@@ -478,7 +479,7 @@ export function HeatUpCard() {
                         </div>
                         <p style={{ color: 'rgba(245,239,232,0.6)', fontSize: 12, lineHeight: 1.6 }}>
                           {(() => {
-                            const advice: Record<string, string> = {
+                            const advice: Record<AbilityKey, string> = {
                               opener: '你的开场力是当前最需要提升的维度。建议今天练习「破冰三步法」，从一个真诚的赞美开始',
                               empathy: '共情力是你的提升重点。试试在对话中多用「我理解你的感受」来回应对方',
                               observe: '观察力需要加强。今天尝试在和人聊天时注意对方的表情和语气变化',

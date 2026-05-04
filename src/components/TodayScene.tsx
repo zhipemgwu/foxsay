@@ -6,6 +6,7 @@ import { motion } from 'motion/react';
 import { Play, ChevronRight, BookOpen, Heart } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import { IcSparkle } from './CuteIcons';
+import { getLevelCard } from '../services/levelCards';
 
 /** 计算关卡实际封面（与 PracticePage buildLevels 一致） */
 function getLevelImage(mode: 'story' | 'encounter', chapterId: number, levelIndex: number): string {
@@ -22,18 +23,56 @@ function getLevelImage(mode: 'story' | 'encounter', chapterId: number, levelInde
   return pool[Math.abs(h) % pool.length];
 }
 
-/* ── 剧情故事关卡池（具体到每一节） ── */
-const storyLevelPool = [
-  { chapterId: 1, levelIndex: 0, name: '那杯拿铁的温度', narrative: '推门进去的瞬间，你闻到了烘焙的香气，还有一个低头微笑的人', tag: '🔥 热门', chapter: '第 1 章 · 第 1 节', chapterName: '初遇', participants: 4280 },
-  { chapterId: 1, levelIndex: 2, name: '同一本书的两只手', narrative: '你伸手去拿那本旅行指南，却碰到了另一只温热的手', tag: '✨ 推荐', chapter: '第 1 章 · 第 3 节', chapterName: '初遇', participants: 3860 },
-  { chapterId: 1, levelIndex: 4, name: '输入框里的勇气', narrative: '打了又删，删了又打，手指悬在发送键上方', tag: '💫 必练', chapter: '第 1 章 · 第 5 节', chapterName: '初遇', participants: 3520 },
-  { chapterId: 2, levelIndex: 1, name: '笑声是最好的桥梁', narrative: '气氛突然冻住了，你需要一个恰到好处的玩笑', tag: '😂 趣味', chapter: '第 2 章 · 第 2 节', chapterName: '破冰', participants: 3150 },
-  { chapterId: 2, levelIndex: 4, name: '"嗯"字之后的拯救', narrative: '对话快要断气了，你还有三秒钟做出反应', tag: '🆘 实用', chapter: '第 2 章 · 第 5 节', chapterName: '破冰', participants: 2980 },
-  { chapterId: 3, levelIndex: 1, name: '眼神不会说谎', narrative: '你偷看对方的时候，发现对方也在偷看你', tag: '💫 必练', chapter: '第 3 章 · 第 2 节', chapterName: '暧昧', participants: 2890 },
-  { chapterId: 3, levelIndex: 4, name: '指尖的距离', narrative: '走路时手背不经意碰到一起，谁都没有躲开', tag: '❤️ 经典', chapter: '第 3 章 · 第 5 节', chapterName: '暧昧', participants: 2760 },
-  { chapterId: 4, levelIndex: 0, name: '紧张到手心出汗', narrative: '提前了四十分钟到，在镜子前整理了第三次衣领', tag: '❤️ 经典', chapter: '第 4 章 · 第 1 节', chapterName: '热恋', participants: 2100 },
-  { chapterId: 5, levelIndex: 0, name: '摔门之后的十分钟', narrative: '坐在门的两边，谁也不说话，但都没有走远', tag: '🛡️ 进阶', chapter: '第 5 章 · 第 1 节', chapterName: '考验', participants: 1760 },
-];
+/* ── 剧情故事关卡池（从 level-cards.json 同步） ── */
+const STORY_LEVEL_KIDS = Array.from({ length: 30 }, (_, i) => `L${String(i + 1).padStart(3, '0')}`);
+const STORY_RECOMMENDATION_KIDS = ['L001', 'L003', 'L006', 'L010', 'L011', 'L016', 'L021', 'L027', 'L030'];
+const STORY_TAGS: Record<number, string> = {
+  1: '🔥 热门',
+  2: '✨ 必练',
+  3: '💫 暧昧',
+  4: '❤️ 哄人',
+  5: '🛡️ 现实',
+  6: '⚠️ 边界',
+  7: '🔥 爆点',
+};
+
+function compactNarrative(text: string, max = 46): string {
+  const clean = String(text || '').replace(/\s+/g, ' ').trim();
+  return clean.length > max ? `${clean.slice(0, max)}...` : clean;
+}
+
+function storyLevelIndexInChapter(kid: string, chapterId: number): number {
+  const idsInChapter = STORY_LEVEL_KIDS.filter(id => getLevelCard(id)?.meta?.chapter_id === chapterId);
+  return Math.max(0, idsInChapter.indexOf(kid));
+}
+
+const storyLevelPool = STORY_RECOMMENDATION_KIDS.map((kid) => {
+  const level = getLevelCard(kid);
+  if (!level) return null;
+  const chapterId = level.meta?.chapter_id || 1;
+  const levelIndex = storyLevelIndexInChapter(kid, chapterId);
+  const levelNumber = Number(kid.slice(1));
+  const chapterName = String(level.meta?.chapter_name || '剧情故事').split('·')[0];
+  return {
+    chapterId,
+    levelIndex,
+    name: level.meta?.title || `第 ${levelNumber} 关`,
+    narrative: compactNarrative(level.story_node?.premise || level.dialogue?.opening_message || ''),
+    tag: STORY_TAGS[chapterId] || '✨ 推荐',
+    chapter: `第 ${chapterId} 章 · 第 ${levelIndex + 1} 节`,
+    chapterName,
+    participants: 1800 + levelNumber * 137,
+  };
+}).filter(Boolean) as Array<{
+  chapterId: number;
+  levelIndex: number;
+  name: string;
+  narrative: string;
+  tag: string;
+  chapter: string;
+  chapterName: string;
+  participants: number;
+}>;
 
 /* ── 人物邂逅关卡池（具体到每一节） ── */
 const encounterLevelPool = [

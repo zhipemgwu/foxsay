@@ -2,7 +2,7 @@
  * 深度恋爱物种测试 —— 31 题精准定位
  *
  * 基于依恋理论(Attachment Theory)、五种爱语(Five Love Languages)
- * 以及 FoxSay 自有的 5 维模型(chat/charm/courage/empathy/control)
+ * 以及 FoxSay 自有的 5 维模型(opener/empathy/observe/topic/safety)
  * 设计的恋爱人格深度诊断。
  *
  * 题型：单选情境题 ×20 | 二选一极端题 ×6 | 滑杆量表题 ×4 | 综合大场景题 ×1
@@ -10,6 +10,7 @@
  */
 
 import { speciesAbilityHint as _speciesAbilityHint } from './onboardingChat';
+import type { AbilityScores } from '../services/ability';
 
 /* ---------- types ---------- */
 
@@ -443,7 +444,7 @@ export interface DeepTestResult {
   /** 匹配度 70-99 */
   matchRate: number;
   /** 5 维能力值 0-100 */
-  abilities: { chat: number; charm: number; courage: number; empathy: number; control: number };
+  abilities: AbilityScores;
   /** 12 物种原始得分 */
   rawScores: Record<string, number>;
 }

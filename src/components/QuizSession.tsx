@@ -16,12 +16,23 @@ import {
   touchStreak,
   shuffle,
 } from '../services/quiz';
+import type { QuizAttemptRecord } from '../services/microGrowth';
+
+export interface QuizSessionResult {
+  total: number;
+  correct: number;
+  wrong: Question[];
+  combo: number;
+  attempts: QuizAttemptRecord[];
+  completed: boolean;
+  plannedTotal: number;
+}
 
 interface Props {
   questions: Question[];
   title: string;             // 顶部标题（"每日推荐" / "反 PUA · Lv2" / "错题本"）
-  onExit: () => void;
-  onFinish: (result: { total: number; correct: number; wrong: Question[]; combo: number }) => void;
+  onExit: (partial?: QuizSessionResult) => void;
+  onFinish: (result: QuizSessionResult) => void;
 }
 
 export function QuizSession({ questions, title, onExit, onFinish }: Props) {
@@ -33,6 +44,7 @@ export function QuizSession({ questions, title, onExit, onFinish }: Props) {
   const [combo, setCombo] = useState(0);
   const [maxCombo, setMaxCombo] = useState(0);
   const scrollRef = useRef<HTMLDivElement | null>(null);
+  const attemptsRef = useRef<QuizAttemptRecord[]>([]);
 
   const q = questions[idx];
 
@@ -40,6 +52,27 @@ export function QuizSession({ questions, title, onExit, onFinish }: Props) {
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: 0, behavior: 'smooth' });
   }, [idx]);
+
+  const buildResult = (completed: boolean): QuizSessionResult => {
+    const attempts = attemptsRef.current.slice();
+    return {
+      total: attempts.length,
+      correct: attempts.filter(attempt => attempt.correct).length,
+      wrong: attempts.filter(attempt => !attempt.correct).map(attempt => attempt.question),
+      combo: maxCombo,
+      attempts,
+      completed,
+      plannedTotal: questions.length,
+    };
+  };
+
+  const handleExit = () => {
+    if (attemptsRef.current.length > 0) {
+      const confirmed = window.confirm('确定返回吗？本次已答题目会保存；主题练习会结算新增首次答对题，全真模拟和进阶题库未完成整套不会产生能力成长。');
+      if (!confirmed) return;
+    }
+    onExit(attemptsRef.current.length > 0 ? buildResult(false) : undefined);
+  };
 
   // 空题库兜底
   useEffect(() => {
@@ -53,6 +86,7 @@ export function QuizSession({ questions, title, onExit, onFinish }: Props) {
   const handleSubmit = () => {
     if (userAnswer === null || (Array.isArray(userAnswer) && userAnswer.length === 0)) return;
     const correct = checkAnswer(q, userAnswer);
+    attemptsRef.current.push({ question: q, correct });
     if (correct) {
       setCorrectCount(c => c + 1);
       setCombo(c => {
@@ -72,12 +106,7 @@ export function QuizSession({ questions, title, onExit, onFinish }: Props) {
 
   const handleNext = () => {
     if (idx + 1 >= questions.length) {
-      onFinish({
-        total: questions.length,
-        correct: correctCount + (checkAnswer(q, userAnswer) ? 0 : 0), // 已经在 handleSubmit 加过
-        wrong: wrongList,
-        combo: maxCombo,
-      });
+      onFinish(buildResult(true));
     } else {
       setIdx(i => i + 1);
       setUserAnswer(null);
@@ -102,7 +131,7 @@ export function QuizSession({ questions, title, onExit, onFinish }: Props) {
         borderBottom: '1px solid rgba(255,255,255,0.06)',
       }}>
         <div className="flex items-center px-4 h-11 relative">
-          <motion.button whileTap={{ scale: 0.9 }} onClick={onExit} className="absolute left-3">
+          <motion.button whileTap={{ scale: 0.9 }} onClick={handleExit} className="absolute left-3">
             <ChevronLeft size={26} color="#f5efe8" />
           </motion.button>
           <div className="flex-1 text-center">

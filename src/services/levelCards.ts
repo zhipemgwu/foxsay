@@ -108,6 +108,12 @@ export function buildLevelScenePrompt(kidOrId: string | number): string {
   if (Array.isArray(node.key_plot_beats)) {
     lines.push(`【关键节拍】${node.key_plot_beats.join('；')}`);
   }
+  if (node.branching_hints) {
+    const hints = Object.entries(node.branching_hints)
+      .map(([key, value]) => `${key}: ${value}`)
+      .join(' / ');
+    if (hints) lines.push(`【分支提示】${hints}`);
+  }
 
   if (Array.isArray(chars.npc_list)) {
     for (const npc of chars.npc_list) {
@@ -126,6 +132,21 @@ export function buildLevelScenePrompt(kidOrId: string | number): string {
   if (dialogue.system_narration_style) {
     lines.push(`【旁白风格】${dialogue.system_narration_style}`);
   }
+  if (dialogue.opening_message) lines.push(`【本关开场】${dialogue.opening_message}`);
+  if (Array.isArray(dialogue.opening_choices) && dialogue.opening_choices.length) {
+    lines.push(`【玩家可选开场】${dialogue.opening_choices.join(' / ')}`);
+  }
+
+  const scoring = lv.scoring || {};
+  if (Array.isArray(scoring.dimensions) && scoring.dimensions.length) {
+    lines.push(`【本关评分关注】${scoring.dimensions.map((dim: any) => `${dim.name}=${dim.description}`).join('；')}`);
+  }
+  const endings = lv.endings || {};
+  const endingHints = ['good', 'neutral', 'bad']
+    .map(key => endings[key]?.title ? `${key}: ${endings[key].title}` : '')
+    .filter(Boolean)
+    .join(' / ');
+  if (endingHints) lines.push(`【结局方向】${endingHints}`);
 
   return lines.join('\n');
 }

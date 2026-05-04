@@ -4,18 +4,20 @@
 import { motion } from 'motion/react';
 import { RotateCcw, Home, BookOpen } from 'lucide-react';
 import type { Question } from '../services/quiz';
+import type { MicroGrowthResult } from '../services/microGrowth';
 
 interface Props {
   total: number;
   correct: number;
   wrong: Question[];
   combo: number;
+  growth?: MicroGrowthResult | null;
   onRetry: () => void;
   onExit: () => void;
   onReviewWrong?: () => void;
 }
 
-export function QuizResult({ total, correct, wrong, combo, onRetry, onExit, onReviewWrong }: Props) {
+export function QuizResult({ total, correct, wrong, combo, growth, onRetry, onExit, onReviewWrong }: Props) {
   const pct = total > 0 ? Math.round((correct / total) * 100) : 0;
   const tier = pct >= 90 ? 'perfect' : pct >= 70 ? 'good' : pct >= 50 ? 'ok' : 'bad';
   const tierData = {
@@ -84,6 +86,26 @@ export function QuizResult({ total, correct, wrong, combo, onRetry, onExit, onRe
           <Stat label="最高连击" val={`${combo}🔥`} color="#FF8A80" />
           <Stat label="错题" val={`${wrong.length}`} color="#FFB080" />
         </motion.div>
+
+        {growth && (
+          <motion.div
+            initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.72 }}
+            style={{
+              marginTop: 16, width: '100%', maxWidth: 400,
+              padding: '14px 16px', borderRadius: 14,
+              background: growth.applied
+                ? 'linear-gradient(135deg, rgba(78,205,196,0.1), rgba(255,213,160,0.08))'
+                : 'rgba(255,255,255,0.04)',
+              border: growth.applied ? '1px solid rgba(78,205,196,0.28)' : '1px solid rgba(255,255,255,0.1)',
+            }}
+          >
+            <div style={{ color: growth.applied ? '#4ECDC4' : 'rgba(245,239,232,0.7)', fontSize: 12, fontWeight: 800, marginBottom: 6 }}>
+              {growth.applied ? '五维成长已结算' : '本次未产生五维成长'}
+            </div>
+            <div style={{ color: '#f5efe8', fontSize: 13, lineHeight: 1.7, fontWeight: 700 }}>{growth.summary}</div>
+            <div style={{ color: 'rgba(245,239,232,0.62)', fontSize: 12, lineHeight: 1.7, marginTop: 6 }}>{growth.detail}</div>
+          </motion.div>
+        )}
 
         {/* 错题列表预览 */}
         {wrong.length > 0 && (

@@ -56,7 +56,7 @@ const skins = [
 
 const activities = [
   { time: '2小时前', text: '完成了「咖啡馆初遇」场景练习，获得 50 XP！', icon: '☕', color: '#FF8A80' },
-  { time: '昨天', text: '恋爱物种鉴定结果：老司狐 🦊 匹配度 98%', icon: '🦊', color: '#FFD93D' },
+  { time: '昨天', text: '恋爱物种鉴定结果：老司狐 · LZTI CTRL', icon: '🦊', color: '#FFD93D' },
   { time: '2天前', text: '连续打卡 23 天，解锁「坚持达人」成就', icon: '🔥', color: '#4ECDC4' },
   { time: '3天前', text: '恋商评分提升至 82 分 (+4)', icon: '📈', color: '#B39DDB' },
   { time: '5天前', text: '完成「深夜便利店」场景挑战', icon: '🌙', color: '#81D4FA' },

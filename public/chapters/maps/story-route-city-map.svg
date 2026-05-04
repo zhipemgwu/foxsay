@@ -1,0 +1,74 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 430 920" role="img" aria-label="Story route city map">
+  <defs>
+    <linearGradient id="storySky" x1="0" y1="0" x2="0.9" y2="1">
+      <stop offset="0" stop-color="#493052"/>
+      <stop offset="0.45" stop-color="#26384f"/>
+      <stop offset="1" stop-color="#151a2c"/>
+    </linearGradient>
+    <linearGradient id="storyRoad" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#77849d" stop-opacity="0.72"/>
+      <stop offset="0.48" stop-color="#35445e" stop-opacity="0.92"/>
+      <stop offset="1" stop-color="#20283c"/>
+    </linearGradient>
+    <linearGradient id="storyCanal" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#89e7df" stop-opacity="0.42"/>
+      <stop offset="1" stop-color="#4f73a0" stop-opacity="0.08"/>
+    </linearGradient>
+    <radialGradient id="storyWarm" cx="0.25" cy="0.12" r="0.8">
+      <stop offset="0" stop-color="#ffcf9f" stop-opacity="0.8"/>
+      <stop offset="0.38" stop-color="#ff8a80" stop-opacity="0.28"/>
+      <stop offset="1" stop-color="#ff8a80" stop-opacity="0"/>
+    </radialGradient>
+    <filter id="storyGlow" x="-35%" y="-35%" width="170%" height="170%">
+      <feGaussianBlur stdDeviation="5" result="blur"/>
+      <feMerge><feMergeNode in="blur"/><feMergeNode in="SourceGraphic"/></feMerge>
+    </filter>
+  </defs>
+  <rect width="430" height="920" fill="url(#storySky)"/>
+  <rect width="430" height="920" fill="url(#storyWarm)"/>
+  <path d="M-40 170 C64 205 108 278 197 288 C304 302 330 202 470 230 L470 920 L-40 920 Z" fill="url(#storyCanal)" opacity="0.52"/>
+  <g opacity="0.78">
+    <path d="M-42 824 C82 792 129 708 244 690 C346 674 374 606 472 575" fill="none" stroke="url(#storyRoad)" stroke-width="64" stroke-linecap="round"/>
+    <path d="M60 -42 C92 92 82 182 112 278 C145 384 104 470 68 598 C48 670 68 742 118 962" fill="none" stroke="#29334a" stroke-width="46" stroke-linecap="round"/>
+    <path d="M368 -58 C320 102 328 202 356 304 C388 420 344 523 300 648 C270 732 286 812 332 970" fill="none" stroke="#2a334b" stroke-width="43" stroke-linecap="round"/>
+    <path d="M-28 480 C70 430 138 454 214 392 C292 328 332 360 468 276" fill="none" stroke="#2f3851" stroke-width="52" stroke-linecap="round"/>
+  </g>
+  <g opacity="0.2" stroke="#f9efe3" stroke-width="2" stroke-linecap="round">
+    <path d="M-42 824 C82 792 129 708 244 690 C346 674 374 606 472 575" stroke-dasharray="18 20"/>
+    <path d="M-28 480 C70 430 138 454 214 392 C292 328 332 360 468 276" stroke-dasharray="16 18"/>
+  </g>
+  <g opacity="0.86">
+    <rect x="18" y="64" width="76" height="120" rx="16" fill="#2e3650"/>
+    <rect x="116" y="44" width="92" height="92" rx="15" fill="#433451"/>
+    <rect x="236" y="72" width="70" height="142" rx="16" fill="#273b52"/>
+    <rect x="326" y="50" width="82" height="112" rx="18" fill="#39344f"/>
+    <rect x="28" y="236" width="118" height="88" rx="18" fill="#3a3854"/>
+    <rect x="178" y="205" width="92" height="118" rx="18" fill="#263a51"/>
+    <rect x="302" y="250" width="94" height="86" rx="18" fill="#44324c"/>
+    <rect x="40" y="378" width="92" height="122" rx="18" fill="#2b344d"/>
+    <rect x="158" y="502" width="126" height="110" rx="20" fill="#3b3652"/>
+    <rect x="302" y="430" width="96" height="132" rx="19" fill="#27394f"/>
+    <rect x="28" y="642" width="122" height="104" rx="20" fill="#3f3650"/>
+    <rect x="196" y="738" width="92" height="120" rx="18" fill="#29384f"/>
+    <rect x="318" y="690" width="86" height="116" rx="18" fill="#403551"/>
+  </g>
+  <g fill="#ffe5c8" opacity="0.68">
+    <rect x="42" y="88" width="10" height="16" rx="3"/><rect x="62" y="88" width="10" height="16" rx="3"/><rect x="42" y="122" width="10" height="16" rx="3"/><rect x="62" y="122" width="10" height="16" rx="3"/>
+    <rect x="136" y="70" width="42" height="8" rx="4"/><rect x="136" y="98" width="52" height="8" rx="4"/>
+    <rect x="254" y="104" width="10" height="16" rx="3"/><rect x="274" y="104" width="10" height="16" rx="3"/><rect x="254" y="146" width="10" height="16" rx="3"/><rect x="274" y="146" width="10" height="16" rx="3"/>
+    <rect x="340" y="82" width="45" height="8" rx="4"/><rect x="340" y="112" width="36" height="8" rx="4"/>
+    <rect x="66" y="410" width="42" height="8" rx="4"/><rect x="326" y="468" width="44" height="8" rx="4"/><rect x="216" y="780" width="48" height="8" rx="4"/>
+  </g>
+  <g filter="url(#storyGlow)">
+    <circle cx="94" cy="344" r="6" fill="#ffd166"/>
+    <circle cx="220" cy="374" r="5" fill="#7ee0d6"/>
+    <circle cx="338" cy="390" r="6" fill="#ff8a80"/>
+    <circle cx="86" cy="606" r="5" fill="#ffd166"/>
+    <circle cx="286" cy="636" r="5" fill="#7ee0d6"/>
+    <path d="M22 876 C105 824 172 842 236 793 C308 738 344 750 414 704" fill="none" stroke="#ffb199" stroke-opacity="0.5" stroke-width="4" stroke-linecap="round"/>
+  </g>
+  <g opacity="0.16" stroke="#ffffff" stroke-width="1">
+    <path d="M0 138 H430"/><path d="M0 276 H430"/><path d="M0 414 H430"/><path d="M0 552 H430"/><path d="M0 690 H430"/><path d="M0 828 H430"/>
+    <path d="M86 0 V920"/><path d="M214 0 V920"/><path d="M344 0 V920"/>
+  </g>
+</svg>

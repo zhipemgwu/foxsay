@@ -132,7 +132,7 @@ export default function App() {
                   onAnimationComplete={() => { skipTabAnimRef.current = false; }}
                 >
                   {activeTab === 0 && (homeLoading ? <HomeSkeletonLoader /> : <ErrorBoundary><Suspense fallback={<TabFallback />}><PracticePage pendingAction={practiceAction} onActionConsumed={() => setPracticeAction(null)} /></Suspense></ErrorBoundary>)}
-                  {activeTab === 1 && <ErrorBoundary><Suspense fallback={<TabFallback />}><DiagnosticPage /></Suspense></ErrorBoundary>}
+                  {activeTab === 1 && <ErrorBoundary><Suspense fallback={<TabFallback />}><DiagnosticPage onPracticeAction={handlePracticeAction} /></Suspense></ErrorBoundary>}
                   {activeTab === 2 && <ErrorBoundary><MicroPracticePage onPracticeAction={handlePracticeAction} /></ErrorBoundary>}
                   {activeTab === 3 && <ErrorBoundary><Suspense fallback={<TabFallback />}><OrderPage /></Suspense></ErrorBoundary>}
                   {activeTab === 4 && <ErrorBoundary><Suspense fallback={<TabFallback />}><ProfilePage onLogout={handleLogout} onPracticeAction={handlePracticeAction} /></Suspense></ErrorBoundary>}

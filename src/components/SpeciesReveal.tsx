@@ -1,28 +1,20 @@
 import { useEffect, useState } from 'react';
 import { motion } from 'motion/react';
-import { speciesAbilityHint } from '../data/onboardingChat';
+import { getSpeciesVerdict } from '../data/lztiVerdicts';
 
-const speciesMap: Record<string, { name: string; emoji: string; camp: string; desc: string; soulQuote: string; color: string; bg: string; avatar: string }> = {
-  laosihu:    { name: '老司狐', emoji: '🦊', camp: '🔥 疯狂输出组', desc: '开车从不翻车，就是乘客换得勤', soulQuote: '技术越好越孤独，因为没人敢上你的车',     avatar: '/species/laosihu.jpg',    color: '#c23616', bg: 'linear-gradient(135deg, #c23616 0%, #e84118 100%)' },
-  haiwanghu:  { name: '海王狐', emoji: '🦊', camp: '🔥 疯狂输出组', desc: '鱼塘太大管不过来了',           soulQuote: '你不是花心，你只是每条鱼都真心喜欢',     avatar: '/species/haiwanghu.jpg',  color: '#1B9CFC', bg: 'linear-gradient(135deg, #1B9CFC 0%, #25CCF7 100%)' },
-  tiantianhu: { name: '舔舔狐', emoji: '🦊', camp: '🔥 疯狂输出组', desc: '你骂我我都说好的亲亲',         soulQuote: '你以为的真诚，在对方眼里叫廉价',         avatar: '/species/tiantianhu.jpg', color: '#FF9FF3', bg: 'linear-gradient(135deg, #FF9FF3 0%, #f368e0 100%)' },
-  zhuangsihu: { name: '装死狐', emoji: '🦊', camp: '💀 已读不回组', desc: '恋爱？先让我死一会儿',         soulQuote: '你不是不心动，你只是害怕心动之后的剧情', avatar: '/species/zhuangsihu.jpg', color: '#8c7ae6', bg: 'linear-gradient(135deg, #8c7ae6 0%, #9c88ff 100%)' },
-  songsonghu: { name: '怂怂狐', emoji: '🦊', camp: '💀 已读不回组', desc: '有感觉就跑，没感觉又来',       soulQuote: '逃避虽然可耻但有用——直到对方不等了',     avatar: '/species/songsonghu.jpg', color: '#40407a', bg: 'linear-gradient(135deg, #40407a 0%, #706fd3 100%)' },
-  zhiwuhu:    { name: '植物狐', emoji: '🦊', camp: '💀 已读不回组', desc: '所有恋爱信号对我无效',         soulQuote: '不是收不到信号，是你把天线拔了',         avatar: '/species/zhiwuhu.jpg',    color: '#44bd32', bg: 'linear-gradient(135deg, #44bd32 0%, #4cd137 100%)' },
-  xiaochouhu: { name: '小丑狐', emoji: '🦊', camp: '🤡 自我感动组', desc: '以为是主角，其实送了个助攻',   soulQuote: '你感动了自己，但对方只觉得有压力',       avatar: '/species/xiaochouhu.jpg', color: '#0097e6', bg: 'linear-gradient(135deg, #0097e6 0%, #00a8ff 100%)' },
-  lianfeihu:  { name: '恋废狐', emoji: '🦊', camp: '🤡 自我感动组', desc: '不谈恋爱会死，谈了更死',       soulQuote: '你缺的不是恋爱，是跟自己好好相处',       avatar: '/species/lianfeihu.jpg',  color: '#718093', bg: 'linear-gradient(135deg, #718093 0%, #7f8fa6 100%)' },
-  caonihu:    { name: '草泥狐', emoji: '🦊', camp: '😈 表面无害组', desc: '嘴上全是随便，心里全是你',     soulQuote: '你以为的高冷，其实是不敢先开口',         avatar: '/species/caonihu.jpg',    color: '#e1b12c', bg: 'linear-gradient(135deg, #e1b12c 0%, #fbc531 100%)' },
-  lvchahu:    { name: '绿茶狐', emoji: '🦊', camp: '😈 表面无害组', desc: '人畜无害就是我的大招',         soulQuote: '善良是真的，算计也是真的',               avatar: '/species/lvchahu.jpg',    color: '#B33771', bg: 'linear-gradient(135deg, #B33771 0%, #FD7272 100%)' },
-  xinjihu:    { name: '心机狐', emoji: '🦊', camp: '😈 表面无害组', desc: '看似佛系聊天，每句都在下钩子', soulQuote: '你不是在聊天，你是在布局',               avatar: '/species/xinjihu.jpg',    color: '#EAB543', bg: 'linear-gradient(135deg, #EAB543 0%, #F8EFBA 100%)' },
+const speciesMap: Record<string, { name: string; code: string; englishName: string; emoji: string; camp: string; desc: string; soulQuote: string; color: string; bg: string; avatar: string }> = {
+  laosihu:    { name: '老司狐', code: 'CTRL', englishName: 'Smooth Operator', emoji: '🦊', camp: '🔥 疯狂输出组', desc: '开车从不翻车，就是乘客换得勤', soulQuote: '技术越好越孤独，因为没人敢上你的车',     avatar: '/species/laosihu.jpg',    color: '#c23616', bg: 'linear-gradient(135deg, #c23616 0%, #e84118 100%)' },
+  haiwanghu:  { name: '海王狐', code: 'TIDE', englishName: 'Tidecaller', emoji: '🦊', camp: '🔥 疯狂输出组', desc: '鱼塘太大管不过来了',           soulQuote: '你不是花心，你只是每条鱼都真心喜欢',     avatar: '/species/haiwanghu.jpg',  color: '#1B9CFC', bg: 'linear-gradient(135deg, #1B9CFC 0%, #25CCF7 100%)' },
+  tiantianhu: { name: '舔舔狐', code: 'HONE', englishName: 'Honeydrift', emoji: '🦊', camp: '🔥 疯狂输出组', desc: '你骂我我都说好的亲亲',         soulQuote: '你以为的真诚，在对方眼里叫廉价',         avatar: '/species/tiantianhu.jpg', color: '#FF9FF3', bg: 'linear-gradient(135deg, #FF9FF3 0%, #f368e0 100%)' },
+  zhuangsihu: { name: '装死狐', code: 'VOID', englishName: 'Ghost Mode', emoji: '🦊', camp: '💀 已读不回组', desc: '恋爱？先让我死一会儿',         soulQuote: '你不是不心动，你只是害怕心动之后的剧情', avatar: '/species/zhuangsihu.jpg', color: '#8c7ae6', bg: 'linear-gradient(135deg, #8c7ae6 0%, #9c88ff 100%)' },
+  songsonghu: { name: '怂怂狐', code: 'HUSH', englishName: 'Soft Retreat', emoji: '🦊', camp: '💀 已读不回组', desc: '有感觉就跑，没感觉又来',       soulQuote: '逃避虽然可耻但有用——直到对方不等了',     avatar: '/species/songsonghu.jpg', color: '#40407a', bg: 'linear-gradient(135deg, #40407a 0%, #706fd3 100%)' },
+  zhiwuhu:    { name: '植物狐', code: 'OFFL', englishName: 'Signal Offline', emoji: '🦊', camp: '💀 已读不回组', desc: '所有恋爱信号对我无效',         soulQuote: '不是收不到信号，是你把天线拔了',         avatar: '/species/zhiwuhu.jpg',    color: '#44bd32', bg: 'linear-gradient(135deg, #44bd32 0%, #4cd137 100%)' },
+  xiaochouhu: { name: '小丑狐', code: 'SHOW', englishName: 'Spotlight Heart', emoji: '🦊', camp: '🤡 自我感动组', desc: '以为是主角，其实送了个助攻',   soulQuote: '你感动了自己，但对方只觉得有压力',       avatar: '/species/xiaochouhu.jpg', color: '#0097e6', bg: 'linear-gradient(135deg, #0097e6 0%, #00a8ff 100%)' },
+  lianfeihu:  { name: '恋废狐', code: 'LOOP', englishName: 'Love Spiral', emoji: '🦊', camp: '🤡 自我感动组', desc: '不谈恋爱会死，谈了更死',       soulQuote: '你缺的不是恋爱，是跟自己好好相处',       avatar: '/species/lianfeihu.jpg',  color: '#718093', bg: 'linear-gradient(135deg, #718093 0%, #7f8fa6 100%)' },
+  caonihu:    { name: '草泥狐', code: 'COOL', englishName: 'Hidden Softie', emoji: '🦊', camp: '😈 表面无害组', desc: '嘴上全是随便，心里全是你',     soulQuote: '你以为的高冷，其实是不敢先开口',         avatar: '/species/caonihu.jpg',    color: '#e1b12c', bg: 'linear-gradient(135deg, #e1b12c 0%, #fbc531 100%)' },
+  lvchahu:    { name: '绿茶狐', code: 'MIST', englishName: 'Velvet Strategist', emoji: '🦊', camp: '😈 表面无害组', desc: '人畜无害就是我的大招',         soulQuote: '善良是真的，算计也是真的',               avatar: '/species/lvchahu.jpg',    color: '#B33771', bg: 'linear-gradient(135deg, #B33771 0%, #FD7272 100%)' },
+  xinjihu:    { name: '心机狐', code: 'PLAN', englishName: 'Silent Tactician', emoji: '🦊', camp: '😈 表面无害组', desc: '看似佛系聊天，每句都在下钩子', soulQuote: '你不是在聊天，你是在布局',               avatar: '/species/xinjihu.jpg',    color: '#EAB543', bg: 'linear-gradient(135deg, #EAB543 0%, #F8EFBA 100%)' },
 };
-
-const abilityLabels: { key: keyof typeof speciesAbilityHint['laosihu']; label: string }[] = [
-  { key: 'opener',   label: '开场白' },
-  { key: 'empathy',  label: '共情力' },
-  { key: 'observe',  label: '观察力' },
-  { key: 'topic',    label: '话题力' },
-  { key: 'safety',   label: '安全感' },
-];
 
 export function SpeciesReveal({
   speciesId,
@@ -42,7 +34,7 @@ export function SpeciesReveal({
   onSkip?: () => void;
 }) {
   const sp = speciesMap[speciesId] || speciesMap.laosihu;
-  const ab = speciesAbilityHint[speciesId] || speciesAbilityHint.laosihu;
+  const verdict = getSpeciesVerdict(speciesId, sp.name, sp.code, sp.englishName);
   const [phase, setPhase] = useState<'sealing' | 'revealed'>('sealing');
 
   useEffect(() => {
@@ -85,7 +77,7 @@ export function SpeciesReveal({
 
         {phase === 'revealed' && (
           <motion.div
-            className="relative flex-1 flex flex-col px-6 pt-10"
+            className="relative flex-1 flex flex-col px-6 pt-10 overflow-y-auto"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             transition={{ duration: 0.6 }}
@@ -130,15 +122,15 @@ export function SpeciesReveal({
                   🦊
                 </motion.span>
               </div>
-              {/* 匹配度徽章 */}
+              {/* LZTI 类型徽章 */}
               <motion.div
                 initial={{ scale: 0, rotate: -90 }}
                 animate={{ scale: 1, rotate: 0 }}
                 transition={{ delay: 0.6, type: 'spring' }}
-                className="absolute -bottom-2 left-1/2 -translate-x-1/2 px-3 py-1 rounded-full"
+                className="absolute -bottom-3 left-1/2 -translate-x-1/2 px-4 py-1.5 rounded-full"
                 style={{ background: '#fff', boxShadow: `0 4px 16px ${sp.color}66` }}
               >
-                <span style={{ color: sp.color, fontSize: 13, fontWeight: 800 }}>匹配度 {matchRate}%</span>
+                <span style={{ color: sp.color, fontSize: 13, fontWeight: 900, letterSpacing: 1 }}>LZTI · {sp.code}</span>
               </motion.div>
             </motion.div>
 
@@ -155,6 +147,9 @@ export function SpeciesReveal({
               <h1 style={{ color: '#f5efe8', fontSize: 30, fontWeight: 800, letterSpacing: '1px', marginBottom: 6 }}>
                 {sp.name}
               </h1>
+              <div style={{ color: sp.color, fontSize: 12, fontWeight: 800, letterSpacing: 1.2, marginBottom: 8 }}>
+                LZTI · {sp.code} · {sp.englishName}
+              </div>
               <p style={{ color: 'rgba(245,239,232,0.55)', fontSize: 13, marginBottom: 12 }}>{sp.desc}</p>
               <div className="mx-auto px-4 py-2.5 rounded-xl" style={{ background: 'rgba(245,239,232,0.04)', border: '1px solid rgba(245,239,232,0.06)', maxWidth: 320 }}>
                 <p style={{ color: 'rgba(245,239,232,0.75)', fontSize: 12.5, lineHeight: 1.55, fontStyle: 'italic' }}>
@@ -163,71 +158,31 @@ export function SpeciesReveal({
               </div>
             </motion.div>
 
-            {/* 5维能力条 */}
+            {/* LZTI 风格身份卡 */}
             <motion.div
               initial={{ opacity: 0, y: 10 }}
               animate={{ opacity: 1, y: 0 }}
               transition={{ delay: 0.45 }}
-              className="px-1 py-3 rounded-2xl mb-3 relative overflow-hidden"
-              style={{ background: 'rgba(245,239,232,0.03)' }}
+              className="p-4 rounded-2xl mb-4 relative overflow-hidden"
+              style={{ background: 'rgba(245,239,232,0.035)', border: '1px solid rgba(245,239,232,0.07)' }}
             >
-              <div className="flex items-center justify-between px-3 mb-2">
-                <span style={{ color: '#f5efe8', fontSize: 12, fontWeight: 600 }}>初始能力评估</span>
-                <span style={{ color: 'rgba(245,239,232,0.4)', fontSize: 10 }}>系统已为你定制成长路线</span>
+              <div className="flex items-center justify-between mb-3">
+                <span style={{ color: '#f5efe8', fontSize: 13, fontWeight: 800 }}>LZTI 风格判词</span>
+                <span style={{ color: sp.color, fontSize: 10, fontWeight: 900, letterSpacing: 1.2 }}>TYPE {sp.code}</span>
               </div>
-              <div className="space-y-1.5 px-3">
-                {abilityLabels.map((a, i) => (
-                  <div key={a.key} className="flex items-center gap-3">
-                    <span style={{ color: 'rgba(245,239,232,0.55)', fontSize: 11, width: 30 }}>{a.label}</span>
-                    <div className="flex-1 h-1.5 rounded-full overflow-hidden" style={{ background: 'rgba(245,239,232,0.06)' }}>
-                      <motion.div
-                        initial={{ width: 0 }}
-                        animate={{ width: `${ab[a.key]}%` }}
-                        transition={{ delay: 0.6 + i * 0.08, duration: 0.6 }}
-                        style={{ height: '100%', background: sp.bg }}
-                      />
-                    </div>
-                    <span style={{ color: 'rgba(245,239,232,0.55)', fontSize: 11, width: 26, textAlign: 'right' }}>{ab[a.key]}</span>
-                  </div>
-                ))}
-              </div>
+              <p style={{ color: 'rgba(245,239,232,0.68)', fontSize: 12.5, lineHeight: 1.65, marginBottom: 12 }}>
+                {verdict}
+              </p>
               {locked && (
                 <div className="absolute inset-0 rounded-2xl flex items-center justify-center"
                   style={{ background: 'rgba(31,26,40,0.88)', backdropFilter: 'blur(8px)', WebkitBackdropFilter: 'blur(8px)' }}>
                   <div className="text-center">
                     <span style={{ fontSize: 28 }}>🔒</span>
-                    <p style={{ color: 'rgba(245,239,232,0.5)', fontSize: 12, marginTop: 4 }}>注册后解锁能力详情</p>
+                    <p style={{ color: 'rgba(245,239,232,0.5)', fontSize: 12, marginTop: 4 }}>注册后解锁完整判词</p>
                   </div>
                 </div>
               )}
             </motion.div>
-
-            {/* 推荐计划 */}
-            {tagsTopN.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: 10 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.6 }}
-                className="mb-4 relative overflow-hidden rounded-xl"
-              >
-                <div className="text-center" style={{ color: 'rgba(245,239,232,0.5)', fontSize: 11, marginBottom: 8 }}>
-                  AI 已为你定制以下成长方向：
-                </div>
-                <div className="flex flex-wrap justify-center gap-2">
-                  {tagsTopN.map(t => (
-                    <span key={t} className="px-3 py-1 rounded-full" style={{ background: `${sp.color}20`, border: `1px solid ${sp.color}55`, color: sp.color, fontSize: 11.5, fontWeight: 600 }}>
-                      {t}
-                    </span>
-                  ))}
-                </div>
-                {locked && (
-                  <div className="absolute inset-0 rounded-xl flex items-center justify-center"
-                    style={{ background: 'rgba(31,26,40,0.88)', backdropFilter: 'blur(6px)', WebkitBackdropFilter: 'blur(6px)' }}>
-                    <span style={{ color: 'rgba(245,239,232,0.4)', fontSize: 12 }}>🔒 注册后查看</span>
-                  </div>
-                )}
-              </motion.div>
-            )}
 
             {/* CTA */}
             <motion.div
