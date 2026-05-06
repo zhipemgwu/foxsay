@@ -68,7 +68,7 @@ export function QuizSession({ questions, title, onExit, onFinish }: Props) {
 
   const handleExit = () => {
     if (attemptsRef.current.length > 0) {
-      const confirmed = window.confirm('确定返回吗？本次已答题目会保存；主题练习会结算新增首次答对题，全真模拟和进阶题库未完成整套不会产生能力成长。');
+      const confirmed = window.confirm('确定返回吗？本次已答题目会保存；主题练习会结算新增首次答对题，全真模拟和主题实战未完成整套不会产生能力成长。');
       if (!confirmed) return;
     }
     onExit(attemptsRef.current.length > 0 ? buildResult(false) : undefined);

@@ -1,15 +1,17 @@
 /**
  * 微练习首页 · Tab 3
  * ---------------------------------------------
- * · 免费精选题 + 进阶题库
+ * · 免费精选题 + 主题实战
  * · 模拟考（免费每日1次 / 会员全量+按分类）
  * · 错题本 + 深度复盘
  * · 主会员权益 + 体验周卡入口
  */
 import {  useMemo, useState  } from 'react';
-import { Play, FileText, BookOpen, Crown, BrainCircuit, ArrowRight, Star, Clock } from 'lucide-react';
+import { motion } from 'motion/react';
+import { Play, FileText, BookOpen, Crown, BrainCircuit, ArrowRight, Star, ChevronLeft } from 'lucide-react';
 import { QuizSession, type QuizSessionResult } from './QuizSession';
 import { QuizResult } from './QuizResult';
+import { ThemeBattleSession } from './ThemeBattleSession';
 import { GreetingSection } from './GreetingSection';
 import { TodayScene } from './TodayScene';
 import { useUser } from '../context/UserContext';
@@ -25,6 +27,12 @@ import {
 } from '../services/quiz';
 import { settleMicroPracticeGrowth, type MicroGrowthResult, type MicroSessionKind } from '../services/microGrowth';
 import { QUIZ_BANK, getByCategory, getQuestionById } from '../data/quizBank';
+import {
+  THEME_BATTLE_CATEGORY_COVERS,
+  getThemeBattleChallenges,
+  getThemeBattleQuestionCount,
+  type ThemeBattleChallenge,
+} from '../data/themeBattleChallenges';
 
 const FREE_POOL_COUNT = 10;
 const FREE_MOCK_DAILY_KEY = 'foxsay:quiz_mock_free_daily';
@@ -32,8 +40,11 @@ const MICRO_TRIAL_EXPIRE_KEY = 'foxsay:micro_week_trial_expire_at';
 
 type Mode =
   | { kind: 'hub' }
+  | { kind: 'theme-battle' }
+  | { kind: 'theme-battle-list'; category: QuizCategory }
+  | { kind: 'theme-battle-play'; challenge: ThemeBattleChallenge }
   | { kind: 'quiz'; questions: Question[]; title: string; sessionKind: MicroSessionKind }
-  | { kind: 'result'; total: number; correct: number; wrong: Question[]; combo: number; retryQs: Question[]; retryTitle: string; retryKind: MicroSessionKind; growth?: MicroGrowthResult | null };
+  | { kind: 'result'; total: number; correct: number; wrong: Question[]; combo: number; retryQs?: Question[]; retryChallenge?: ThemeBattleChallenge; retryTitle: string; retryKind: MicroSessionKind; growth?: MicroGrowthResult | null };
 
 interface MicroPracticePageProps {
   onPracticeAction?: (action: any) => void;
@@ -46,7 +57,7 @@ export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps =
   const flash = (m: string) => { setToastMsg(m); setTimeout(() => setToastMsg(''), 1800); };
   const [version, setVersion] = useState(0);
   const [showPaywall, setShowPaywall] = useState(false);
-  const [paywallFrom, setPaywallFrom] = useState('进阶题库');
+  const [paywallFrom, setPaywallFrom] = useState('主题实战');
   const [accessVersion, setAccessVersion] = useState(0);
 
   const hasMainVip = useMemo(() => !!user.isPro?.(), [user, accessVersion]);
@@ -61,7 +72,6 @@ export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps =
   const hasMicroVip = hasMainVip || hasMicroTrial;
 
   const freePool = useMemo(() => QUIZ_BANK.slice(0, Math.min(FREE_POOL_COUNT, QUIZ_BANK.length)), []);
-  const advancedPool = useMemo(() => QUIZ_BANK.slice(Math.min(FREE_POOL_COUNT, QUIZ_BANK.length)), []);
   const activeBank = hasMicroVip ? QUIZ_BANK : freePool;
 
   const stats = useMemo(() => getStats(), [version]);
@@ -104,7 +114,7 @@ export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps =
         flash('当前分类暂无题目，题库正在扩充中。');
         return;
       }
-      setPaywallFrom(`${CATEGORY_META[cat].label} · 进阶题`);
+      setPaywallFrom(`${CATEGORY_META[cat].label} · 主题精练扩展`);
       setShowPaywall(true);
       return;
     }
@@ -187,17 +197,17 @@ export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps =
     startSession(pool, `模拟考 · 全量 ${pool.length} 题`, 'mock');
   };
 
-  const startAdvancedBank = () => {
+  const openThemeBattle = () => {
     if (!hasMicroVip) {
-      setPaywallFrom('进阶题库');
+      setPaywallFrom('主题实战');
       setShowPaywall(true);
       return;
     }
-    if (advancedPool.length === 0) {
-      flash('进阶题库正在扩充中。');
-      return;
-    }
-    startSession(shuffle(advancedPool).slice(0, Math.min(30, advancedPool.length)), '进阶题库 · 30 题', 'advanced');
+    setMode({ kind: 'theme-battle' });
+  };
+
+  const startThemeBattleChallenge = (challenge: ThemeBattleChallenge) => {
+    setMode({ kind: 'theme-battle-play', challenge });
   };
 
   const activateMicroWeekTrial = () => {
@@ -244,6 +254,36 @@ export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps =
     );
   }
 
+  if (mode.kind === 'theme-battle-play') {
+    const title = `主题实战 · ${CATEGORY_META[mode.challenge.category].label} · ${mode.challenge.title}`;
+    return (
+      <ThemeBattleSession
+        challenge={mode.challenge}
+        title={title}
+        onExit={(partial) => {
+          if (partial) {
+            const growth = applyGrowthResult(partial, title, 'advanced');
+            flash(growth.summary);
+          }
+          setMode({ kind: 'theme-battle-list', category: mode.challenge.category });
+          setVersion(versionValue => versionValue + 1);
+        }}
+        onFinish={(result) => {
+          const growth = applyGrowthResult(result, title, 'advanced');
+          setVersion(versionValue => versionValue + 1);
+          setMode({
+            kind: 'result',
+            ...result,
+            retryChallenge: mode.challenge,
+            retryTitle: title,
+            retryKind: 'advanced',
+            growth,
+          });
+        }}
+      />
+    );
+  }
+
   if (mode.kind === 'result') {
     return (
       <QuizResult
@@ -251,13 +291,104 @@ export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps =
         correct={mode.correct}
         wrong={mode.wrong}
         combo={mode.combo}
+        variant={mode.retryChallenge ? 'themeBattle' : 'quiz'}
         growth={mode.growth}
-        onRetry={() => { setMode({ kind: 'quiz', questions: mode.retryQs, title: mode.retryTitle, sessionKind: mode.retryKind }); }}
+        onRetry={() => {
+          if (mode.retryChallenge) {
+            setMode({ kind: 'theme-battle-play', challenge: mode.retryChallenge });
+            return;
+          }
+          if (mode.retryQs) setMode({ kind: 'quiz', questions: mode.retryQs, title: mode.retryTitle, sessionKind: mode.retryKind });
+        }}
         onExit={() => setMode({ kind: 'hub' })}
-        onReviewWrong={mode.wrong.length > 0 ? () => {
-          setMode({ kind: 'quiz', questions: mode.wrong, title: '错题重刷' });
+        onReviewWrong={mode.wrong.length > 0 && mode.retryKind !== 'advanced' ? () => {
+          setMode({ kind: 'quiz', questions: mode.wrong, title: '错题重刷', sessionKind: 'practice' });
         } : undefined}
       />
+    );
+  }
+
+  if (mode.kind === 'theme-battle') {
+    return (
+      <div style={subPageStyle}>
+        <SubPageHeader
+          title="主题实战"
+          subtitle="八个主题的高压短剧副本"
+          onBack={() => setMode({ kind: 'hub' })}
+        />
+        <div style={{ padding: '16px 18px 40px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, minmax(0, 1fr))', gap: 12 }}>
+            {(Object.keys(CATEGORY_META) as QuizCategory[]).map(cat => {
+              const meta = CATEGORY_META[cat];
+              const challengeCount = getThemeBattleChallenges(cat).length;
+              const nodeCount = getThemeBattleQuestionCount(cat);
+              return (
+                <motion.button
+                  key={cat}
+                  whileTap={{ scale: 0.96 }}
+                  whileHover={{ y: -3 }}
+                  onClick={() => setMode({ kind: 'theme-battle-list', category: cat })}
+                  style={themeBattleCardStyle(meta.color, THEME_BATTLE_CATEGORY_COVERS[cat])}
+                >
+                  <div style={{ position: 'absolute', inset: 0, background: `linear-gradient(180deg, ${meta.color}12, rgba(15,10,24,0.88))` }} />
+                  <div style={{ position: 'relative', zIndex: 1, display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', width: '100%' }}>
+                    <div style={{ width: 40, height: 40, borderRadius: 13, background: 'rgba(255,255,255,0.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 20, backdropFilter: 'blur(10px)' }}>
+                      {meta.emoji}
+                    </div>
+                    <div style={{ fontSize: 10, fontWeight: 900, color: '#fff', padding: '4px 8px', borderRadius: 999, background: 'rgba(0,0,0,0.34)' }}>
+                      {challengeCount} 副本
+                    </div>
+                  </div>
+                  <div style={{ position: 'relative', zIndex: 1, marginTop: 'auto' }}>
+                    <div style={{ color: '#fff', fontSize: 17, fontWeight: 900, marginBottom: 4 }}>{meta.label}</div>
+                    <div style={{ color: 'rgba(255,255,255,0.68)', fontSize: 11, lineHeight: 1.45 }}>{nodeCount} 个剧情回复节点</div>
+                  </div>
+                </motion.button>
+              );
+            })}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  if (mode.kind === 'theme-battle-list') {
+    const meta = CATEGORY_META[mode.category];
+    const challenges = getThemeBattleChallenges(mode.category);
+    return (
+      <div style={subPageStyle}>
+        <SubPageHeader
+          title={`${meta.label} · 主题实战`}
+          subtitle="选择一个高阶副本进入短剧场"
+          onBack={() => setMode({ kind: 'theme-battle' })}
+        />
+        <div style={{ padding: '16px 18px 40px', display: 'grid', gap: 14 }}>
+          {challenges.map((challenge) => (
+            <motion.button
+              key={challenge.id}
+              whileTap={{ scale: 0.97 }}
+              whileHover={{ y: -3 }}
+              onClick={() => startThemeBattleChallenge(challenge)}
+              style={challengeCardStyle(meta.color, challenge.cover)}
+            >
+              <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg, rgba(20,14,28,0.92) 0%, rgba(20,14,28,0.58) 58%, rgba(20,14,28,0.78) 100%)' }} />
+              <div style={{ position: 'relative', zIndex: 1, display: 'flex', flexDirection: 'column', minHeight: 154 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+                  <span style={{ padding: '5px 9px', borderRadius: 999, background: `${meta.color}22`, color: meta.color, border: `1px solid ${meta.color}66`, fontSize: 11, fontWeight: 900 }}>{challenge.focus}</span>
+                  <span style={{ padding: '5px 9px', borderRadius: 999, background: 'rgba(255,255,255,0.1)', color: 'rgba(255,255,255,0.78)', fontSize: 11, fontWeight: 800 }}>{challenge.nodes.length}幕短剧</span>
+                </div>
+                <div style={{ marginTop: 'auto' }}>
+                  <div style={{ color: '#fff', fontSize: 21, fontWeight: 900, lineHeight: 1.2, marginBottom: 8 }}>{challenge.title}</div>
+                  <div style={{ color: 'rgba(255,255,255,0.7)', fontSize: 12, lineHeight: 1.55, maxWidth: 280 }}>{challenge.subtitle}</div>
+                  <div style={{ display: 'inline-flex', alignItems: 'center', gap: 8, marginTop: 14, padding: '8px 12px', borderRadius: 12, background: 'rgba(255,255,255,0.14)', color: '#fff', fontSize: 12, fontWeight: 900, border: '1px solid rgba(255,255,255,0.12)' }}>
+                    进入副本 <ArrowRight size={15} />
+                  </div>
+                </div>
+              </div>
+            </motion.button>
+          ))}
+        </div>
+      </div>
     );
   }
 
@@ -290,7 +421,7 @@ export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps =
       <div style={{ padding: '12px 18px 0' }}>
       <div style={{ fontSize: 24, fontWeight: 900, marginBottom: 6, marginTop: 10, letterSpacing: 0.5 }}>微练习</div>
       <div style={{ color: 'rgba(245,239,232,0.62)', fontSize: 13, marginBottom: 16 }}>
-        精简 50 题高频场景，免费先刷 10 题，进阶题库解锁后全量训练
+        主题精练打基础，主题实战练高压判断
       </div>
 
       <div style={{
@@ -406,8 +537,8 @@ export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps =
             <div style={{ fontSize: 12, color: 'rgba(245,239,232,0.5)' }}>待复习 {wrongIds.length} 题</div>
           </button>
 
-          {/* 4. 进阶库 (VIP) */}
-          <button onClick={startAdvancedBank} style={{ padding: 16, borderRadius: 20, background: 'linear-gradient(145deg, rgba(255,213,160,0.08) 0%, rgba(255,213,160,0.02) 100%)', border: '1px solid rgba(255,213,160,0.15)', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', cursor: 'pointer', textAlign: 'left', position: 'relative', overflow: 'hidden' }}>
+          {/* 4. 主题实战 (VIP) */}
+          <motion.button whileTap={{ scale: 0.97 }} whileHover={{ y: -2 }} onClick={openThemeBattle} style={{ padding: 16, borderRadius: 20, background: 'linear-gradient(145deg, rgba(255,213,160,0.08) 0%, rgba(255,213,160,0.02) 100%)', border: '1px solid rgba(255,213,160,0.15)', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', cursor: 'pointer', textAlign: 'left', position: 'relative', overflow: 'hidden' }}>
             {!hasMicroVip && <div style={{ position: 'absolute', right: -24, top: 12, background: 'linear-gradient(90deg, #FFD5A0, #FFBD73)', color: '#3a2c17', fontSize: 9, fontWeight: 900, padding: '2px 24px', transform: 'rotate(45deg)', boxShadow: '0 2px 4px rgba(0,0,0,0.3)', letterSpacing: 1 }}>VIP</div>}
             
             <div style={{ display: 'flex', justifyContent: 'space-between', width: '100%', alignItems: 'flex-start', marginBottom: 12 }}>
@@ -415,9 +546,9 @@ export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps =
                 <Crown size={22} />
               </div>
             </div>
-            <div style={{ fontSize: 16, fontWeight: 800, color: '#FFD5A0', marginBottom: 4 }}>进阶题库</div>
-            <div style={{ fontSize: 12, color: 'rgba(255,213,160,0.6)' }}>高难度挑战</div>
-          </button>
+            <div style={{ fontSize: 16, fontWeight: 800, color: '#FFD5A0', marginBottom: 4 }}>主题实战</div>
+            <div style={{ fontSize: 12, color: 'rgba(255,213,160,0.6)' }}>高压短剧副本</div>
+          </motion.button>
 
           {/* 5. 深度复盘 (PRO) */}
           <button onClick={startDeepReview} style={{ padding: 16, borderRadius: 20, background: 'linear-gradient(145deg, rgba(247,166,217,0.08) 0%, rgba(247,166,217,0.02) 100%)', border: '1px solid rgba(247,166,217,0.15)', display: 'flex', flexDirection: 'column', alignItems: 'flex-start', cursor: 'pointer', textAlign: 'left', position: 'relative', overflow: 'hidden' }}>
@@ -521,7 +652,7 @@ export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps =
       {showPaywall && (
         <div style={overlayStyle}>
           <div style={{ ...modalStyle, width: 'min(92vw, 430px)' }}>
-            <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 6 }}>解锁微练习进阶题库</div>
+            <div style={{ fontSize: 18, fontWeight: 900, marginBottom: 6 }}>解锁微练习主题实战</div>
             <div style={{ fontSize: 12, color: 'rgba(245,239,232,0.68)', marginBottom: 12 }}>
               当前入口：{paywallFrom}
             </div>
@@ -529,13 +660,13 @@ export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps =
               {!hasMainVip && (
                 <div style={planCard('rgba(154,199,255,0.18)', 'rgba(154,199,255,0.45)')}>
                   <div style={planTitle}>体验周卡 9.9</div>
-                  <div style={planDesc}>单独解锁微练习进阶题库 + 深度复盘（7天体验）</div>
+                  <div style={planDesc}>单独解锁微练习主题实战 + 深度复盘（7天体验）</div>
                   <button style={planBtn} onClick={activateMicroWeekTrial}>开通体验周卡</button>
                 </div>
               )}
               <div style={planCard('rgba(255,213,160,0.2)', 'rgba(255,213,160,0.58)')}>
                 <div style={planTitle}>主会员（推荐）</div>
-                <div style={planDesc}>微练习权益已并入会员：全量题库 + 分类模拟 + 深度复盘</div>
+                <div style={planDesc}>微练习权益已并入会员：全量题库 + 主题实战 + 深度复盘</div>
                 <button style={planBtn} onClick={goOpenMembership}>去订购页开通</button>
               </div>
             </div>
@@ -551,6 +682,61 @@ export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps =
     </div>
   );
 }
+
+function SubPageHeader({ title, subtitle, onBack }: { title: string; subtitle: string; onBack: () => void }) {
+  return (
+    <div style={{ position: 'sticky', top: 0, zIndex: 20, padding: '14px 18px 12px', background: 'linear-gradient(180deg, rgba(33,27,46,0.98), rgba(33,27,46,0.86))', backdropFilter: 'blur(18px)', borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+      <button
+        onClick={onBack}
+        style={{ width: 36, height: 36, borderRadius: 12, border: '1px solid rgba(255,255,255,0.12)', background: 'rgba(255,255,255,0.06)', color: '#f5efe8', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', marginBottom: 10 }}
+      >
+        <ChevronLeft size={20} />
+      </button>
+      <div style={{ fontSize: 24, fontWeight: 900, color: '#fff', letterSpacing: 0 }}>{title}</div>
+      <div style={{ marginTop: 4, color: 'rgba(245,239,232,0.62)', fontSize: 13 }}>{subtitle}</div>
+    </div>
+  );
+}
+
+const subPageStyle = {
+  position: 'absolute' as const,
+  inset: 0,
+  background: 'radial-gradient(900px 420px at 50% -12%, rgba(255,195,121,0.2), transparent 58%), linear-gradient(180deg,#211b2e 0%, #171222 100%)',
+  color: '#f5efe8',
+  overflowY: 'auto' as const,
+  paddingBottom: 44,
+};
+
+const themeBattleCardStyle = (accent: string, cover: string) => ({
+  minHeight: 166,
+  border: `1px solid ${accent}44`,
+  borderRadius: 18,
+  padding: 14,
+  position: 'relative' as const,
+  overflow: 'hidden' as const,
+  cursor: 'pointer',
+  textAlign: 'left' as const,
+  display: 'flex',
+  flexDirection: 'column' as const,
+  backgroundImage: `url(${cover})`,
+  backgroundSize: 'cover',
+  backgroundPosition: 'center',
+  boxShadow: '0 14px 30px rgba(0,0,0,0.22)',
+});
+
+const challengeCardStyle = (accent: string, cover: string) => ({
+  position: 'relative' as const,
+  overflow: 'hidden' as const,
+  borderRadius: 20,
+  border: `1px solid ${accent}50`,
+  padding: 16,
+  cursor: 'pointer',
+  textAlign: 'left' as const,
+  backgroundImage: `url(${cover})`,
+  backgroundSize: 'cover',
+  backgroundPosition: 'center',
+  boxShadow: '0 16px 34px rgba(0,0,0,0.26)',
+});
 
 const statCardStyle = (bg: string, color: string) => ({
   borderRadius: 12,

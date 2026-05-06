@@ -309,8 +309,8 @@ function settleAdvanced(input: SettleMicroGrowthInput): { xpDelta: AbilityDelta;
     return {
       xpDelta: emptyAbilityDelta(),
       eligible: false,
-      summary: '进阶题库未完成整套挑战，不结算能力成长',
-      detail: '进阶题库按高难副本通关结算，中途退出只保存答题记录。',
+      summary: '主题实战未完成整套挑战，不结算能力成长',
+      detail: '主题实战按高难副本通关结算，中途退出只保存答题记录。',
     };
   }
 
@@ -321,20 +321,20 @@ function settleAdvanced(input: SettleMicroGrowthInput): { xpDelta: AbilityDelta;
     return {
       xpDelta: emptyAbilityDelta(),
       eligible: false,
-      summary: `进阶挑战正确率 ${pct}%，暂未通关`,
+      summary: `主题实战正确率 ${pct}%，暂未通关`,
       detail: '低于 60% 不产生五维成长，错题已进入复盘。',
     };
   }
 
   const bestKey = getUserStorageKey(ADVANCED_BEST_KEY_PREFIX, input.userId);
   const previousBest = readJson<Record<string, number>>(bestKey, {});
-  const challengeKey = 'advanced-bank';
+  const challengeKey = input.title || 'theme-battle';
   const previousTier = Math.max(0, Math.min(3, Number(previousBest[challengeKey] ?? 0))) as 0 | 1 | 2 | 3;
   if (currentTier <= previousTier) {
     return {
       xpDelta: emptyAbilityDelta(),
       eligible: false,
-      summary: `进阶挑战评级 ${tierName(currentTier)}，未超过历史最高 ${tierName(previousTier)}`,
+      summary: `主题实战评级 ${tierName(currentTier)}，未超过历史最高 ${tierName(previousTier)}`,
       detail: '重复挑战只有超过历史最高评级时，才发放差额成长奖励。',
     };
   }
@@ -352,7 +352,7 @@ function settleAdvanced(input: SettleMicroGrowthInput): { xpDelta: AbilityDelta;
   return {
     xpDelta,
     eligible: true,
-    summary: `进阶挑战评级 ${tierName(currentTier)}，刷新历史最好成绩`,
+    summary: `主题实战评级 ${tierName(currentTier)}，刷新历史最好成绩`,
     detail: `主能力 ${ABILITY_META[abilities.primary].label}、副能力 ${ABILITY_META[abilities.secondary].label} 获得差额成长：${formatDelta(xpDelta, '经验')}`,
   };
 }

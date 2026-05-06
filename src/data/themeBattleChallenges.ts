@@ -1,0 +1,431 @@
+import type { Question, QuizCategory } from '../services/quiz';
+
+export interface ThemeBattleChallenge {
+  id: string;
+  category: QuizCategory;
+  title: string;
+  subtitle: string;
+  cover: string;
+  focus: string;
+  risk: string;
+  nodes: Question[];
+}
+
+export const THEME_BATTLE_CATEGORY_COVERS: Record<QuizCategory, string> = {
+  'anti-pua': '/chapters/challenge-1.jpg',
+  icebreak: '/chapters/challenge-2.jpg',
+  ambiguous: '/chapters/challenge-3.jpg',
+  love: '/chapters/story-4.jpg',
+  redflag: '/chapters/challenge-4.jpg',
+  'emotion-catch': '/chapters/story-5.jpg',
+  refuse: '/chapters/challenge-5.jpg',
+  recover: '/chapters/story-3.jpg',
+};
+
+const shortChoiceOverrides: Record<string, string> = {
+  '哦。': '哦，我刚才在想该怎么接你这句话。',
+  '不在。': '不在，你这么晚突然问是有什么事吗？',
+  '想我了？': '想我了？这么晚突然找我，是不是有点特别。',
+  '数羊吧。': '数羊吧，实在睡不着就先别想那么多。',
+  '看情况。': '看情况吧，没必要现在把话说得太死。',
+  '我哪有？': '我哪有？你是不是把我的意思想偏了。',
+  '她在作。': '她就是在作，先别被这句话牵着走。',
+  '她在夸我。': '她这是在夸我，说明我确实和别人不一样。',
+  '立刻拉黑。': '那就立刻拉黑，省得后面继续麻烦。',
+  '我配不上你。': '我配不上你，你值得遇到更好的人。',
+  '你别烦我了。': '你别烦我了，我已经说得很清楚了。',
+  '那随便你。': '那随便你，我也不知道还能怎么说。',
+  '你才敏感。': '你才敏感，别把问题都推到我身上。',
+  '沉默忍着。': '先沉默忍着，等这次约会结束再说。',
+  '假装没看到。': '先假装没看到，反正回应只会更麻烦。',
+  '你才残忍。': '你才残忍，一直逼我改变决定。',
+  '你愿意回来吗？': '那你愿意回来吗？我真的想要一个答案。',
+};
+
+function normalizeChoiceText(text: string): string {
+  if (shortChoiceOverrides[text]) return shortChoiceOverrides[text];
+  return text;
+}
+
+const choice = (text: string, isCorrect: boolean, explain: string) => ({ text: normalizeChoiceText(text), isCorrect, explain });
+
+function node(input: {
+  id: string;
+  category: QuizCategory;
+  scenario: string;
+  prompt: string;
+  options: ReturnType<typeof choice>[];
+  overallExplain: string;
+  tags: string[];
+}): Question {
+  return {
+    id: input.id,
+    category: input.category,
+    difficulty: 5,
+    type: 'single',
+    scenario: input.scenario,
+    prompt: input.prompt,
+    options: input.options,
+    overallExplain: input.overallExplain,
+    tags: ['主题实战', ...input.tags],
+  };
+}
+
+function challenge(input: Omit<ThemeBattleChallenge, 'nodes'> & { nodes: ThemeBattleChallenge['nodes'] }): ThemeBattleChallenge {
+  return input;
+}
+
+export const THEME_BATTLE_CHALLENGES: ThemeBattleChallenge[] = [
+  challenge({
+    id: 'anti-phone-boundary',
+    category: 'anti-pua',
+    title: '查手机压力测试',
+    subtitle: '对方用信任绑架你交出隐私',
+    cover: '/chapters/challenge-1.jpg',
+    focus: '边界 + 观察',
+    risk: '控制升级',
+    nodes: [
+      node({
+        id: 'anti-phone-boundary-1',
+        category: 'anti-pua',
+        scenario: '你刚洗完澡回来，对方盯着你的手机说：“你刚才为什么把屏幕扣过去？”',
+        prompt: '第一步先判断这句话里最主要的风险是什么？',
+        options: [
+          choice('只是吃醋，先哄一下就过去了。', false, '把控制解释成吃醋，会让后续边界更难守。'),
+          choice('这是隐私检查的试探，核心是边界和信任被混在一起。', true, '先识别风险，才能不被带进“证明清白”的局。'),
+          choice('说明我确实应该主动公开手机。', false, '主动交出隐私会强化对方用怀疑换控制的模式。'),
+          choice('这是对方没有安全感，我需要立刻道歉。', false, '可以理解不安，但不等于接受检查和审问。'),
+        ],
+        overallExplain: '反 PUA 的第一步不是反击，而是识别“情绪表达”和“控制要求”的边界。',
+        tags: ['隐私边界', '控制识别'],
+      }),
+      node({
+        id: 'anti-phone-boundary-2',
+        category: 'anti-pua',
+        scenario: '对方继续说：“你不敢给我看，就是心里有鬼。”',
+        prompt: '这时最稳的回应是哪一种？',
+        options: [
+          choice('你看吧，看完就别闹了。', false, '短期止损，长期会把检查变成默认权利。'),
+          choice('我可以解释刚才在做什么，但不会用交出手机来证明清白。', true, '同时回应不安和守住边界，是高质量处理。'),
+          choice('你有病吧，谁谈恋爱这样？', false, '虽然指出问题，但攻击会让局面升级。'),
+          choice('好吧，我以后不这样了。', false, '这会把问题改写成你的错误，而不是边界议题。'),
+        ],
+        overallExplain: '成熟边界表达通常包含两层：我愿意解释事实，但不接受越界方式。',
+        tags: ['边界表达', '信任'],
+      }),
+      node({
+        id: 'anti-phone-boundary-3',
+        category: 'anti-pua',
+        scenario: '对方沉默几秒后冷笑：“你现在开始讲边界了？以前怎么不讲？”',
+        prompt: '面对反讽，下一步怎么接？',
+        options: [
+          choice('你别阴阳怪气，我不吃这套。', false, '容易进入互相攻击，偏离核心边界。'),
+          choice('以前没讲清楚是我的问题，但这不代表以后可以靠检查隐私解决不安。', true, '承认沟通不足，同时不让步核心原则。'),
+          choice('那你想怎样就怎样吧。', false, '退让会让压力测试成功。'),
+          choice('你要这么想我也没办法。', false, '回避会让对方继续升级或记账。'),
+        ],
+        overallExplain: '被翻旧账时，先承认可改进部分，再把话题拉回当下边界。',
+        tags: ['翻旧账', '压力升级'],
+      }),
+      node({
+        id: 'anti-phone-boundary-4',
+        category: 'anti-pua',
+        scenario: '气氛稍微降下来，对方说：“那你以后怎么让我安心？”',
+        prompt: '最后怎么收束最合适？',
+        options: [
+          choice('我会多报备，但手机不能当检查工具；忙的时候我提前说一声。', true, '给替代方案，不把关系推向零和。'),
+          choice('你自己学会信任吧，我没义务哄你。', false, '边界有了，但共情和修复不足。'),
+          choice('以后你想看就看，但别太频繁。', false, '这只是把越界变成次数管理。'),
+          choice('我保证以后不会让你不安。', false, '过度承诺会制造新的控制入口。'),
+        ],
+        overallExplain: '好的收束不是“谁赢了”，而是把控制要求替换成双方都能接受的安全感方案。',
+        tags: ['关系修复', '安全感'],
+      }),
+    ],
+  }),
+  challenge({
+    id: 'anti-guilt-trip',
+    category: 'anti-pua',
+    title: '道德绑架反转局',
+    subtitle: '对方把你的拒绝包装成不爱',
+    cover: '/chapters/challenge-4.jpg',
+    focus: '边界 + 共情',
+    risk: '内疚操控',
+    nodes: [
+      node({
+        id: 'anti-guilt-trip-1',
+        category: 'anti-pua',
+        scenario: '你今晚已经很累，拒绝了对方临时约见。对方回：“你就是没那么在乎我。”',
+        prompt: '先判断这句话最容易把你带进什么局？',
+        options: [
+          choice('证明爱不爱，把所有安排都取消。', false, '这正好进入对方设置的证明题。'),
+          choice('把合理拒绝改写成感情审判。', true, '识别审判框架，才不会被迫自证。'),
+          choice('对方只是撒娇，不用认真。', false, '轻描淡写会忽略操控风险。'),
+          choice('我应该立刻反问他是不是也不爱我。', false, '反审判会升级对抗。'),
+        ],
+        overallExplain: '道德绑架常把具体需求换成爱不爱的审判，让你从沟通者变成被告。',
+        tags: ['道德绑架', '框架识别'],
+      }),
+      node({
+        id: 'anti-guilt-trip-2',
+        category: 'anti-pua',
+        scenario: '对方继续说：“真正喜欢一个人不会这么冷血。”',
+        prompt: '第一句回应怎么说？',
+        options: [
+          choice('你别给我扣帽子，我不欠你的。', false, '指出问题但语气过硬，容易变成争吵。'),
+          choice('我在乎你，但我今晚确实需要休息；拒绝临时见面不等于不喜欢。', true, '同时确认感情和说明边界。'),
+          choice('好吧，那我过来。', false, '用牺牲换平静，会强化绑架。'),
+          choice('你这么想就算了。', false, '回避会留下更多误解。'),
+        ],
+        overallExplain: '被扣帽子时，不要急着证明爱，先把“具体事情”和“感情评价”拆开。',
+        tags: ['拒绝表达', '情绪承接'],
+      }),
+      node({
+        id: 'anti-guilt-trip-3',
+        category: 'anti-pua',
+        scenario: '对方说：“那你就休息吧，以后我也不会找你了。”',
+        prompt: '面对冷处理威胁，下一步更稳的是？',
+        options: [
+          choice('你爱找不找，随便。', false, '容易把问题推进断联对抗。'),
+          choice('我听到你很失落，但用“以后不找我”来惩罚我，会让我更难靠近。', true, '点出感受和行为后果，是成熟反馈。'),
+          choice('别这样，我现在就过去。', false, '被威胁后让步，会让威胁有效。'),
+          choice('那我明天补偿你两倍。', false, '补偿可以有，但不该在威胁框架下交换。'),
+        ],
+        overallExplain: '冷处理威胁不是普通失望，需要温和但明确地指出它对关系的伤害。',
+        tags: ['冷处理', '惩罚机制'],
+      }),
+      node({
+        id: 'anti-guilt-trip-4',
+        category: 'anti-pua',
+        scenario: '对方语气软了一点：“那我就是想你了嘛。”',
+        prompt: '最后怎么把关系拉回健康模式？',
+        options: [
+          choice('想我可以直接说，我会回应；但别用指责换陪伴。明晚我认真陪你。', true, '接住需求，改掉表达方式，并给出可执行安排。'),
+          choice('你早这么说不就好了？', false, '有点指责，容易让对方重新防御。'),
+          choice('那我也没办法，我今天就是累。', false, '边界有了，但缺少关系修复。'),
+          choice('行，那你现在还生气吗？', false, '容易继续围绕情绪确认打转。'),
+        ],
+        overallExplain: '高阶处理是把操控语言翻译成真实需求，再给健康表达的模板。',
+        tags: ['健康表达', '修复'],
+      }),
+    ],
+  }),
+  challenge({
+    id: 'icebreak-first-meet',
+    category: 'icebreak',
+    title: '初见冷场救场',
+    subtitle: '线下见面突然安静下来',
+    cover: '/chapters/challenge-2.jpg',
+    focus: '开场 + 话题',
+    risk: '尴尬沉默',
+    nodes: [
+      node({ id: 'icebreak-first-meet-1', category: 'icebreak', scenario: '你们第一次线下见面，点完饮料后突然安静，对方低头搅杯子。', prompt: '先观察哪个信号最重要？', options: [choice('对方不说话就是没兴趣。', false, '过早下结论会让你更紧张。'), choice('她可能也在适应陌生感，需要低压力话题。', true, '初见冷场常是适应期，不一定是拒绝。'), choice('必须马上讲个笑话。', false, '强行搞笑有时会增加表演感。'), choice('直接问她是不是不开心。', false, '初见就审情绪，压力偏高。')], overallExplain: '破冰先降压，再推进，不要把冷场立即解读成失败。', tags: ['冷场', '初见'] }),
+      node({ id: 'icebreak-first-meet-2', category: 'icebreak', scenario: '你决定开口。对方刚才提到路上堵车。', prompt: '第一句话怎么接更自然？', options: [choice('你是不是平时也经常迟到？', false, '像审问，还容易冒犯。'), choice('刚才那段路确实容易堵，你能赶到已经很厉害了。你平时也常来这边吗？', true, '先接住现实，再轻转开放话题。'), choice('没事，我们赶紧聊点有意思的。', false, '跳得太快，像强行切换。'), choice('那你应该早点出门呀。', false, '初见不适合上来纠错。')], overallExplain: '自然破冰的关键是“顺着已有信息轻轻延展”。', tags: ['接话', '低压开场'] }),
+      node({ id: 'icebreak-first-meet-3', category: 'icebreak', scenario: '对方回答：“我不常来，今天也是第一次。”', prompt: '下一步怎么延展？', options: [choice('那你觉得这里怎么样？我刚才看菜单有点选择困难。', true, '把观察变成共同体验，容易展开。'), choice('哦。', false, '话题会断。'), choice('第一次就和我来，看来我很特别。', false, '调情太早，容易油。'), choice('你平时都去哪？', false, '可以问，但略像查资料。')], overallExplain: '高质量延展是把对方回答变成“我们正在共同经历的事”。', tags: ['话题延展', '共同体验'] }),
+      node({ id: 'icebreak-first-meet-4', category: 'icebreak', scenario: '对方笑了一下，说自己也选择困难。气氛松了。', prompt: '收束这个小破冰最好的方式是？', options: [choice('那今天我们就互相拯救选择困难，先从饮料开始。', true, '轻松、有互动感，也自然进入下一轮。'), choice('哈哈你也太可爱了吧。', false, '夸奖可以，但略突然。'), choice('那你以后都听我的。', false, '玩笑带控制感，不稳。'), choice('原来我们这么像。', false, '可以用，但略空。')], overallExplain: '破冰成功后，用轻任务建立互动，而不是急着升温。', tags: ['互动感', '收束'] }),
+    ],
+  }),
+  challenge({
+    id: 'icebreak-cold-reply',
+    category: 'icebreak',
+    title: '对方反应很淡',
+    subtitle: '聊天只回“哈哈”“嗯嗯”',
+    cover: '/chapters/story-2.jpg',
+    focus: '开场 + 延展',
+    risk: '话题断线',
+    nodes: [
+      node({ id: 'icebreak-cold-reply-1', category: 'icebreak', scenario: '你分享了一个日常，对方只回：“哈哈。”', prompt: '你先怎么判断？', options: [choice('她肯定不想聊了。', false, '可能是话题承接点不够，也可能是在忙。'), choice('这条回复信息量低，需要换成更容易回答的具体问题。', true, '淡回复不一定是拒绝，先降低回答成本。'), choice('继续发更多内容填满空白。', false, '容易变成单方面输出。'), choice('立刻问她为什么这么冷淡。', false, '会制造压力。')], overallExplain: '淡回复时先调整话题结构，而不是追问态度。', tags: ['淡回复', '低成本问题'] }),
+      node({ id: 'icebreak-cold-reply-2', category: 'icebreak', scenario: '你想换个更好回答的问题。', prompt: '哪句更适合？', options: [choice('你怎么每次都回这么少？', false, '指责会让对方更想退。'), choice('我刚才那个故事有点流水账。换个好答的：你今天是更想躺平还是出去透气？', true, '自我调侃加二选一，降低压力。'), choice('那我不打扰你了。', false, '太快撤退，可能错过机会。'), choice('你到底喜欢聊什么？', false, '问题太大，反而难答。')], overallExplain: '二选一问题适合救淡场，因为它不要求对方组织长答案。', tags: ['二选一', '自我调侃'] }),
+      node({ id: 'icebreak-cold-reply-3', category: 'icebreak', scenario: '对方回：“躺平吧，今天累死。”', prompt: '怎么接能让话题继续？', options: [choice('那你早点睡。', false, '体贴但话题直接结束。'), choice('懂，那种电量只剩 3% 的累。今天是人累还是心累？', true, '接住情绪并给出可选方向。'), choice('我也很累。', false, '只转到自己，缺少承接。'), choice('为什么这么累？', false, '可以问，但偏审问。')], overallExplain: '好接话不是抢话，而是给对方一个更容易表达的入口。', tags: ['情绪入口', '接话'] }),
+      node({ id: 'icebreak-cold-reply-4', category: 'icebreak', scenario: '对方开始说今天工作很乱。', prompt: '这一轮该怎么收束？', options: [choice('那你慢慢说，我在线。讲完我给你颁一个今日幸存者奖。', true, '既接住情绪，又保持轻松氛围。'), choice('工作都这样，习惯就好。', false, '会显得敷衍。'), choice('你公司也太烂了吧。', false, '站队太快，容易带偏。'), choice('所以你刚才才不回我？', false, '把话题拉回自己，会破坏承接。')], overallExplain: '淡回复救回来后，要维护对方表达的安全感。', tags: ['承接', '轻松感'] }),
+    ],
+  }),
+  challenge({
+    id: 'ambiguous-hot-cold',
+    category: 'ambiguous',
+    title: '忽冷忽热判断',
+    subtitle: '对方一会热情一会消失',
+    cover: '/chapters/challenge-3.jpg',
+    focus: '观察 + 话题',
+    risk: '误读信号',
+    nodes: [
+      node({ id: 'ambiguous-hot-cold-1', category: 'ambiguous', scenario: '对方前晚聊到凌晨，今天一整天只回了两个字。', prompt: '最稳的第一判断是什么？', options: [choice('她在吊着我。', false, '可能性之一，但不能直接定性。'), choice('先看模式：频率、主动性、内容质量是否持续波动。', true, '暧昧判断要看模式，不看单次。'), choice('她肯定喜欢别人了。', false, '灾难化会影响后续表达。'), choice('我也冷她一天。', false, '用博弈回应波动，会加剧不稳定。')], overallExplain: '高阶暧昧理解不是猜心，而是看稳定模式。', tags: ['信号判断', '模式观察'] }),
+      node({ id: 'ambiguous-hot-cold-2', category: 'ambiguous', scenario: '晚上她突然发：“今天累趴了。”', prompt: '怎么回应既不跪又不冷？', options: [choice('终于想起我了？', false, '带怨气，会让对方防御。'), choice('听起来今天被榨干了。要不要先回血，晚点再跟我吐槽？', true, '接住状态，也给空间。'), choice('那你早点休息。', false, '安全但可能直接断。'), choice('你白天怎么不回我？', false, '时机太早，容易审问。')], overallExplain: '对方回温时，先接住当下，再观察后续稳定性。', tags: ['回温', '空间感'] }),
+      node({ id: 'ambiguous-hot-cold-3', category: 'ambiguous', scenario: '她说：“你不会生气了吧？”', prompt: '这一句透露了什么？', options: [choice('她知道自己冷，所以在试探你的反应。', true, '这是关系温度和边界的试探点。'), choice('她在道歉，所以我必须说没事。', false, '不必把感受全部吞掉。'), choice('她只是客套。', false, '可能低估了信号。'), choice('她在操控我。', false, '证据还不足。')], overallExplain: '“你不会生气吧”常是轻量试探，适合温和表达感受和期待。', tags: ['试探', '边界'] }),
+      node({ id: 'ambiguous-hot-cold-4', category: 'ambiguous', scenario: '你想表达期待，但不想显得很需要。', prompt: '怎么说更高级？', options: [choice('没生气，只是我会更喜欢稳定一点的聊天节奏；你忙的时候说一声就好。', true, '表达偏好，不索取保证。'), choice('没事啊，我一点都不在乎。', false, '过度装没事会失真。'), choice('你下次必须提前告诉我。', false, '要求感太强。'), choice('你这样我真的很难受。', false, '可以表达，但此处压力偏高。')], overallExplain: '暧昧期的边界表达要轻，但要真实。', tags: ['稳定节奏', '轻边界'] }),
+    ],
+  }),
+  challenge({
+    id: 'ambiguous-late-night',
+    category: 'ambiguous',
+    title: '深夜“在吗”试探',
+    subtitle: '一句话背后可能有三种需求',
+    cover: '/chapters/story-1.jpg',
+    focus: '观察 + 安全感',
+    risk: '过度推进',
+    nodes: [
+      node({ id: 'ambiguous-late-night-1', category: 'ambiguous', scenario: '晚上 11:48，对方发来一句：“在吗。”', prompt: '第一步最该避免什么？', options: [choice('立刻脑补她想你了。', true, '深夜联系可能是情绪、无聊或求助，不能单一解读。'), choice('看时间和她最近状态。', false, '这是应该做的，不是要避免的。'), choice('留意她是否有情绪波动。', false, '这是重要线索。'), choice('先用低压力方式回应。', false, '这是稳妥策略。')], overallExplain: '深夜信号容易被浪漫化，先收集上下文再推进。', tags: ['深夜信号', '上下文'] }),
+      node({ id: 'ambiguous-late-night-2', category: 'ambiguous', scenario: '你决定回应。', prompt: '哪句最合适？', options: [choice('在，怎么啦？听起来像有事找我。', true, '开放又不暧昧过度。'), choice('想我了？', false, '可能太快调情，若对方低落会踩空。'), choice('这么晚找我干嘛？', false, '语气偏防御。'), choice('不在。', false, '玩笑可能不合时机。')], overallExplain: '不确定对方需求时，用温和开放句承接最稳。', tags: ['开放回应', '需求判断'] }),
+      node({ id: 'ambiguous-late-night-3', category: 'ambiguous', scenario: '她回：“也没什么，就是突然睡不着。”', prompt: '接下来怎么推进？', options: [choice('那我陪你聊到睡着。', false, '太快承诺，容易形成依赖或压力。'), choice('失眠很难受。是脑子停不下来，还是心里有事？', true, '给两条表达路径，帮助她说清楚。'), choice('数羊吧。', false, '轻松但不够承接。'), choice('你是不是想我想的？', false, '调情过早。')], overallExplain: '暧昧里的情绪承接，要比调情更先出现。', tags: ['情绪承接', '失眠'] }),
+      node({ id: 'ambiguous-late-night-4', category: 'ambiguous', scenario: '她说：“可能有点心事，但不知道怎么说。”', prompt: '怎么收束这轮最有分寸？', options: [choice('不用马上整理好。你可以先说最烦的那一小块，我听着。', true, '提供陪伴但不逼问。'), choice('你必须告诉我，不然我会担心。', false, '关心变压力。'), choice('那算了，想说再说。', false, '给空间但略冷。'), choice('是不是感情问题？', false, '容易带方向。')], overallExplain: '高阶暧昧不是急着升温，而是建立“我在，但不逼你”的安全感。', tags: ['分寸', '安全感'] }),
+    ],
+  }),
+  challenge({
+    id: 'love-late-birthday',
+    category: 'love',
+    title: '生日惊喜翻车',
+    subtitle: '好意和疲惫撞在一起',
+    cover: '/chapters/story-4.jpg',
+    focus: '共情 + 安全感',
+    risk: '好意压迫',
+    nodes: [
+      node({ id: 'love-late-birthday-1', category: 'love', scenario: '你准备了生日惊喜，但她临时加班很累，只想回家。你已经叫了朋友在现场等。', prompt: '最重要的风险是什么？', options: [choice('惊喜不能浪费，先带她去。', false, '把安排放在她状态前面。'), choice('你的好意可能变成她必须配合的压力。', true, '热恋沟通要区分心意和要求。'), choice('她不领情。', false, '先贴标签会忽略疲惫。'), choice('朋友面子最重要。', false, '关系优先级会出问题。')], overallExplain: '亲密关系里，惊喜只有在对方状态允许时才是礼物。', tags: ['惊喜', '状态识别'] }),
+      node({ id: 'love-late-birthday-2', category: 'love', scenario: '她说：“我真的很累，你为什么非要今天？”', prompt: '第一回应怎么说？', options: [choice('大家都等你了，你忍一下。', false, '直接把她放进义务里。'), choice('对不起，我刚才只顾着想把惊喜完成，没先看见你已经累到不行。', true, '先承认忽略状态，比解释用心更重要。'), choice('我也是为你好啊。', false, '好意辩护会让她更累。'), choice('那算了，我让他们都走。', false, '有情绪化撤退感。')], overallExplain: '翻车后的第一句要先承认影响，不要急着证明动机。', tags: ['道歉', '疲惫'] }),
+      node({ id: 'love-late-birthday-3', category: 'love', scenario: '她沉默，眼眶有点红：“我不是不领情，我是真的撑不住。”', prompt: '下一步怎么处理现场安排？', options: [choice('我先让朋友散了，今天只按你的体力来。要不要我送你回家？', true, '把选择权还给她，并处理外部压力。'), choice('那你进去露个面就走。', false, '仍然要求她配合。'), choice('你别哭啊，我很尴尬。', false, '把焦点转回自己。'), choice('我以后再也不准备惊喜了。', false, '情绪化，会让她反过来安慰你。')], overallExplain: '修复不是说漂亮话，而是立刻撤掉让对方承压的安排。', tags: ['选择权', '修复'] }),
+      node({ id: 'love-late-birthday-4', category: 'love', scenario: '路上气氛缓和，她说：“其实我知道你用心了。”', prompt: '怎么收束最稳？', options: [choice('谢谢你还看见我的用心。以后我会先问你的状态，再决定惊喜怎么出现。', true, '承接认可，也给出下次改法。'), choice('那你刚才还那么凶。', false, '会重新点燃冲突。'), choice('所以你不生气了吧？', false, '急着要赦免。'), choice('我真的很委屈。', false, '可以表达，但此刻先收住更稳。')], overallExplain: '好的收束要把这次翻车变成下一次更懂彼此的规则。', tags: ['复盘', '亲密规则'] }),
+    ],
+  }),
+  challenge({
+    id: 'love-cold-war',
+    category: 'love',
+    title: '冷战 24 小时修复',
+    subtitle: '她说“随便你”后不再回复',
+    cover: '/chapters/story-5.jpg',
+    focus: '共情 + 观察',
+    risk: '情绪撤退',
+    nodes: [
+      node({ id: 'love-cold-war-1', category: 'love', scenario: '昨天争吵后，她只说“随便你”，到现在 24 小时没主动联系。', prompt: '“随便你”更可能是什么信号？', options: [choice('她真的无所谓。', false, '很多时候这是情绪撤退，不是无所谓。'), choice('她可能觉得继续说也不会被理解，所以退回去了。', true, '识别撤退信号是修复第一步。'), choice('她在作。', false, '贴标签会降低修复质量。'), choice('她想让我猜。', false, '可能有试探，但核心仍是未被理解。')], overallExplain: '冷战里最危险的是把撤退误读成结束。', tags: ['冷战', '撤退信号'] }),
+      node({ id: 'love-cold-war-2', category: 'love', scenario: '你准备发第一条修复信息。', prompt: '哪句更合适？', options: [choice('你还要冷到什么时候？', false, '会让对方更防御。'), choice('昨天那段我想重聊。我太急着赢，可能让你觉得我没在懂你。', true, '先承担自己的互动问题，而不是要求对方出来。'), choice('我已经不生气了。', false, '只说自己，没接住对方。'), choice('你不回我我也没办法。', false, '像放弃修复。')], overallExplain: '冷战破冰要给对方一个安全出来的台阶。', tags: ['修复开场', '台阶'] }),
+      node({ id: 'love-cold-war-3', category: 'love', scenario: '她回：“你每次都这样，讲到最后都是我不对。”', prompt: '下一步怎么接？', options: [choice('我没有每次都这样。', false, '立刻辩解会复刻争吵。'), choice('听起来你最难受的不是那件事本身，而是你觉得我一直在否定你。', true, '抓住深层感受，修复才有入口。'), choice('那你说我哪里错。', false, '像把她推上举证台。'), choice('我都道歉了你还想怎样。', false, '会彻底升级。')], overallExplain: '修复中要听见“重复受伤点”，不是只解决表面事件。', tags: ['深层感受', '重复冲突'] }),
+      node({ id: 'love-cold-war-4', category: 'love', scenario: '她语气软下来：“我只是希望你能站在我这边一次。”', prompt: '最后怎么收束？', options: [choice('我明白了。今晚先按这个顺序聊：先确认感受，再谈谁对谁错。', true, '把理解落成具体新规则。'), choice('我一直站你这边啊。', false, '空泛保证不够。'), choice('好，那以后我都让着你。', false, '过度让步不是健康规则。'), choice('那你也要改。', false, '太快转向对方责任。')], overallExplain: '冷战修复的终点是建立新的沟通顺序，而不是求对方别生气。', tags: ['新规则', '沟通顺序'] }),
+    ],
+  }),
+  challenge({
+    id: 'redflag-money-test',
+    category: 'redflag',
+    title: '借钱试探识别',
+    subtitle: '关系很浅却提出高额要求',
+    cover: '/chapters/challenge-4.jpg',
+    focus: '观察 + 安全',
+    risk: '资源索取',
+    nodes: [
+      node({ id: 'redflag-money-test-1', category: 'redflag', scenario: '你们认识两周，对方说手机坏了，想借你 5000 周转。', prompt: '第一判断是什么？', options: [choice('她愿意找我说明信任我。', false, '信任不等于合理索取。'), choice('关系深度和资源请求不匹配，是明显风险信号。', true, '红旗识别要看关系阶段和请求强度是否匹配。'), choice('不借就显得小气。', false, '这是内疚框架。'), choice('先借一半比较稳。', false, '没有核实前，金额减半仍有风险。')], overallExplain: '红旗不是看对方惨不惨，而是看请求是否和关系阶段匹配。', tags: ['金钱边界', '关系阶段'] }),
+      node({ id: 'redflag-money-test-2', category: 'redflag', scenario: '对方说：“我以为你跟别人不一样。”', prompt: '这句话的风险在哪里？', options: [choice('用特殊感压你越过边界。', true, '“你不一样”可能是情感奖励，也可能是操控按钮。'), choice('说明她真的很失望。', false, '失望可以理解，但不能替代边界判断。'), choice('她在夸我。', false, '此处夸奖和索取绑定在一起。'), choice('我应该证明自己。', false, '证明框架会让你失去主动。')], overallExplain: '红旗识别要警惕“夸奖 + 索取 + 内疚”的组合。', tags: ['特殊感', '内疚'] }),
+      node({ id: 'redflag-money-test-3', category: 'redflag', scenario: '你决定拒绝但不想羞辱对方。', prompt: '怎么说最稳？', options: [choice('我不做超出当前关系阶段的大额借款，但可以帮你想其他解决办法。', true, '边界清楚，也保留基本善意。'), choice('你是不是骗子？', false, '可能准确但证据不足，容易冲突。'), choice('我最近也没钱。', false, '找借口会给对方继续谈判空间。'), choice('下个月再说。', false, '模糊拖延不是边界。')], overallExplain: '拒绝高风险请求时，不要编理由，直接说明原则。', tags: ['原则拒绝', '善意边界'] }),
+      node({ id: 'redflag-money-test-4', category: 'redflag', scenario: '对方突然冷淡：“算了，当我没说。”', prompt: '最后怎么处理后续关系？', options: [choice('继续观察她是否尊重边界，不急着补偿讨好。', true, '红旗的关键是看被拒后是否尊重你。'), choice('发红包缓和一下。', false, '这会奖励越界请求。'), choice('立刻拉黑。', false, '若没有更多证据，可以先观察并保持距离。'), choice('不停解释自己不是小气。', false, '会再次进入证明框架。')], overallExplain: '一个人被拒绝后的反应，比提出请求本身更能暴露关系质量。', tags: ['后续观察', '边界测试'] }),
+    ],
+  }),
+  challenge({
+    id: 'redflag-isolation',
+    category: 'redflag',
+    title: '朋友圈隔离警报',
+    subtitle: '对方要求你少见朋友',
+    cover: '/chapters/challenge-5.jpg',
+    focus: '观察 + 边界',
+    risk: '社交隔离',
+    nodes: [
+      node({ id: 'redflag-isolation-1', category: 'redflag', scenario: '对方说：“你那些朋友都不靠谱，以后少跟他们玩。”', prompt: '这句话最值得警惕的是？', options: [choice('她只是吃醋。', false, '吃醋不等于可以切断你的支持系统。'), choice('开始评价并限制你的社交圈，可能是隔离型红旗。', true, '隔离常从“我为你好”的评价开始。'), choice('她眼光比我好。', false, '把判断权交出去会很危险。'), choice('朋友确实没那么重要。', false, '亲密关系不该吞掉所有社会连接。')], overallExplain: '红旗识别要看对方是否试图削弱你的外部支持系统。', tags: ['社交隔离', '控制'] }),
+      node({ id: 'redflag-isolation-2', category: 'redflag', scenario: '对方说：“你跟他们出去，我就没有安全感。”', prompt: '怎么回应？', options: [choice('我可以告诉你大概安排，但我不会因为你的不安切断正常朋友关系。', true, '回应安全感，但守住社交自由。'), choice('那我以后不去了。', false, '这会让隔离要求成功。'), choice('你管太多了。', false, '边界对，但缺少承接。'), choice('你也可以去找朋友啊。', false, '转移话题，没处理核心。')], overallExplain: '健康安全感靠透明和信任，不靠切断他人。', tags: ['安全感', '社交边界'] }),
+      node({ id: 'redflag-isolation-3', category: 'redflag', scenario: '对方追问：“那我和他们谁更重要？”', prompt: '这个问题该如何拆解？', options: [choice('当然你更重要。', false, '看似甜，但接受了错误比较。'), choice('这是两种不同关系，不能用重要性来逼我放弃其中一边。', true, '拒绝二选一框架。'), choice('朋友更重要。', false, '会升级对抗。'), choice('看情况。', false, '模糊会被继续追问。')], overallExplain: '二选一问题常是控制框架，高阶回应要拒绝框架本身。', tags: ['二选一', '框架拆解'] }),
+      node({ id: 'redflag-isolation-4', category: 'redflag', scenario: '对方不满：“你就是不愿意为我改变。”', prompt: '怎么收束最稳？', options: [choice('我愿意为关系调整沟通方式，但不会把正常社交改成被批准才可以。', true, '区分可调整和不可让渡的边界。'), choice('那你别跟我谈。', false, '可能过度决裂。'), choice('我改还不行吗。', false, '核心边界失守。'), choice('你太敏感了。', false, '否定感受会激化。')], overallExplain: '红旗局里，最重要的是把“改变”限定在健康范围内。', tags: ['健康改变', '不可让渡'] }),
+    ],
+  }),
+  challenge({
+    id: 'emotion-tired',
+    category: 'emotion-catch',
+    title: '她说“我真的很累”',
+    subtitle: '低能量情绪如何接住',
+    cover: '/chapters/story-5.jpg',
+    focus: '共情 + 安全',
+    risk: '无效安慰',
+    nodes: [
+      node({ id: 'emotion-tired-1', category: 'emotion-catch', scenario: '她下班后发来：“我真的很累，什么都不想说。”', prompt: '第一步最不该做什么？', options: [choice('立刻讲道理帮她分析。', true, '低能量时分析常会变成负担。'), choice('确认她现在需要空间还是陪伴。', false, '这是好的方向。'), choice('降低回复压力。', false, '这是应该做的。'), choice('先承认她很累。', false, '这是基础共情。')], overallExplain: '情绪接住不是马上解决，而是先降低对方继续表达的成本。', tags: ['低能量', '无效安慰'] }),
+      node({ id: 'emotion-tired-2', category: 'emotion-catch', scenario: '你准备回应。', prompt: '哪句更稳？', options: [choice('别想太多，睡一觉就好了。', false, '常见但无效，会显得轻视。'), choice('听起来今天已经把你耗空了。不想说也没关系，我在这儿。', true, '确认感受，允许沉默。'), choice('发生什么了？快说说。', false, '逼问会增加压力。'), choice('我今天也很累。', false, '容易抢走情绪中心。')], overallExplain: '接住情绪的高阶能力，是允许对方不用马上解释。', tags: ['允许沉默', '陪伴'] }),
+      node({ id: 'emotion-tired-3', category: 'emotion-catch', scenario: '她回：“我怕我说了也是负能量。”', prompt: '怎么接？', options: [choice('不会啊，你别这么想。', false, '否定太快，没接住顾虑。'), choice('你不用把自己整理成好状态才可以找我。可以只说一点点，不想说也可以。', true, '拆掉“必须正能量”的压力。'), choice('那就别说了，早点睡。', false, '可能让她更孤单。'), choice('谁说你负能量我骂谁。', false, '有维护感，但没具体接住。')], overallExplain: '情绪支持要让对方相信：不完美的状态也可以被接住。', tags: ['负能量羞耻', '接纳'] }),
+      node({ id: 'emotion-tired-4', category: 'emotion-catch', scenario: '她开始说今天被领导否定，觉得自己很差。', prompt: '收束这一轮最好的方式是？', options: [choice('你不是很差，你只是今天被消耗得太狠了。先把自己从那句话里抱出来。', true, '重新命名经历，帮她和评价分离。'), choice('领导都那样，别理他。', false, '太泛，支撑不够。'), choice('你要更自信一点。', false, '像任务，不像陪伴。'), choice('那你辞职吧。', false, '解决方案太快。')], overallExplain: '高质量共情会帮助对方把“我很差”和“我被否定了”分开。', tags: ['自我评价', '情绪修复'] }),
+    ],
+  }),
+  challenge({
+    id: 'emotion-silent',
+    category: 'emotion-catch',
+    title: '“算了，不想说了”',
+    subtitle: '对方退回沉默时怎么接',
+    cover: '/chapters/challenge-3.jpg',
+    focus: '共情 + 观察',
+    risk: '逼问升级',
+    nodes: [
+      node({ id: 'emotion-silent-1', category: 'emotion-catch', scenario: '你问她怎么了，她说：“算了，不想说了。”', prompt: '这句话可能代表什么？', options: [choice('她不需要你了。', false, '过度消极解读。'), choice('她可能觉得说了也不会被理解，正在撤退。', true, '这是典型情绪撤退信号。'), choice('她在故意吊你。', false, '贴标签会破坏共情。'), choice('她就是没事。', false, '“算了”通常不是没事。')], overallExplain: '情绪撤退时，重点不是追答案，而是重建表达安全感。', tags: ['撤退', '表达安全'] }),
+      node({ id: 'emotion-silent-2', category: 'emotion-catch', scenario: '你想让她知道你愿意听。', prompt: '怎么说更好？', options: [choice('你不说我怎么知道？', false, '会让她更不想说。'), choice('可以先不说。我刚才可能问得太急了，你只要知道我不是来审你的。', true, '降低压力，并修正互动方式。'), choice('那随便你。', false, '冷处理会加深撤退。'), choice('你每次都这样。', false, '翻旧账会升级。')], overallExplain: '真正的“我在”不是逼她说，而是让她不用防御。', tags: ['不审问', '安全感'] }),
+      node({ id: 'emotion-silent-3', category: 'emotion-catch', scenario: '她说：“我说了你也只会讲道理。”', prompt: '怎么接住这个反馈？', options: [choice('我哪有？', false, '直接否认会证明她的担心。'), choice('这句话我听进去了。那我先不讲道理，只听你站在哪一边。', true, '承认反馈，并调整角色。'), choice('讲道理不是为你好吗？', false, '继续进入她讨厌的模式。'), choice('那你想我怎么做？', false, '可以问，但此刻略像交作业。')], overallExplain: '对方指出你的旧模式时，先暂停辩解，才有机会改变互动。', tags: ['旧模式', '倾听'] }),
+      node({ id: 'emotion-silent-4', category: 'emotion-catch', scenario: '她终于说：“我只是觉得没人站在我这边。”', prompt: '怎么收束最能给安全感？', options: [choice('我在你这边。我们先不判谁对错，先把你受委屈的地方说完。', true, '明确站位，同时不急着审判。'), choice('肯定是他们不对。', false, '盲目站队可能不真实。'), choice('你要客观看问题。', false, '她刚说不想听道理。'), choice('那我能怎么办？', false, '显得无力且把压力还给她。')], overallExplain: '情绪接住的核心，是先陪对方把感受落地，再处理事实。', tags: ['站在这边', '感受优先'] }),
+    ],
+  }),
+  challenge({
+    id: 'refuse-persistent',
+    category: 'refuse',
+    title: '强势追求者拒绝',
+    subtitle: '对方反复约你还制造压力',
+    cover: '/chapters/challenge-5.jpg',
+    focus: '边界 + 安全',
+    risk: '纠缠升级',
+    nodes: [
+      node({ id: 'refuse-persistent-1', category: 'refuse', scenario: '你已经婉拒两次，对方仍说：“给我一次机会嘛，我真的很认真。”', prompt: '第一判断是什么？', options: [choice('认真就应该再给机会。', false, '认真不等于你有义务回应。'), choice('对方没有尊重前两次拒绝，需要更清晰边界。', true, '重复越界时，拒绝要升级清晰度。'), choice('我应该继续委婉。', false, '委婉已经无效。'), choice('直接消失最好。', false, '有时可以断联，但先清晰表达更完整。')], overallExplain: '拒绝练习的核心是让边界可被理解、可被执行。', tags: ['重复越界', '清晰拒绝'] }),
+      node({ id: 'refuse-persistent-2', category: 'refuse', scenario: '你准备正式拒绝。', prompt: '哪句最好？', options: [choice('你很好，但我最近不想谈恋爱。', false, '容易留下以后还有机会。'), choice('谢谢你的认真，但我没有发展关系的意愿；再约几次也不会改变。', true, '明确、不羞辱、不留谈判口。'), choice('我配不上你。', false, '自贬会让对方继续劝。'), choice('你别烦我了。', false, '情绪真实但不够体面。')], overallExplain: '高质量拒绝要避免“不是你，是我”的模糊出口。', tags: ['不留误会', '体面'] }),
+      node({ id: 'refuse-persistent-3', category: 'refuse', scenario: '对方说：“你连试都不试，太残忍了。”', prompt: '如何回应道德压力？', options: [choice('拒绝不是残忍，继续要求我改变决定才是在给我压力。', true, '把压力还原成行为问题。'), choice('对不起对不起。', false, '过度道歉会削弱边界。'), choice('你才残忍。', false, '反击会升级。'), choice('那我们试一周？', false, '违背真实意愿。')], overallExplain: '被说残忍时，不要为了显得善良而牺牲边界。', tags: ['道德压力', '边界维护'] }),
+      node({ id: 'refuse-persistent-4', category: 'refuse', scenario: '对方继续发长消息，你已经不舒服。', prompt: '最后怎么处理？', options: [choice('我已经说明清楚了，后续不再回应同类话题；如果继续施压，我会拉黑。', true, '给最后边界和后果。'), choice('再解释一遍我的想法。', false, '重复解释会进入循环。'), choice('找共同朋友传话羞辱他。', false, '可能扩大冲突。'), choice('假装没看到。', false, '可作为后续策略，但此刻缺少边界收束。')], overallExplain: '拒绝进入纠缠阶段时，需要从解释转为执行边界。', tags: ['执行边界', '拉黑预告'] }),
+    ],
+  }),
+  challenge({
+    id: 'refuse-exit-date',
+    category: 'refuse',
+    title: '约会中途退出',
+    subtitle: '现场不舒服但不想撕破脸',
+    cover: '/chapters/story-2.jpg',
+    focus: '安全 + 表达',
+    risk: '现场压力',
+    nodes: [
+      node({ id: 'refuse-exit-date-1', category: 'refuse', scenario: '约会中，对方多次靠得很近，你已经明显不舒服。', prompt: '第一步该做什么？', options: [choice('忍到结束，避免尴尬。', false, '身体边界不舒服时不该硬撑。'), choice('先拉开距离，并用简短语言说明不舒服。', true, '现场边界先保护自己。'), choice('立刻大骂对方。', false, '若无紧急危险，先清晰表达更稳。'), choice('假装接电话逃走。', false, '可以作为备选，但先看能否明确边界。')], overallExplain: '拒绝练习不只是语言体面，也包括保护自己的现场安全。', tags: ['身体边界', '现场安全'] }),
+      node({ id: 'refuse-exit-date-2', category: 'refuse', scenario: '你想表达边界。', prompt: '哪句最合适？', options: [choice('你能不能别这样？', false, '方向对，但不够具体。'), choice('我不习惯这么近的距离，请你往后一点。', true, '具体、清楚、可执行。'), choice('你是不是对每个人都这样？', false, '容易变成争吵。'), choice('算了没事。', false, '会让边界消失。')], overallExplain: '现场边界要具体到行为，不要只表达情绪。', tags: ['具体边界', '距离'] }),
+      node({ id: 'refuse-exit-date-3', category: 'refuse', scenario: '对方笑：“你也太敏感了吧。”', prompt: '这时怎么回应？', options: [choice('我不是在讨论敏不敏感，我是在说这个距离让我不舒服。', true, '拒绝被贴标签，回到行为边界。'), choice('可能吧，是我问题。', false, '自我否定会让边界失效。'), choice('你才敏感。', false, '反击会升级。'), choice('沉默忍着。', false, '风险继续。')], overallExplain: '当边界被轻视时，要把话题拉回具体行为和你的感受。', tags: ['被轻视', '行为边界'] }),
+      node({ id: 'refuse-exit-date-4', category: 'refuse', scenario: '对方仍然靠近，你决定提前离开。', prompt: '怎么收束更安全？', options: [choice('我现在不舒服，今天先到这里。我自己回去，不用送。', true, '清晰结束，并避免继续被控制行程。'), choice('你真的很恶心。', false, '可能激化现场风险。'), choice('再坐十分钟吧。', false, '继续暴露在不舒服环境中。'), choice('偷偷跑掉不说。', false, '紧急时可以，但当前清晰离开更稳。')], overallExplain: '现场退出要短句、明确、不进入辩论。', tags: ['提前离开', '不辩论'] }),
+    ],
+  }),
+  challenge({
+    id: 'recover-first-message',
+    category: 'recover',
+    title: '复联第一句话',
+    subtitle: '前任没拉黑但很冷淡',
+    cover: '/chapters/story-3.jpg',
+    focus: '共情 + 观察',
+    risk: '需求感过高',
+    nodes: [
+      node({ id: 'recover-first-message-1', category: 'recover', scenario: '分开三周后，对方没有拉黑你，但也没有主动联系。', prompt: '复联前最重要的判断是什么？', options: [choice('没拉黑就是还有机会，马上表白。', false, '没拉黑不等于准备复合。'), choice('先判断分手原因是否已有改变，复联目的要低压力。', true, '复联不是冲结果，而是重新建立安全感。'), choice('先发长文道歉。', false, '长文容易压迫。'), choice('先装偶遇。', false, '策略感太重。')], overallExplain: '挽回复联要先降低需求感，避免把对方拖回旧压力。', tags: ['复联准备', '低压力'] }),
+      node({ id: 'recover-first-message-2', category: 'recover', scenario: '你准备发第一句。', prompt: '哪句更适合？', options: [choice('我真的不能没有你。', false, '需求感过高。'), choice('那家店出了新菜单，想到你可能会感兴趣。只是分享一下，不打扰你。', true, '轻连接、无索取，适合作为复联开口。'), choice('你最近还好吗？我有很多话想说。', false, '压力偏高。'), choice('我们能不能重新开始？', false, '太早谈结果。')], overallExplain: '复联第一句最好是轻量、具体、不给对方必须回应的压力。', tags: ['轻连接', '无索取'] }),
+      node({ id: 'recover-first-message-3', category: 'recover', scenario: '对方回：“嗯，谢谢。”', prompt: '怎么判断这条回复？', options: [choice('她很冷，没戏。', false, '不能只看一条短回复。'), choice('这是礼貌回应，还不能推进，需要继续保持低压力。', true, '短回复说明窗口小，不适合立刻深聊。'), choice('她回了就说明想复合。', false, '过度解读。'), choice('马上追问她最近感情状态。', false, '会越界。')], overallExplain: '复联初期要尊重小窗口，不要把礼貌回应当成邀请。', tags: ['窗口判断', '礼貌回应'] }),
+      node({ id: 'recover-first-message-4', category: 'recover', scenario: '你想继续但不想压迫。', prompt: '下一句怎么收束？', options: [choice('不客气。你忙你的，看到这个就想起你之前很爱研究菜单。祝你今天顺利。', true, '温和收束，留下轻松印象。'), choice('你就只回这两个字吗？', false, '立刻施压。'), choice('我们聊聊以前吧。', false, '太早进入重话题。'), choice('你是不是已经不在乎我了？', false, '强烈需求感。')], overallExplain: '复联不是一轮拿结果，而是慢慢修复对方对你的压力预期。', tags: ['温和收束', '压力预期'] }),
+    ],
+  }),
+  challenge({
+    id: 'recover-past-question',
+    category: 'recover',
+    title: '“现在说这些有什么意义”',
+    subtitle: '前任质疑你的改变',
+    cover: '/chapters/story-1.jpg',
+    focus: '共情 + 安全',
+    risk: '急着证明',
+    nodes: [
+      node({ id: 'recover-past-question-1', category: 'recover', scenario: '你表达了自己最近的反思，对方回：“现在说这些有什么意义？”', prompt: '这句话背后更可能是什么？', options: [choice('她完全不想听。', false, '可能有防御，但也在给你回应窗口。'), choice('她在质疑改变是否真实，也在保护自己不再受伤。', true, '挽回里要先理解防御。'), choice('她故意刁难。', false, '贴标签会让你失去共情。'), choice('她想让我继续求。', false, '过度策略化。')], overallExplain: '前任的质疑常是自我保护，不是简单拒绝。', tags: ['防御', '改变可信度'] }),
+      node({ id: 'recover-past-question-2', category: 'recover', scenario: '你想回应这个质疑。', prompt: '哪句更稳？', options: [choice('当然有意义，因为我还爱你。', false, '又把重点放回你的需求。'), choice('你这样问很正常。以前我让你失望过，所以你不需要马上相信我。', true, '承认对方不信任的合理性。'), choice('你为什么总是否定我？', false, '会复刻旧冲突。'), choice('那我不说了。', false, '回避会让改变更不可信。')], overallExplain: '挽回时最有力量的不是证明，而是允许对方暂时不信。', tags: ['允许不信', '承认伤害'] }),
+      node({ id: 'recover-past-question-3', category: 'recover', scenario: '对方说：“你以前也是这么保证的。”', prompt: '下一步怎么接？', options: [choice('这次真的不一样。', false, '空口保证可信度低。'), choice('所以我不想再用保证让你承担风险。我会说具体改了什么，也接受你慢慢看。', true, '从保证转向可观察行动。'), choice('你能不能别老提以前？', false, '否定她的经验。'), choice('那你到底要我怎样？', false, '像把压力丢给她。')], overallExplain: '重建信任靠可观察行为，不靠更用力的承诺。', tags: ['可观察行动', '信任重建'] }),
+      node({ id: 'recover-past-question-4', category: 'recover', scenario: '对方没有继续反驳，只回：“你说吧。”', prompt: '这时怎么收束表达？', options: [choice('我先说一件具体改变：先复述你受伤的点，再谈我的想法。你不用马上回应。', true, '具体、可验证、低压力。'), choice('我会把所有都改掉。', false, '太大太空。'), choice('你愿意回来吗？', false, '太快要结果。'), choice('我真的每天都在想你。', false, '仍是自我情绪。')], overallExplain: '复联里的高阶表达要小、具体、可验证，并允许对方不立刻给答案。', tags: ['具体改变', '低压力'] }),
+    ],
+  }),
+];
+
+export function getThemeBattleChallenges(category: QuizCategory): ThemeBattleChallenge[] {
+  return THEME_BATTLE_CHALLENGES.filter(challengeItem => challengeItem.category === category);
+}
+
+export function getThemeBattleQuestionCount(category: QuizCategory): number {
+  return getThemeBattleChallenges(category).reduce((sum, challengeItem) => sum + challengeItem.nodes.length, 0);
+}

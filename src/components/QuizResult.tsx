@@ -11,22 +11,31 @@ interface Props {
   correct: number;
   wrong: Question[];
   combo: number;
+  variant?: 'quiz' | 'themeBattle';
   growth?: MicroGrowthResult | null;
   onRetry: () => void;
   onExit: () => void;
   onReviewWrong?: () => void;
 }
 
-export function QuizResult({ total, correct, wrong, combo, growth, onRetry, onExit, onReviewWrong }: Props) {
+export function QuizResult({ total, correct, wrong, combo, variant = 'quiz', growth, onRetry, onExit, onReviewWrong }: Props) {
+  const isThemeBattle = variant === 'themeBattle';
   const pct = total > 0 ? Math.round((correct / total) * 100) : 0;
   const tier = pct >= 90 ? 'perfect' : pct >= 70 ? 'good' : pct >= 50 ? 'ok' : 'bad';
-  const tierData = {
+  const quizTierData = {
     perfect: { emoji: '🏆', title: '手感绝了！', sub: '这波操作教科书级', color: '#FFD93D' },
     good:    { emoji: '✨', title: '稳中有进',   sub: '再刷两轮就能封神', color: '#4ECDC4' },
     ok:      { emoji: '🌱', title: '在路上',     sub: '错的那几道值得回看', color: '#B8A4E8' },
     bad:     { emoji: '💪', title: '没关系，这才是值得练的',
                sub: '每错一题就长一寸认知', color: '#FF8A80' },
-  }[tier];
+  };
+  const battleTierData = {
+    perfect: { emoji: '🏆', title: '副本完美通关', sub: '你把这段局面稳稳接住了', color: '#FFD93D' },
+    good:    { emoji: '✨', title: '副本成功通关', sub: '关键回合处理得很稳', color: '#4ECDC4' },
+    ok:      { emoji: '🌙', title: '副本勉强通关', sub: '有几处风险选择值得回看', color: '#B8A4E8' },
+    bad:     { emoji: '🧭', title: '副本暂未通关', sub: '先复盘这段局势，再重演一遍', color: '#FF8A80' },
+  };
+  const tierData = (isThemeBattle ? battleTierData : quizTierData)[tier];
 
   return (
     <motion.div
@@ -72,7 +81,7 @@ export function QuizResult({ total, correct, wrong, combo, growth, onRetry, onEx
             flexDirection: 'column', alignItems: 'center', justifyContent: 'center',
           }}>
             <div style={{ color: '#f5efe8', fontSize: 44, fontWeight: 800, lineHeight: 1 }}>{pct}</div>
-            <div style={{ color: 'rgba(245,239,232,0.55)', fontSize: 12, marginTop: 4 }}>正确率</div>
+            <div style={{ color: 'rgba(245,239,232,0.55)', fontSize: 12, marginTop: 4 }}>{isThemeBattle ? '通关指数' : '正确率'}</div>
           </div>
         </motion.div>
 
@@ -82,9 +91,9 @@ export function QuizResult({ total, correct, wrong, combo, growth, onRetry, onEx
           className="flex gap-3"
           style={{ width: '100%', maxWidth: 400 }}
         >
-          <Stat label="答对" val={`${correct}/${total}`} color="#4ECDC4" />
-          <Stat label="最高连击" val={`${combo}🔥`} color="#FF8A80" />
-          <Stat label="错题" val={`${wrong.length}`} color="#FFB080" />
+          <Stat label={isThemeBattle ? '有效选择' : '答对'} val={`${correct}/${total}`} color="#4ECDC4" />
+          <Stat label={isThemeBattle ? '连续稳住' : '最高连击'} val={`${combo}🔥`} color="#FF8A80" />
+          <Stat label={isThemeBattle ? '风险选择' : '错题'} val={`${wrong.length}`} color="#FFB080" />
         </motion.div>
 
         {growth && (
@@ -119,13 +128,13 @@ export function QuizResult({ total, correct, wrong, combo, growth, onRetry, onEx
             }}
           >
             <div style={{ color: '#FF8A80', fontSize: 12, fontWeight: 700, marginBottom: 8 }}>
-              本次错题 · 已自动加入错题本
+              {isThemeBattle ? '本次风险选择 · 建议重演副本' : '本次错题 · 已自动加入错题本'}
             </div>
             {wrong.slice(0, 3).map(q => (
               <div key={q.id} style={{
                 color: 'rgba(245,239,232,0.75)', fontSize: 12, lineHeight: 1.6,
                 padding: '6px 0', borderTop: '1px dashed rgba(255,255,255,0.08)',
-              }}>• {q.prompt.length > 50 ? q.prompt.slice(0, 50) + '...' : q.prompt}</div>
+              }}>• {(isThemeBattle && q.scenario ? q.scenario : q.prompt).length > 50 ? (isThemeBattle && q.scenario ? q.scenario : q.prompt).slice(0, 50) + '...' : (isThemeBattle && q.scenario ? q.scenario : q.prompt)}</div>
             ))}
             {wrong.length > 3 && (
               <div style={{ color: 'rgba(245,239,232,0.5)', fontSize: 11, marginTop: 6 }}>...还有 {wrong.length - 3} 道</div>
@@ -151,7 +160,7 @@ export function QuizResult({ total, correct, wrong, combo, growth, onRetry, onEx
               border: '1px solid rgba(255,255,255,0.12)', cursor: 'pointer',
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
             }}
-          ><RotateCcw size={16} /> 再来一轮</motion.button>
+          ><RotateCcw size={16} /> {isThemeBattle ? '重演副本' : '再来一轮'}</motion.button>
           {wrong.length > 0 && onReviewWrong && (
             <motion.button
               whileTap={{ scale: 0.97 }} onClick={onReviewWrong}
