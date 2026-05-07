@@ -2,7 +2,7 @@
  * 答题结算页
  */
 import { motion } from 'motion/react';
-import { RotateCcw, Home, BookOpen } from 'lucide-react';
+import { RotateCcw, Home } from 'lucide-react';
 import type { Question } from '../services/quiz';
 import type { MicroGrowthResult } from '../services/microGrowth';
 
@@ -15,10 +15,9 @@ interface Props {
   growth?: MicroGrowthResult | null;
   onRetry: () => void;
   onExit: () => void;
-  onReviewWrong?: () => void;
 }
 
-export function QuizResult({ total, correct, wrong, combo, variant = 'quiz', growth, onRetry, onExit, onReviewWrong }: Props) {
+export function QuizResult({ total, correct, wrong, combo, variant = 'quiz', growth, onRetry, onExit }: Props) {
   const isThemeBattle = variant === 'themeBattle';
   const pct = total > 0 ? Math.round((correct / total) * 100) : 0;
   const tier = pct >= 90 ? 'perfect' : pct >= 70 ? 'good' : pct >= 50 ? 'ok' : 'bad';
@@ -161,18 +160,6 @@ export function QuizResult({ total, correct, wrong, combo, variant = 'quiz', gro
               display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
             }}
           ><RotateCcw size={16} /> {isThemeBattle ? '重演副本' : '再来一轮'}</motion.button>
-          {wrong.length > 0 && onReviewWrong && (
-            <motion.button
-              whileTap={{ scale: 0.97 }} onClick={onReviewWrong}
-              style={{
-                flex: 1, height: 48, borderRadius: 14,
-                background: 'linear-gradient(135deg,#FFB080,#FF8A80)',
-                color: '#fff', fontSize: 14, fontWeight: 700,
-                border: 'none', cursor: 'pointer',
-                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 6,
-              }}
-            ><BookOpen size={16} /> 只刷错题</motion.button>
-          )}
           <motion.button
             whileTap={{ scale: 0.97 }} onClick={onExit}
             style={{

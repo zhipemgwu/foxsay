@@ -355,9 +355,6 @@ export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps =
           if (mode.retryQs) setMode({ kind: 'quiz', questions: mode.retryQs, title: mode.retryTitle, sessionKind: mode.retryKind });
         }}
         onExit={() => setMode({ kind: 'hub' })}
-        onReviewWrong={mode.wrong.length > 0 && mode.retryKind !== 'advanced' ? () => {
-          setMode({ kind: 'quiz', questions: mode.wrong, title: '错题重刷', sessionKind: 'practice' });
-        } : undefined}
       />
     );
   }
