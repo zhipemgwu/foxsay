@@ -1,7 +1,7 @@
-import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
 import { motion } from 'motion/react';
 import { ArrowRight, ChevronLeft, Send } from 'lucide-react';
-import { CATEGORY_META, touchStreak, type Question } from '../services/quiz';
+import { CATEGORY_META, shuffle, touchStreak, type Question } from '../services/quiz';
 import type { ThemeBattleChallenge } from '../data/themeBattleChallenges';
 import type { QuizSessionResult } from './QuizSession';
 
@@ -31,7 +31,8 @@ export function ThemeBattleSession({ challenge, onExit, onFinish }: ThemeBattleS
   const [isFinishing, setIsFinishing] = useState(false);
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const finishTimerRef = useRef<number | null>(null);
-  const currentScene = challenge.nodes[sceneIndex];
+  const battleNodes = useMemo(() => shuffleThemeBattleNodes(challenge.nodes), [challenge]);
+  const currentScene = battleNodes[sceneIndex];
   const category = CATEGORY_META[challenge.category];
   const chatProfile = getChatProfile(challenge);
 
@@ -56,7 +57,7 @@ export function ThemeBattleSession({ challenge, onExit, onFinish }: ThemeBattleS
       combo: getMaxCombo(records),
       attempts,
       completed,
-      plannedTotal: challenge.nodes.length,
+      plannedTotal: battleNodes.length,
     };
   };
 
@@ -76,7 +77,7 @@ export function ThemeBattleSession({ challenge, onExit, onFinish }: ThemeBattleS
     setHistory(nextHistory);
     touchStreak();
 
-    if (sceneIndex + 1 >= challenge.nodes.length) {
+    if (sceneIndex + 1 >= battleNodes.length) {
       setIsFinishing(true);
       finishTimerRef.current = window.setTimeout(() => {
         onFinish(buildResult(true, nextHistory));
@@ -188,6 +189,13 @@ export function ThemeBattleSession({ challenge, onExit, onFinish }: ThemeBattleS
       )}
     </motion.div>
   );
+}
+
+function shuffleThemeBattleNodes(nodes: Question[]): Question[] {
+  return nodes.map(question => ({
+    ...question,
+    options: question.options ? shuffle(question.options) : question.options,
+  }));
 }
 
 function SceneContext({ question }: { question: Question }) {
