@@ -100,6 +100,7 @@ export function ThemeBattleSession({ challenge, onExit, onFinish }: ThemeBattleS
   const activeDraft = drafts[draftIndex] ?? drafts[0];
   const previousRecords = history.slice(0, sceneIndex);
   const currentRecord = history.find(record => record.question.id === currentScene.id);
+  const currentIncomingMessage = getIncomingMessage(currentScene);
 
   return (
     <motion.div
@@ -123,13 +124,16 @@ export function ThemeBattleSession({ challenge, onExit, onFinish }: ThemeBattleS
       <div ref={scrollRef} style={chatBodyStyle}>
         <SystemMessage text={`${CATEGORY_META[challenge.category].label} · ${challenge.title}`} />
 
-        {previousRecords.map((record) => (
-          <div key={record.question.id} style={sceneBlockStyle}>
-            <SceneContext question={record.question} />
-            <IncomingBubble profile={chatProfile} text={getIncomingMessage(record.question)} />
-            <OutgoingBubble text={getSelectedText(record)} />
-          </div>
-        ))}
+        {previousRecords.map((record) => {
+          const incomingMessage = getIncomingMessage(record.question);
+          return (
+            <div key={record.question.id} style={sceneBlockStyle}>
+              <SceneContext question={record.question} />
+              {incomingMessage && <IncomingBubble profile={chatProfile} text={incomingMessage} />}
+              <OutgoingBubble text={getSelectedText(record)} />
+            </div>
+          );
+        })}
 
         <motion.div
           key={currentScene.id}
@@ -139,7 +143,7 @@ export function ThemeBattleSession({ challenge, onExit, onFinish }: ThemeBattleS
           style={sceneBlockStyle}
         >
           <SceneContext question={currentScene} />
-          <IncomingBubble profile={chatProfile} text={getIncomingMessage(currentScene)} />
+          {currentIncomingMessage && <IncomingBubble profile={chatProfile} text={currentIncomingMessage} />}
           {currentRecord && (
             <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
               <OutgoingBubble text={getSelectedText(currentRecord)} />
@@ -239,10 +243,7 @@ function getIncomingMessage(question: Question): string {
   const scenario = question.scenario || '';
   const quoted = scenario.match(/“([^”]+)”/);
   if (quoted?.[1]) return quoted[1];
-  if (/判断|风险|信号|透露|避免/.test(question.prompt)) return '你先在心里过了一遍这段局势。';
-  if (/收束|最后/.test(question.prompt)) return '这段对话来到收尾处。';
-  if (/第一句|回应|怎么接|哪句/.test(question.prompt)) return '输入框停在这里，等你决定怎么开口。';
-  return '轮到你回复了。';
+  return '';
 }
 
 function getSceneContext(question: Question): string {
