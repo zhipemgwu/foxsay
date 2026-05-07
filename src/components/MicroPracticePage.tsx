@@ -38,6 +38,29 @@ const FREE_POOL_COUNT = 10;
 const FREE_MOCK_DAILY_KEY = 'foxsay:quiz_mock_free_daily';
 const MICRO_TRIAL_EXPIRE_KEY = 'foxsay:micro_week_trial_expire_at';
 
+const getPracticeScenarioKey = (q: Question) => {
+  const base = (q.scenario || q.prompt || q.id).split('；')[0].trim();
+  return base.replace(/\s+/g, '');
+};
+
+const pickUniqueScenarioQuestions = (questions: Question[], limit: number): Question[] => {
+  const unique: Question[] = [];
+  const overflow: Question[] = [];
+  const seen = new Set<string>();
+
+  for (const question of shuffle(questions)) {
+    const key = getPracticeScenarioKey(question);
+    if (seen.has(key)) {
+      overflow.push(question);
+      continue;
+    }
+    seen.add(key);
+    unique.push(question);
+  }
+
+  return [...unique, ...overflow].slice(0, limit);
+};
+
 type Mode =
   | { kind: 'hub' }
   | { kind: 'theme-battle' }
@@ -103,7 +126,7 @@ export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps =
   const startDaily = () => {
     const unanswered = dailyPicks.filter(p => !p.answered).map(p => p.q);
     const pool = unanswered.length > 0 ? unanswered : dailyPicks.map(p => p.q);
-    startSession(pool, '今日推荐');
+    startSession(pickUniqueScenarioQuestions(pool, pool.length), '今日推荐');
   };
 
   const startCategory = (cat: QuizCategory) => {
@@ -118,7 +141,7 @@ export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps =
       setShowPaywall(true);
       return;
     }
-    startSession(shuffle(qs).slice(0, 10), hasMicroVip ? CATEGORY_META[cat].label : `${CATEGORY_META[cat].label} · 免费`);
+    startSession(pickUniqueScenarioQuestions(qs, 10), hasMicroVip ? CATEGORY_META[cat].label : `${CATEGORY_META[cat].label} · 免费`);
   };
 
   const startWrongBook = () => {
@@ -162,18 +185,49 @@ export function MicroPracticePage({ onPracticeAction }: MicroPracticePageProps =
     const byCat = new Map<QuizCategory, Question[]>();
     cats.forEach(c => byCat.set(c, shuffle(bank.filter(q => q.category === c))));
     const picked: Question[] = [];
+    const pickedIds = new Set<string>();
+    const seenScenarios = new Set<string>();
+    const overflow: Question[] = [];
+    const overflowIds = new Set<string>();
     const base = Math.floor(total / cats.length);
+
+    const holdForFallback = (question: Question) => {
+      if (pickedIds.has(question.id) || overflowIds.has(question.id)) return;
+      overflowIds.add(question.id);
+      overflow.push(question);
+    };
+
+    const addQuestions = (candidates: Question[], maxCount = total, allowRepeatedScenario = false) => {
+      let added = 0;
+      for (const question of candidates) {
+        if (picked.length >= total || added >= maxCount) break;
+        if (pickedIds.has(question.id)) continue;
+        const key = getPracticeScenarioKey(question);
+        if (!allowRepeatedScenario && seenScenarios.has(key)) {
+          holdForFallback(question);
+          continue;
+        }
+        pickedIds.add(question.id);
+        seenScenarios.add(key);
+        picked.push(question);
+        added += 1;
+      }
+    };
+
     // 第一轮：每类先取 base 道
     cats.forEach(c => {
       const arr = byCat.get(c)!;
-      picked.push(...arr.splice(0, Math.min(base, arr.length)));
+      addQuestions(arr, Math.min(base, arr.length));
+      byCat.set(c, arr.filter(q => !pickedIds.has(q.id)));
     });
-    // 第二轮：在剩余的题里随机补齐到 total
+
+    // 第二轮：在剩余的题里优先用没出现过的基础情境补齐
     const rest = shuffle(cats.flatMap(c => byCat.get(c)!));
-    while (picked.length < total && rest.length > 0) {
-      picked.push(rest.shift()!);
-    }
-    return shuffle(picked);
+    addQuestions(rest);
+
+    // 题量不足时再回退到重复情境，保证模拟考仍可凑满 50 题
+    addQuestions(overflow, total, true);
+    return picked.slice(0, total);
   };
 
   const startMock = () => {
