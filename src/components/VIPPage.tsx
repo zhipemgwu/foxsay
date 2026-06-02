@@ -91,7 +91,7 @@ const benefitModules = [
       { label: '自定义AI人设', lite: false, pro: true, proplus: true },
       { label: '快速响应免排队', lite: false, pro: true, proplus: true },
       { label: '话术推荐次数', lite: '10次/日', pro: '50次/日', proplus: '100次/日' },
-      { label: 'AI 辅助键盘', lite: false, pro: false, proplus: true },
+      { label: '尼克大叔回复建议', lite: '10次/日', pro: '50次/日', proplus: '100次/日' },
     ],
   },
 ];

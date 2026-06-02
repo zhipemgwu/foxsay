@@ -162,7 +162,7 @@ export function SubscriptionManageSheet({ open, onClose, onUpgrade }: Props) {
                 </div>
                 <p style={{ color: '#f5efe8', fontSize: 14, fontWeight: 700 }}>你还不是会员</p>
                 <p style={{ color: 'rgba(245,239,232,0.5)', fontSize: 12, marginTop: 4, marginBottom: 16 }}>
-                  开通后解锁 AI 键盘 / 深度诊断 / 专属导师 等全部功能
+                  开通后解锁回复建议 / 深度诊断 / 专属导师 / 高级副本等功能
                 </p>
                 <motion.button whileTap={{ scale: 0.98 }}
                   onClick={() => { onClose(); setTimeout(() => sub.open('manage_empty'), 200); }}

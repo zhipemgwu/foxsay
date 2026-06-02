@@ -1,9 +1,26 @@
-import { useEffect, useMemo, useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { motion } from 'motion/react';
 import { ArrowRight, ChevronLeft, Send } from 'lucide-react';
 import { CATEGORY_META, shuffle, touchStreak, type Question } from '../services/quiz';
-import type { ThemeBattleChallenge } from '../data/themeBattleChallenges';
+import { type ThemeBattleChallenge } from '../data/themeBattleChallenges';
 import type { QuizSessionResult } from './QuizSession';
+
+type BattleReactionTone = 'steady' | 'attack' | 'appease' | 'avoid' | 'pressure';
+
+interface BattleMoodState {
+  trust: number;
+  tension: number;
+  warmth: number;
+}
+
+interface ChoiceImpact {
+  trust: number;
+  tension: number;
+  warmth: number;
+  tone: BattleReactionTone;
+}
+
+const INITIAL_BATTLE_STATE: BattleMoodState = { trust: 50, tension: 34, warmth: 46 };
 
 interface ThemeBattleSessionProps {
   challenge: ThemeBattleChallenge;
@@ -16,7 +33,27 @@ interface SceneChoiceRecord {
   question: Question;
   selectedIndex: number;
   correct: boolean;
+  stateAfter: BattleMoodState;
+  reactionTone: BattleReactionTone;
+  followUp?: SceneFollowUp;
 }
+
+interface SceneFollowUp {
+  context: string;
+  text?: string;
+  tone: BattleReactionTone;
+}
+
+const CHAT_NODE_MERGES: Record<string, string> = {
+  'ambiguous-late-night-1': 'ambiguous-late-night-2',
+  'emotion-tired-1': 'emotion-tired-2',
+  'emotion-silent-1': 'emotion-silent-2',
+  'refuse-persistent-1': 'refuse-persistent-2',
+  'refuse-exit-date-1': 'refuse-exit-date-2',
+  'recover-first-message-1': 'recover-first-message-2',
+  'recover-past-question-1': 'recover-past-question-2',
+  'love-cold-war-1': 'love-cold-war-2',
+};
 
 interface ChatProfile {
   name: string;
@@ -29,12 +66,22 @@ export function ThemeBattleSession({ challenge, onExit, onFinish }: ThemeBattleS
   const [draftIndex, setDraftIndex] = useState(0);
   const [history, setHistory] = useState<SceneChoiceRecord[]>([]);
   const [isFinishing, setIsFinishing] = useState(false);
+  const [battleNodes, setBattleNodes] = useState<Question[]>(() => buildThemeBattleRunNodes(challenge));
   const scrollRef = useRef<HTMLDivElement | null>(null);
   const finishTimerRef = useRef<number | null>(null);
-  const battleNodes = useMemo(() => shuffleThemeBattleNodes(challenge.nodes), [challenge]);
   const currentScene = battleNodes[sceneIndex];
+  const currentBattleState = getCurrentBattleState(history);
   const category = CATEGORY_META[challenge.category];
   const chatProfile = getChatProfile(challenge);
+
+  useEffect(() => {
+    if (finishTimerRef.current) window.clearTimeout(finishTimerRef.current);
+    setBattleNodes(buildThemeBattleRunNodes(challenge));
+    setSceneIndex(0);
+    setDraftIndex(0);
+    setHistory([]);
+    setIsFinishing(false);
+  }, [challenge]);
 
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
@@ -73,7 +120,18 @@ export function ThemeBattleSession({ challenge, onExit, onFinish }: ThemeBattleS
     if (isFinishing || !currentScene) return;
     const option = currentScene.options?.[index];
     if (!option) return;
-    const nextHistory = [...history, { question: currentScene, selectedIndex: index, correct: option.isCorrect }];
+    const impact = getChoiceImpact(currentScene, option);
+    const nextState = applyBattleImpact(currentBattleState, impact);
+    const record: SceneChoiceRecord = {
+      question: currentScene,
+      selectedIndex: index,
+      correct: option.isCorrect,
+      stateAfter: nextState,
+      reactionTone: impact.tone,
+    };
+    const nextScene = battleNodes[sceneIndex + 1];
+    const followUp = nextScene ? buildSceneFollowUp(nextScene, record, history) : undefined;
+    const nextHistory = [...history, followUp ? { ...record, followUp } : record];
     setHistory(nextHistory);
     touchStreak();
 
@@ -101,7 +159,8 @@ export function ThemeBattleSession({ challenge, onExit, onFinish }: ThemeBattleS
   const activeDraft = drafts[draftIndex] ?? drafts[0];
   const previousRecords = history.slice(0, sceneIndex);
   const currentRecord = history.find(record => record.question.id === currentScene.id);
-  const currentIncomingMessage = getIncomingMessage(currentScene);
+  const currentIncomingMessage = sceneIndex === 0 ? getBaseIncomingMessage(currentScene) : '';
+  const shouldShowCurrentSceneBlock = sceneIndex === 0 || !!currentRecord;
 
   return (
     <motion.div
@@ -118,46 +177,50 @@ export function ThemeBattleSession({ challenge, onExit, onFinish }: ThemeBattleS
         <img src={chatProfile.avatar} alt={chatProfile.name} style={headerAvatarStyle} />
         <div style={{ flex: 1, minWidth: 0 }}>
           <div style={headerNameStyle}>{chatProfile.name}</div>
-          <div style={headerStatusStyle}>{chatProfile.status}</div>
+          <div style={headerStatusStyle}>{getBattleStateStatus(currentBattleState, chatProfile.status)}</div>
         </div>
       </div>
 
       <div ref={scrollRef} style={chatBodyStyle}>
         <SystemMessage text={`${CATEGORY_META[challenge.category].label} · ${challenge.title}`} />
 
-        {previousRecords.map((record) => {
-          const incomingMessage = getIncomingMessage(record.question);
+        {previousRecords.map((record, index) => {
+          const openingMessage = index === 0 ? getBaseIncomingMessage(record.question) : '';
           return (
             <div key={record.question.id} style={sceneBlockStyle}>
-              <SceneContext question={record.question} />
-              {incomingMessage && <IncomingBubble profile={chatProfile} text={incomingMessage} />}
+              {index === 0 && <SceneContext question={record.question} />}
+              {openingMessage && <IncomingBubble profile={chatProfile} text={openingMessage} />}
               <OutgoingBubble text={getSelectedText(record)} />
+              {record.followUp?.context && <SystemMessage text={record.followUp.context} />}
+              {record.followUp?.text && <IncomingBubble profile={chatProfile} text={record.followUp.text} tone={record.followUp.tone} />}
             </div>
           );
         })}
 
-        <motion.div
-          key={currentScene.id}
-          initial={{ opacity: 0, y: 12 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.24 }}
-          style={sceneBlockStyle}
-        >
-          <SceneContext question={currentScene} />
-          {currentIncomingMessage && <IncomingBubble profile={chatProfile} text={currentIncomingMessage} />}
-          {currentRecord && (
-            <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
-              <OutgoingBubble text={getSelectedText(currentRecord)} />
-            </motion.div>
-          )}
-        </motion.div>
+        {shouldShowCurrentSceneBlock && (
+          <motion.div
+            key={currentScene.id}
+            initial={{ opacity: 0, y: 12 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.24 }}
+            style={sceneBlockStyle}
+          >
+            {sceneIndex === 0 && <SceneContext question={currentScene} />}
+            {currentIncomingMessage && <IncomingBubble profile={chatProfile} text={currentIncomingMessage} />}
+            {currentRecord && (
+              <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }}>
+                <OutgoingBubble text={getSelectedText(currentRecord)} />
+              </motion.div>
+            )}
+          </motion.div>
+        )}
       </div>
 
       {!isFinishing && !currentRecord && (
         <div style={composerPanelStyle}>
           <div style={{ display: 'grid', gap: 10 }}>
             <div style={composerMetaStyle}>
-              <span>正在输入</span>
+              <span>{getComposerHint(currentBattleState)}</span>
               <div aria-hidden="true" style={draftDotsStyle}>
                 {drafts.map((_, index) => (
                   <span key={index} style={draftDotStyle(index === draftIndex, category.color)} />
@@ -191,11 +254,89 @@ export function ThemeBattleSession({ challenge, onExit, onFinish }: ThemeBattleS
   );
 }
 
-function shuffleThemeBattleNodes(nodes: Question[]): Question[] {
-  return nodes.map(question => ({
+function getCurrentBattleState(records: SceneChoiceRecord[]): BattleMoodState {
+  return records[records.length - 1]?.stateAfter || INITIAL_BATTLE_STATE;
+}
+
+function applyBattleImpact(state: BattleMoodState, impact: ChoiceImpact): BattleMoodState {
+  return {
+    trust: clampMood(state.trust + impact.trust),
+    tension: clampMood(state.tension + impact.tension),
+    warmth: clampMood(state.warmth + impact.warmth),
+  };
+}
+
+function clampMood(value: number): number {
+  return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function getChoiceImpact(question: Question, option: NonNullable<Question['options']>[number]): ChoiceImpact {
+  const text = `${option.text} ${option.explain || ''} ${question.prompt || ''} ${question.tags?.join(' ') || ''}`;
+  if (option.isCorrect) {
+    return { trust: 12, tension: -10, warmth: 8, tone: 'steady' };
+  }
+  if (/攻击|指责|反击|威胁|审问|逼|必须|离谱|有病|烦|冷血|残忍|不欠|随便你|爱找不找|别再/.test(text)) {
+    return { trust: -12, tension: 16, warmth: -9, tone: 'attack' };
+  }
+  if (/讨好|过度道歉|道歉|求|证明|保证|让步|顺从|马上|现在过去|给你看|都听你|我改|补偿|借你|红包/.test(text)) {
+    return { trust: -9, tension: 8, warmth: -3, tone: 'appease' };
+  }
+  if (/回避|沉默|假装|算了|不回|不说|没看到|早点睡|看情况|下次|随便|慢慢看|不打扰/.test(text)) {
+    return { trust: -7, tension: 10, warmth: -7, tone: 'avoid' };
+  }
+  return { trust: -8, tension: 12, warmth: -5, tone: 'pressure' };
+}
+
+function getBattleStateStatus(state: BattleMoodState, fallback: string): string {
+  if (state.tension >= 72) return '防备明显升高';
+  if (state.trust <= 32) return '信任正在变低';
+  if (state.trust >= 66 && state.warmth >= 56) return '愿意继续聊';
+  if (state.warmth >= 62) return '情绪开始放松';
+  if (state.tension <= 26) return '语气缓和中';
+  return fallback;
+}
+
+function getComposerHint(state: BattleMoodState): string {
+  if (state.tension >= 70) return '对方有点防备，下一句要降压';
+  if (state.trust <= 34) return '先别急着推进，把话说真实';
+  if (state.warmth >= 62) return '窗口打开了，轻轻推进';
+  return '正在输入';
+}
+
+function buildThemeBattleRunNodes(challenge: ThemeBattleChallenge): Question[] {
+  return mergeChatBattleNodes(challenge.nodes || []).map(shuffleThemeBattleOptions);
+}
+
+function mergeChatBattleNodes(nodes: Question[]): Question[] {
+  const nodeById = new Map(nodes.map(question => [question.id, question]));
+  const consumedIds = new Set<string>();
+  const mergedNodes: Question[] = [];
+
+  for (const question of nodes) {
+    if (consumedIds.has(question.id)) continue;
+    const replyNodeId = CHAT_NODE_MERGES[question.id];
+    const replyNode = replyNodeId ? nodeById.get(replyNodeId) : undefined;
+    if (replyNode) {
+      consumedIds.add(replyNode.id);
+      mergedNodes.push({
+        ...question,
+        prompt: replyNode.prompt,
+        options: replyNode.options,
+        overallExplain: replyNode.overallExplain,
+        tags: Array.from(new Set([...(question.tags || []), ...(replyNode.tags || [])])),
+      });
+      continue;
+    }
+    mergedNodes.push(question);
+  }
+  return mergedNodes;
+}
+
+function shuffleThemeBattleOptions(question: Question): Question {
+  return {
     ...question,
     options: question.options ? shuffle(question.options) : question.options,
-  }));
+  };
 }
 
 function SceneContext({ question }: { question: Question }) {
@@ -204,13 +345,13 @@ function SceneContext({ question }: { question: Question }) {
   return <SystemMessage text={context} />;
 }
 
-function IncomingBubble({ profile, text }: { profile: ChatProfile; text: string }) {
+function IncomingBubble({ profile, text, tone = 'steady' }: { profile: ChatProfile; text: string; tone?: BattleReactionTone }) {
   return (
     <div style={incomingRowStyle}>
       <img src={profile.avatar} alt={profile.name} style={messageAvatarStyle} />
       <div style={{ display: 'grid', gap: 4, maxWidth: '78%' }}>
         <div style={messageNameStyle}>{profile.name}</div>
-        <div style={incomingBubbleStyle}>{text}</div>
+        <div style={incomingBubbleStyle(tone)}>{text}</div>
       </div>
     </div>
   );
@@ -247,10 +388,50 @@ function getSelectedText(record: SceneChoiceRecord): string {
   return record.question.options?.[record.selectedIndex]?.text || '';
 }
 
-function getIncomingMessage(question: Question): string {
+function buildSceneFollowUp(nextQuestion: Question, record: SceneChoiceRecord, previousRecords: SceneChoiceRecord[]): SceneFollowUp | undefined {
+  const previousReplyText = previousRecords[previousRecords.length - 1]?.followUp?.text || '';
+  const text = getIncomingMessage(nextQuestion, record, previousReplyText);
+  const context = getSceneContext(nextQuestion);
+  if (!text && !context) return undefined;
+  return {
+    context,
+    text,
+    tone: record.reactionTone,
+  };
+}
+
+function getIncomingMessage(question: Question, previousRecord?: SceneChoiceRecord, previousReplyText = ''): string {
+  const baseMessage = getBaseIncomingMessage(question);
+  if (!previousRecord) return baseMessage;
+  return avoidRepeatedIncoming(getSpecificIncomingBranch(question, previousRecord) || baseMessage, previousReplyText);
+}
+
+function getBaseIncomingMessage(question: Question): string {
   const scenario = question.scenario || '';
-  const quoted = scenario.match(/“([^”]+)”/);
-  if (quoted?.[1]) return quoted[1];
+  const quotedMessages = Array.from(scenario.matchAll(/“([^”]+)”/g));
+  const latestQuotedMessage = quotedMessages[quotedMessages.length - 1]?.[1];
+  if (latestQuotedMessage) return latestQuotedMessage;
+  return '';
+}
+
+function getSpecificIncomingBranch(currentQuestion: Question, previousRecord: SceneChoiceRecord): string {
+  const selectedText = getSelectedText(previousRecord);
+
+  if (currentQuestion.id === 'ambiguous-late-night-3') {
+    if (/想我了/.test(selectedText)) return '没有啦，就是突然睡不着。';
+    if (/这么晚找我干嘛|不在/.test(selectedText)) return '也没什么，就是突然睡不着。你不用这么防备。';
+  }
+
+  if (currentQuestion.id === 'redflag-isolation-4') {
+    if (/当然你更重要/.test(selectedText)) return '那你就证明一下，以后少跟他们出去，这样我才知道你真的把我放第一。';
+    if (/朋友更重要/.test(selectedText)) return '所以在你心里朋友就是比我重要，对吗？';
+    if (/看情况/.test(selectedText)) return '你看，你连一句明确的话都不愿意给我。';
+  }
+  return '';
+}
+
+function avoidRepeatedIncoming(text: string, previousReplyText: string): string {
+  if (!text || text !== previousReplyText) return text;
   return '';
 }
 
@@ -260,8 +441,8 @@ function getSceneContext(question: Question): string {
 
   const scenario = question.scenario || '';
   if (!scenario) return '';
-  const quoteIndex = scenario.indexOf('“');
-  const rawContext = quoteIndex < 0 ? scenario : scenario.slice(0, quoteIndex);
+  const quoteIndex = scenario.lastIndexOf('“');
+  const rawContext = quoteIndex < 0 ? scenario : scenario.slice(0, quoteIndex).replace(/“[^”]+”/g, '');
   const context = polishSceneContext(rawContext);
   if (!context || /^(对方|她|他)(继续|追问|回|说)?$/.test(context)) return '';
   return context;
@@ -269,6 +450,8 @@ function getSceneContext(question: Question): string {
 
 function polishSceneContext(rawContext: string): string {
   const context = rawContext
+    .replace(/你发[：:]?/g, '')
+    .replace(/(对方|她|他)?\s*(回|回复|说)[：:]?$/, '')
     .replace(/[：:]?$/, '')
     .replace(/说$/, '')
     .replace(/对方$/, '')
@@ -414,15 +597,16 @@ const messageNameStyle: CSSProperties = {
   fontWeight: 800,
 };
 
-const incomingBubbleStyle: CSSProperties = {
+const incomingBubbleStyle = (tone: BattleReactionTone): CSSProperties => ({
   borderRadius: '5px 18px 18px 18px',
   padding: '10px 12px',
-  background: '#fff',
+  background: tone === 'steady' ? '#fff' : tone === 'attack' ? '#fff1ed' : tone === 'appease' ? '#fff8e6' : '#f7f5f1',
   color: '#1f2a24',
   fontSize: 14,
   lineHeight: 1.65,
+  border: tone === 'steady' ? 'none' : tone === 'attack' ? '1px solid rgba(184,84,64,0.16)' : '1px solid rgba(176,131,61,0.14)',
   boxShadow: '0 8px 18px rgba(57,70,62,0.12)',
-};
+});
 
 const outgoingBubbleStyle: CSSProperties = {
   maxWidth: '78%',

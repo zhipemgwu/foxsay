@@ -138,7 +138,7 @@ export function SubscriptionProvider({ children }: { children: ReactNode }) {
                 }}>
                 <Sparkles size={12} color="#FFD93D" />
                 <span style={{ color: 'rgba(245,239,232,0.82)', fontSize: 12, lineHeight: 1.5 }}>
-                  解锁 AI 键盘 · 深度翻译 · 约会复盘 · 关系诊断 · 专属导师
+                  解锁回复建议 · 约会复盘 · 关系诊断 · 专属导师 · 高级副本
                 </span>
               </div>
 

@@ -1,6 +1,6 @@
 /**
  * FoxSay 后端代理服务
- * 转发前端请求到 DeepSeek API，保护 API Key 不暴露
+ * 转发前端请求到 OpenAI-compatible API，保护 API Key 不暴露
  */
 const express = require('express');
 const cors = require('cors');
@@ -12,14 +12,37 @@ app.use(express.json({ limit: '1mb' }));
 
 const { getLevel, getRole, getPartner, listRoles, listPartners, listLevels, buildPromptForLevel, reloadAll } = require('./data-loader.cjs');
 
-const API_KEY = process.env.DEEPSEEK_API_KEY;
-const BASE_URL = process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com';
-const MODEL = process.env.DEEPSEEK_MODEL || 'deepseek-reasoner';
+const AI_PROVIDER = (process.env.AI_PROVIDER || 'deepseek').toLowerCase();
+const API_KEY = AI_PROVIDER === 'gpt'
+  ? process.env.GPT_API_KEY
+  : process.env.DEEPSEEK_API_KEY;
+const BASE_URL = AI_PROVIDER === 'gpt'
+  ? (process.env.GPT_BASE_URL || 'https://dxb.huifei.net/v1')
+  : (process.env.DEEPSEEK_BASE_URL || 'https://api.deepseek.com');
+const MODEL = AI_PROVIDER === 'gpt'
+  ? (process.env.GPT_MODEL || 'gpt-4o-mini')
+  : (process.env.DEEPSEEK_MODEL || 'deepseek-reasoner');
 const PORT = process.env.PORT || 3001;
 
 if (!API_KEY) {
-  console.error('❌ 缺少 DEEPSEEK_API_KEY，请在 .env 文件中配置');
+  console.error(`❌ 缺少 ${AI_PROVIDER === 'gpt' ? 'GPT_API_KEY' : 'DEEPSEEK_API_KEY'}，请在 .env 文件中配置`);
   process.exit(1);
+}
+
+function getChatCompletionsUrl() {
+  const base = String(BASE_URL || '').replace(/\/+$/, '');
+  return base.endsWith('/v1') ? `${base}/chat/completions` : `${base}/v1/chat/completions`;
+}
+
+function resolveModel(requestedModel) {
+  if (AI_PROVIDER === 'gpt') {
+    if (typeof requestedModel === 'string' && requestedModel.trim() && !requestedModel.startsWith('deepseek-')) {
+      return requestedModel.trim();
+    }
+    return MODEL;
+  }
+  const allowedModels = ['deepseek-chat', 'deepseek-reasoner'];
+  return allowedModels.includes(requestedModel) ? requestedModel : MODEL;
 }
 
 /**
@@ -36,9 +59,7 @@ app.post('/api/chat', async (req, res) => {
     return res.status(400).json({ error: 'messages 字段必须是数组' });
   }
 
-  // 白名单：允许前端指定 deepseek-chat（快）或 deepseek-reasoner（慢但聪明），其他一律用默认
-  const allowedModels = ['deepseek-chat', 'deepseek-reasoner'];
-  const useModel = allowedModels.includes(model) ? model : MODEL;
+  const useModel = resolveModel(model);
 
   const body = {
     model: useModel,
@@ -49,7 +70,7 @@ app.post('/api/chat', async (req, res) => {
   if (max_tokens !== undefined) body.max_tokens = max_tokens;
 
   try {
-    const response = await fetch(`${BASE_URL}/v1/chat/completions`, {
+    const response = await fetch(getChatCompletionsUrl(), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -60,7 +81,7 @@ app.post('/api/chat', async (req, res) => {
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error('DeepSeek API 错误:', response.status, errText);
+      console.error(`${AI_PROVIDER} API 错误:`, response.status, errText);
       return res.status(response.status).json({ error: errText });
     }
 
@@ -92,14 +113,14 @@ app.post('/api/chat', async (req, res) => {
       res.json(data);
     }
   } catch (err) {
-    console.error('请求 DeepSeek 失败:', err.message);
+    console.error(`请求 ${AI_PROVIDER} 失败:`, err.message);
     res.status(500).json({ error: '服务器内部错误: ' + err.message });
   }
 });
 
 /** 健康检查 */
 app.get('/api/health', (_req, res) => {
-  res.json({ status: 'ok', model: MODEL });
+  res.json({ status: 'ok', provider: AI_PROVIDER, model: MODEL });
 });
 
 /**
@@ -143,11 +164,11 @@ app.post('/api/level-chat', async (req, res) => {
   // 加入对话历史
   messages.push(...history);
 
-  // 转发到 DeepSeek
+  // 转发到当前 AI provider
   const body = { model: MODEL, messages, stream };
 
   try {
-    const response = await fetch(`${BASE_URL}/v1/chat/completions`, {
+    const response = await fetch(getChatCompletionsUrl(), {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -158,7 +179,7 @@ app.post('/api/level-chat', async (req, res) => {
 
     if (!response.ok) {
       const errText = await response.text();
-      console.error('DeepSeek API 错误:', response.status, errText);
+      console.error(`${AI_PROVIDER} API 错误:`, response.status, errText);
       return res.status(response.status).json({ error: errText });
     }
 
@@ -185,7 +206,7 @@ app.post('/api/level-chat', async (req, res) => {
       res.json(data);
     }
   } catch (err) {
-    console.error('请求 DeepSeek 失败:', err.message);
+    console.error(`请求 ${AI_PROVIDER} 失败:`, err.message);
     res.status(500).json({ error: '服务器内部错误: ' + err.message });
   }
 });
@@ -225,6 +246,7 @@ app.post('/api/reload', (_req, res) => {
 app.listen(PORT, () => {
   console.log(`🦊 FoxSay API 代理已启动`);
   console.log(`   端口: ${PORT}`);
+  console.log(`   服务: ${AI_PROVIDER}`);
   console.log(`   模型: ${MODEL}`);
   console.log(`   地址: http://localhost:${PORT}/api/chat`);
 });

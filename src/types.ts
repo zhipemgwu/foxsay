@@ -5,7 +5,6 @@
 
 export type SubTier = 'lite' | 'pro' | 'proplus' | null;
 export type SubPlan = 'month' | 'quarter' | 'halfYear' | 'year' | 'lifetime' | null;
-export type KbPlan = 'kb_month' | 'kb_quarter' | 'kb_year' | 'kb_lifetime' | null;
 export type Gender = 'male' | 'female' | null;
 
 export interface User {
@@ -22,9 +21,6 @@ export interface User {
   subExpireAt: number | string | null;
   subChannel: string | null;
   subAutoRenew: boolean;
-  kbVip: boolean;
-  kbPlan: KbPlan;
-  kbExpireAt: number | string | null;
   gender: Gender;
   age: string | null;
   goals: string[];

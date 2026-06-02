@@ -113,6 +113,30 @@ input::placeholder {
   color: rgba(245,239,232,0.3) !important;
 }
 
+.wechat-input::placeholder {
+  color: #9b9b9b !important;
+}
+
+@keyframes foxsay-heart-float {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-2px) scale(1.06);
+  }
+}
+
+@keyframes foxsay-heart-pulse {
+  0% {
+    opacity: 0.7;
+    transform: scale(0.82);
+  }
+  100% {
+    opacity: 0;
+    transform: scale(1.45);
+  }
+}
+
 /* 平滑过渡动效 */
 @layer components {
   .transition-smooth {

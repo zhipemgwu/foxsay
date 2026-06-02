@@ -1,11 +1,10 @@
 import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'motion/react';
-import { Bell, X, Check, Gift, TrendingUp, Heart, Crown, Keyboard } from 'lucide-react';
+import { Bell, X, Check, Gift, TrendingUp, Heart, Crown } from 'lucide-react';
 import { ImageWithFallback } from './figma/ImageWithFallback';
 import { IconBubble, IcHeart, IcTarget, IcChart, IcTrophy, IcChat, gradients } from './CuteIcons';
 import { VIPPage } from './VIPPage';
 import { SocialPage } from './SocialPage';
-import { AssistKeyboardPage } from './AssistKeyboardPage';
 import { useSub } from './SubscriptionSheet';
 import { useUser } from '../context/UserContext';
 import { SubscriptionManageSheet } from './SubscriptionManageSheet';
@@ -51,7 +50,6 @@ function getBookingNotifs() {
 export function Header() {
   const [showNotif, setShowNotif] = useState(false);
   const [showVIP, setShowVIP] = useState(false);
-  const [showKb, setShowKb] = useState(false);
   const [showSocial, setShowSocial] = useState(false);
   const [showSubManage, setShowSubManage] = useState(false);
   const user = useUser();
@@ -114,20 +112,6 @@ export function Header() {
           </div>
 
           <div className="flex items-center gap-3">
-            <motion.button
-              className="flex items-center gap-1 px-2 py-1 rounded-full"
-              style={{
-                background: 'linear-gradient(135deg, rgba(255,217,61,0.22), rgba(255,138,128,0.15))',
-                border: '1px solid rgba(255,217,61,0.3)',
-              }}
-              whileTap={{ scale: 0.9 }}
-              onClick={() => setShowKb(true)}
-              aria-label="AI 键盘"
-            >
-              <Keyboard size={11} color="#FFD93D" strokeWidth={2.5} />
-              <span style={{ color: '#FFD93D', fontSize: '10.5px', fontWeight: 600 }}>键盘</span>
-            </motion.button>
-
             <motion.button
               className="flex items-center gap-1 px-2.5 py-1 rounded-full"
               style={{
@@ -235,10 +219,6 @@ export function Header() {
       </AnimatePresence>
 
       <SubscriptionManageSheet open={showSubManage} onClose={() => setShowSubManage(false)} onUpgrade={() => setShowVIP(true)} />
-
-      <AnimatePresence>
-        {showKb && <AssistKeyboardPage onClose={() => setShowKb(false)} />}
-      </AnimatePresence>
 
       <AnimatePresence>
         {showSocial && <SocialPage onClose={() => setShowSocial(false)} />}

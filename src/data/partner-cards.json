@@ -88,7 +88,7 @@
         "alias": "Yuzu",
         "age": 23,
         "gender": "female",
-        "image": "/chapters/roles/role-27.jpg",
+        "image": "/immersive/cards/P001-card.png",
         "identities": [
           "连锁咖啡店早班店员",
           "夜校插画课学生",
@@ -382,7 +382,7 @@
         "alias": "Xiaotang",
         "age": 26,
         "gender": "female",
-        "image": "/chapters/roles/role-01.jpg",
+        "image": "/immersive/cards/P002-card.png",
         "identities": [
           "互联网公司运营专员",
           "同项目协作同事",
@@ -676,7 +676,7 @@
         "alias": "Ruoning",
         "age": 28,
         "gender": "female",
-        "image": "/chapters/roles/role-12.jpg",
+        "image": "/immersive/cards/P003-card.png",
         "identities": [
           "小学英语老师",
           "家里介绍的相亲对象",
@@ -971,7 +971,7 @@
         "alias": "Nianan",
         "age": 24,
         "gender": "female",
-        "image": "/chapters/roles/role-18.jpg",
+        "image": "/immersive/cards/P004-card.png",
         "identities": [
           "图书馆新媒体助理",
           "手作店周末兼职",
@@ -1266,7 +1266,7 @@
         "alias": "Yuxin",
         "age": 25,
         "gender": "female",
-        "image": "/chapters/roles/role-15.jpg",
+        "image": "/immersive/cards/P005-card.png",
         "identities": [
           "健身房前台兼私教助理",
           "刚结束一段消耗型关系",

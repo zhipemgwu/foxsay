@@ -1,26 +1,25 @@
-import { useState, useEffect, useCallback, lazy, Suspense, useRef } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { AnimatePresence, motion } from 'motion/react';
+import { ChevronLeft } from 'lucide-react';
 import { UserProvider } from './context/UserContext';
 import { ProfileModalProvider } from './components/ProfileModals';
 import { SubscriptionProvider } from './components/SubscriptionSheet';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { Header } from './components/Header';
-import { GreetingSection } from './components/GreetingSection';
-import { TodayScene } from './components/TodayScene';
-import { DiagnosticStream } from './components/DiagnosticStream';
-import { TabBar } from './components/TabBar';
-const PracticePage = lazy(() => import('./components/PracticePage').then(m => ({ default: m.PracticePage })));
-const DiagnosticPage = lazy(() => import('./components/DiagnosticPage').then(m => ({ default: m.DiagnosticPage })));
-const CommunityPage = lazy(() => import('./components/CommunityPage').then(m => ({ default: m.CommunityPage })));
-const ProfilePage = lazy(() => import('./components/ProfilePage').then(m => ({ default: m.ProfilePage })));
-const OrderPage = lazy(() => import('./components/OrderPage').then(m => ({ default: m.OrderPage })));
-import { MicroPracticePage } from './components/MicroPracticePage';
+import { WechatTabBar } from './components/WechatTabBar';
+import { TrainingAccountPage } from './components/TrainingAccountPage';
+import { ChatListPage } from './components/ChatListPage';
+import { ContactsPage } from './components/ContactsPage';
+import { MomentsPage } from './components/MomentsPage';
+import { WechatMinePage } from './components/WechatMinePage';
+import { RoleChatPage } from './components/RoleChatPage';
+import { NickChatPage } from './components/NickChatPage';
+import { SocialActionPlaceholder, SocialSearchPage } from './components/SocialSheets';
 import { SplashScreen } from './components/SplashScreen';
 import { OnboardingScreen } from './components/OnboardingScreen';
 import { AuthScreen } from './components/AuthScreen';
 import { HomeSkeletonLoader } from './components/SkeletonLoader';
-import { HeatUpCard } from './components/HeatUpCard';
-import { TodayTaskList } from './components/TodayTaskList';
+
+const OrderPage = lazy(() => import('./components/OrderPage').then(m => ({ default: m.OrderPage })));
 
 function TabFallback() {
   return (
@@ -42,13 +41,35 @@ export default function App() {
     } catch {}
     return 'splash';
   });
-  const [activeTab, setActiveTab] = useState(() => {
-    // 练习页已合并到首页，idx 0 即练习内容，无需跳转
-    return 0;
-  });
+  const [activeTab, setActiveTab] = useState(0);
   const [homeLoading, setHomeLoading] = useState(true);
   const [practiceAction, setPracticeAction] = useState(null);
+  const [roleChatKid, setRoleChatKid] = useState(null);
+  const [showNickChat, setShowNickChat] = useState(false);
+  const [showTrainingAccount, setShowTrainingAccount] = useState(false);
+  const [showOrder, setShowOrder] = useState(false);
+  const [utilityView, setUtilityView] = useState(null);
   const skipTabAnimRef = useRef(false);
+
+  const closeUtility = useCallback(() => setUtilityView(null), []);
+  const openSearch = useCallback(() => {
+    skipTabAnimRef.current = true;
+    setUtilityView('search');
+  }, []);
+  const openCreateGroup = useCallback(() => {
+    skipTabAnimRef.current = true;
+    setUtilityView('group');
+  }, []);
+  const openAddFriend = useCallback(() => {
+    skipTabAnimRef.current = true;
+    setUtilityView('friend');
+  }, []);
+
+  const tabToolProps = {
+    onSearch: openSearch,
+    onCreateGroup: openCreateGroup,
+    onAddFriend: openAddFriend,
+  };
 
   const goToOnboarding = useCallback(() => setStage('onboarding'), []);
   const goToAuth = useCallback(() => setStage('auth'), []);
@@ -57,29 +78,85 @@ export default function App() {
     try {
       localStorage.setItem('foxsay_stage', 'main');
     } catch {}
-    // 练习内容已在首页（idx 0），不再需要新用户跳转
   }, []);
+
   const handleLogout = useCallback(() => {
     try { localStorage.clear(); } catch {}
     setStage('splash');
     setActiveTab(0);
     setHomeLoading(true);
+    setRoleChatKid(null);
+    setShowNickChat(false);
+    setShowTrainingAccount(false);
+    setShowOrder(false);
+    setUtilityView(null);
   }, []);
-
-  const goPractice = useCallback(() => setActiveTab(0), []);
 
   const handlePracticeAction = useCallback((action) => {
     if (action === 'go_vip' || action?.type === 'go_vip') {
       skipTabAnimRef.current = true;
-      setActiveTab(3);
+      setUtilityView(null);
+      setShowOrder(true);
       return;
     }
     setPracticeAction(action);
     skipTabAnimRef.current = true;
+    setUtilityView(null);
+    setRoleChatKid(null);
+    setShowNickChat(false);
+    setShowTrainingAccount(true);
+    setShowOrder(false);
     setActiveTab(0);
   }, []);
 
-  // 练习内容已合并到首页（idx 0），无需兜底跳转
+  const handleTabChange = useCallback((idx) => {
+    skipTabAnimRef.current = true;
+    setUtilityView(null);
+    setRoleChatKid(null);
+    setShowNickChat(false);
+    setShowTrainingAccount(false);
+    setShowOrder(false);
+    setActiveTab(idx);
+  }, []);
+
+  const openRoleChat = useCallback((kid) => {
+    skipTabAnimRef.current = true;
+    setUtilityView(null);
+    setActiveTab(0);
+    setShowNickChat(false);
+    setShowTrainingAccount(false);
+    setShowOrder(false);
+    setRoleChatKid(kid);
+  }, []);
+
+  const openNickChat = useCallback(() => {
+    skipTabAnimRef.current = true;
+    setUtilityView(null);
+    setActiveTab(0);
+    setRoleChatKid(null);
+    setShowTrainingAccount(false);
+    setShowOrder(false);
+    setShowNickChat(true);
+  }, []);
+
+  const openTrainingAccount = useCallback(() => {
+    skipTabAnimRef.current = true;
+    setUtilityView(null);
+    setActiveTab(0);
+    setRoleChatKid(null);
+    setShowNickChat(false);
+    setShowOrder(false);
+    setShowTrainingAccount(true);
+  }, []);
+
+  const openOrder = useCallback(() => {
+    skipTabAnimRef.current = true;
+    setUtilityView(null);
+    setRoleChatKid(null);
+    setShowNickChat(false);
+    setShowTrainingAccount(false);
+    setShowOrder(true);
+  }, []);
 
   useEffect(() => {
     if (stage === 'main' && homeLoading) {
@@ -88,66 +165,141 @@ export default function App() {
     }
   }, [stage, homeLoading]);
 
+  const isFullScreenView = !!showOrder || !!showTrainingAccount || !!showNickChat || !!roleChatKid || !!utilityView;
+  const pageKey = showOrder
+    ? 'order'
+    : showTrainingAccount
+      ? 'training-account'
+      : showNickChat
+        ? 'nick'
+        : roleChatKid
+          ? `role-${roleChatKid}`
+          : utilityView
+            ? `utility-${utilityView}`
+            : `tab-${activeTab}`;
+
   return (
     <UserProvider>
-    <SubscriptionProvider>
-    <ProfileModalProvider>
-    <div
-      className="w-full h-screen flex flex-col overflow-hidden"
-      style={{ background: '#2b2535' }}
-    >
-      <div
-        className="relative flex flex-col h-full w-full overflow-hidden"
-        style={{
-          maxWidth: 430,
-          margin: '0 auto',
-          background: '#2b2535',
-          fontFamily: "inherit",
-        }}
-      >
-        {stage === 'splash' && (
-          <SplashScreen onFinish={goToOnboarding} />
-        )}
+      <SubscriptionProvider>
+        <ProfileModalProvider>
+          <div
+            className="w-full h-screen flex flex-col overflow-hidden"
+            style={{ background: stage === 'main' ? '#ededed' : '#2b2535' }}
+          >
+            <div
+              className="relative flex flex-col h-full w-full overflow-hidden"
+              style={{
+                maxWidth: 430,
+                margin: '0 auto',
+                background: stage === 'main' ? '#ededed' : '#2b2535',
+                fontFamily: 'inherit',
+              }}
+            >
+              {stage === 'splash' && <SplashScreen onFinish={goToOnboarding} />}
+              {stage === 'onboarding' && <OnboardingScreen onFinish={goToAuth} />}
+              {stage === 'auth' && <AuthScreen onComplete={goToMain} />}
 
-        {stage === 'onboarding' && (
-          <OnboardingScreen onFinish={goToAuth} />
-        )}
+              {stage === 'main' && (
+                <>
+                  <div className="flex-1 overflow-hidden relative">
+                    <AnimatePresence mode="wait" initial={false}>
+                      <motion.div
+                        key={pageKey}
+                        className="absolute inset-0 overflow-y-auto overflow-x-hidden"
+                        style={{ WebkitOverflowScrolling: 'touch' }}
+                        initial={skipTabAnimRef.current ? false : { opacity: 0, y: 8 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={skipTabAnimRef.current ? { opacity: 0 } : { opacity: 0, y: -8 }}
+                        transition={{ duration: skipTabAnimRef.current ? 0 : 0.2, ease: [0.4, 0, 0.2, 1] }}
+                        onAnimationComplete={() => { skipTabAnimRef.current = false; }}
+                      >
+                        {showOrder && (
+                          <ErrorBoundary>
+                            <div style={{ minHeight: '100%', background: '#2b2535' }}>
+                              <button type="button" onClick={() => setShowOrder(false)} style={orderBackButton}>
+                                <span style={{ position: 'absolute', left: 8, display: 'flex', alignItems: 'center', fontSize: 14, fontWeight: 700 }}>
+                                  <ChevronLeft size={22} /> 返回
+                                </span>
+                                会员中心
+                              </button>
+                              <Suspense fallback={<TabFallback />}><OrderPage /></Suspense>
+                            </div>
+                          </ErrorBoundary>
+                        )}
 
-        {stage === 'auth' && (
-          <AuthScreen onComplete={goToMain} />
-        )}
+                        {utilityView === 'search' && (
+                          <ErrorBoundary><SocialSearchPage onBack={closeUtility} /></ErrorBoundary>
+                        )}
+                        {(utilityView === 'group' || utilityView === 'friend') && (
+                          <ErrorBoundary><SocialActionPlaceholder type={utilityView} onBack={closeUtility} /></ErrorBoundary>
+                        )}
 
-        {stage === 'main' && (
-          <>
-            <div className="flex-1 overflow-hidden relative">
-              <AnimatePresence mode="wait" initial={false}>
-                <motion.div
-                  key={activeTab}
-                  className="absolute inset-0 overflow-y-auto overflow-x-hidden"
-                  style={{ WebkitOverflowScrolling: 'touch' }}
-                  initial={skipTabAnimRef.current ? false : { opacity: 0, y: 8 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  exit={skipTabAnimRef.current ? { opacity: 0 } : { opacity: 0, y: -8 }}
-                  transition={{ duration: skipTabAnimRef.current ? 0 : 0.2, ease: [0.4, 0, 0.2, 1] }}
-                  onAnimationComplete={() => { skipTabAnimRef.current = false; }}
-                >
-                  {activeTab === 0 && (homeLoading ? <HomeSkeletonLoader /> : <ErrorBoundary><Suspense fallback={<TabFallback />}><PracticePage pendingAction={practiceAction} onActionConsumed={() => setPracticeAction(null)} /></Suspense></ErrorBoundary>)}
-                  {activeTab === 1 && <ErrorBoundary><Suspense fallback={<TabFallback />}><DiagnosticPage onPracticeAction={handlePracticeAction} /></Suspense></ErrorBoundary>}
-                  {activeTab === 2 && <ErrorBoundary><MicroPracticePage onPracticeAction={handlePracticeAction} /></ErrorBoundary>}
-                  {activeTab === 3 && <ErrorBoundary><Suspense fallback={<TabFallback />}><OrderPage /></Suspense></ErrorBoundary>}
-                  {activeTab === 4 && <ErrorBoundary><Suspense fallback={<TabFallback />}><ProfilePage onLogout={handleLogout} onPracticeAction={handlePracticeAction} /></Suspense></ErrorBoundary>}
-                </motion.div>
-              </AnimatePresence>
+                        {showTrainingAccount && (
+                          <ErrorBoundary>
+                            <TrainingAccountPage
+                              pendingAction={practiceAction}
+                              onActionConsumed={() => setPracticeAction(null)}
+                              onBack={() => setShowTrainingAccount(false)}
+                              onOpenOrder={openOrder}
+                            />
+                          </ErrorBoundary>
+                        )}
+                        {showNickChat && <ErrorBoundary><NickChatPage onBack={() => setShowNickChat(false)} /></ErrorBoundary>}
+                        {roleChatKid && <ErrorBoundary><RoleChatPage kid={roleChatKid} onBack={() => setRoleChatKid(null)} /></ErrorBoundary>}
+
+                        {!isFullScreenView && activeTab === 0 && (
+                          homeLoading
+                            ? <HomeSkeletonLoader />
+                            : (
+                              <ErrorBoundary>
+                                <ChatListPage
+                                  onOpenTrainingAccount={openTrainingAccount}
+                                  onOpenNick={openNickChat}
+                                  onOpenRoleChat={openRoleChat}
+                                  {...tabToolProps}
+                                />
+                              </ErrorBoundary>
+                            )
+                        )}
+                        {!isFullScreenView && activeTab === 1 && (
+                          <ErrorBoundary><ContactsPage onOpenNick={openNickChat} onOpenRoleChat={openRoleChat} {...tabToolProps} /></ErrorBoundary>
+                        )}
+                        {!isFullScreenView && activeTab === 2 && (
+                          <ErrorBoundary><MomentsPage {...tabToolProps} /></ErrorBoundary>
+                        )}
+                        {!isFullScreenView && activeTab === 3 && (
+                          <ErrorBoundary><WechatMinePage onLogout={handleLogout} onOpenOrder={openOrder} {...tabToolProps} /></ErrorBoundary>
+                        )}
+                      </motion.div>
+                    </AnimatePresence>
+                  </div>
+
+                  {!isFullScreenView && (
+                    <WechatTabBar active={activeTab} onTabChange={handleTabChange} />
+                  )}
+                </>
+              )}
             </div>
-
-            <TabBar active={activeTab} onTabChange={setActiveTab} />
-          </>
-        )}
-      </div>
-    </div>
-    </ProfileModalProvider>
-    </SubscriptionProvider>
+          </div>
+        </ProfileModalProvider>
+      </SubscriptionProvider>
     </UserProvider>
   );
 }
 
+const orderBackButton = {
+  position: 'sticky',
+  top: 0,
+  zIndex: 60,
+  height: 48,
+  width: '100%',
+  border: 0,
+  background: 'rgba(43,37,53,0.94)',
+  color: '#f5efe8',
+  display: 'flex',
+  alignItems: 'center',
+  justifyContent: 'center',
+  fontSize: 16,
+  fontWeight: 850,
+  backdropFilter: 'blur(18px)',
+};

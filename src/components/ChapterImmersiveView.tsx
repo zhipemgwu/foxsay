@@ -780,13 +780,6 @@ export function ChapterImmersiveView({ open, mode, chapters, initialIndex, onClo
                       </div>
                     )}
 
-                    {/* —— 候选池小指示（回到右下角对齐 progress 文字的位置，轻量一行） —— */}
-                    <div style={{
-                      display: 'flex', justifyContent: 'flex-end',
-                      color: 'rgba(255,255,255,0.5)', fontSize: 10.5, fontWeight: 600, letterSpacing: 1.5,
-                    }}>
-                      候选 · {(pickerIndex % Math.max(candidates.length, 1)) + 1} / {candidates.length}
-                    </div>
                   </motion.div>
                 )}
               </AnimatePresence>
@@ -954,25 +947,22 @@ export function ChapterImmersiveView({ open, mode, chapters, initialIndex, onClo
               </motion.button>
             </div>
 
-            {/* 下滑关闭提示 / picking 左右滑提示 */}
-            <motion.div
-              initial={{ opacity: 0, y: -4 }}
-              animate={{ opacity: [0, 0.55, 0.55, 0], y: [0, 4, 4, 0] }}
-              transition={{ duration: 2.4, repeat: Infinity, repeatDelay: 1 }}
-              style={{
-                position: 'absolute', top: 68, left: 0, right: 0,
-                display: 'flex', justifyContent: 'center', alignItems: 'center',
-                gap: 4, pointerEvents: 'none',
-                color: pickerPhase === 'picking' ? 'rgba(240,171,252,0.75)' : 'rgba(255,255,255,0.55)',
-                fontSize: 10, letterSpacing: 1,
-              }}
-            >
-              {pickerPhase === 'picking' ? (
-                <>← 左右滑动选择今日搭档 →</>
-              ) : (
-                <><ChevronDown size={12} /><span>下滑关闭</span></>
-              )}
-            </motion.div>
+            {pickerPhase !== 'picking' && (
+              <motion.div
+                initial={{ opacity: 0, y: -4 }}
+                animate={{ opacity: [0, 0.55, 0.55, 0], y: [0, 4, 4, 0] }}
+                transition={{ duration: 2.4, repeat: Infinity, repeatDelay: 1 }}
+                style={{
+                  position: 'absolute', top: 68, left: 0, right: 0,
+                  display: 'flex', justifyContent: 'center', alignItems: 'center',
+                  gap: 4, pointerEvents: 'none',
+                  color: 'rgba(255,255,255,0.55)',
+                  fontSize: 10, letterSpacing: 1,
+                }}
+              >
+                <ChevronDown size={12} /><span>下滑关闭</span>
+              </motion.div>
+            )}
           </motion.div>
         </AnimatePresence>
 

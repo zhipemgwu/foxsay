@@ -39,7 +39,7 @@ export const TERMS = {
 
 /** 权益矩阵 — 各个功能是否需要会员 */
 export const FEATURES = {
-  KEYBOARD: { pro: true, label: 'AI 辅助键盘' },
+  REPLY_SUGGESTION: { pro: true, label: '尼克大叔回复建议' },
   DIAGNOSTIC_DEEP: { pro: true, label: '关系深度诊断' },
   COACH_CHAT: { pro: true, label: '专属导师一对一' },
   COMMUNITY_PAID_POSTS: { pro: true, label: '精品付费专栏' },

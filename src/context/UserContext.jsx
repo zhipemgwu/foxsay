@@ -23,10 +23,6 @@ const freshUser = {
   subExpireAt: null,
   subChannel: null,
   subAutoRenew: false,
-  // 键盘会员（独立于主会员）
-  kbVip: false,
-  kbPlan: null,          // 'kb_month' | 'kb_quarter' | 'kb_year' | 'kb_lifetime'
-  kbExpireAt: null,
   gender: null,
   age: null,
   goals: [],
@@ -63,10 +59,6 @@ const defaultUser = {
   subExpireAt: null,
   subChannel: null,
   subAutoRenew: false,
-  // 键盘会员（FFPro+ 自动包含，这里包为字段默认值）
-  kbVip: false,
-  kbPlan: null,
-  kbExpireAt: null,
   gender: null,
   age: null,
   goals: [],

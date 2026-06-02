@@ -15,7 +15,8 @@
 import { useState, useEffect, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { motion, AnimatePresence } from 'motion/react';
-import { ChevronRight, ChevronLeft, Lock, X, Send, Users, Zap, Loader2, RefreshCw, MapPin, Compass } from 'lucide-react';
+import { ChevronRight, ChevronLeft, Lock, X, Send, Users, Zap, Loader2, RefreshCw, MapPin, Compass, Archive, Plus, Trash2, CheckCircle2, Pencil, Moon, MessageSquareReply, ClipboardCheck, Languages } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import {
   IconBubble, IcChat, IcTarget, IcMask, IcWave, IcLetter, IcDove,
   IcGift, IcHeartSpark, IcRobot, IcPen, IcTrophy, IcStar, IcSparkle,
@@ -29,6 +30,7 @@ import { VIPPage } from './VIPPage';
 import { KenBurnsImage } from './KenBurnsImage';
 import { chatOnce, chatStream, type ChatMessage } from '../services/ai';
 import { getAllPartnerKids, partnerCardToPartnerInfo, buildRolePersonaPrompt } from '../services/roleCards';
+import { unlockRoleCard } from '../services/unlockedRoles';
 import {
   getLevelCard, getMaxTurns, getMinTurnsForGoodEnding, getOpening,
   buildLevelScenePrompt, getScoringDims, getEndings,
@@ -200,6 +202,103 @@ function pickEncounterImage(chapter: number, levelIdx: number): string {
   return _encounterPool[idx];
 }
 
+const IMMERSIVE_ASSET_ROOT = '/immersive';
+
+function resolveImmersivePortrait(partnerKid?: string | null, state: 'normal' | 'soft' | 'happy' | 'angry' = 'normal'): string | null {
+  if (!partnerKid) return null;
+  return `${IMMERSIVE_ASSET_ROOT}/partners/${partnerKid}-${state}.png`;
+}
+
+function resolveImmersiveBackground(levelKid?: string | null, mode?: 'story' | 'challenge' | 'freestyle'): string | null {
+  if (mode === 'story') return `${IMMERSIVE_ASSET_ROOT}/backgrounds/story.jpg`;
+  if (mode === 'challenge') return `${IMMERSIVE_ASSET_ROOT}/backgrounds/mall.jpg`;
+  if (levelKid) return `${IMMERSIVE_ASSET_ROOT}/backgrounds/${levelKid}.jpg`;
+  return null;
+}
+
+const PARTNER_ROLE_LABELS: Record<string, string> = {
+  P001: '咖啡店早班店员 · 夜校插画学生',
+  P002: '同项目协作同事 · 羽毛球搭子',
+  P003: '小学老师 · 相亲对象',
+  P004: '手作店主理人 · 慢热文艺系',
+  P005: '健身房前台 · 私教助理',
+};
+
+function getPartnerRoleLabel(partner?: { kid?: string; identities?: string[] } | null): string {
+  if (partner?.kid && PARTNER_ROLE_LABELS[partner.kid]) return PARTNER_ROLE_LABELS[partner.kid];
+  if (partner?.identities?.length) return partner.identities[0];
+  return '互动对象';
+}
+
+function useImageFallback(event: { currentTarget: HTMLImageElement }, fallback?: string | null) {
+  const img = event.currentTarget;
+  if (!fallback || img.src.endsWith(fallback)) return;
+  img.src = fallback;
+}
+
+function TypingDots({ size = 6, color = '#EC407A' }: { size?: number; color?: string }) {
+  return (
+    <span className="inline-flex items-center gap-1" aria-label="正在输入">
+      {[0, 1, 2].map(i => (
+        <motion.span
+          key={i}
+          animate={{ y: [0, -3, 0], opacity: [0.35, 1, 0.35] }}
+          transition={{ duration: 0.86, repeat: Infinity, delay: i * 0.14, ease: 'easeInOut' }}
+          style={{
+            width: size,
+            height: size,
+            borderRadius: 999,
+            background: color,
+            display: 'inline-block',
+          }}
+        />
+      ))}
+    </span>
+  );
+}
+
+type SceneHotspot = {
+  id: string;
+  label: string;
+  hint: string;
+  x: string;
+  y: string;
+};
+
+function buildSceneHotspots(title: string, synopsis?: string): SceneHotspot[] {
+  const text = `${title} ${synopsis || ''}`;
+  const pool: SceneHotspot[] = [];
+  const add = (id: string, label: string, hint: string, x: string, y: string) => {
+    if (!pool.some(item => item.id === id)) pool.push({ id, label, hint, x, y });
+  };
+
+  if (/迟到|取号|小票|等/.test(text)) {
+    add('ticket', '取号小票', '取号时间比她说的更早，她其实已经等了一会儿。', '73%', '52%');
+    add('phone', '手机屏幕', '她一直看手机，但没有催你，像是在压住情绪。', '24%', '45%');
+  }
+  if (/雨|伞|便利店|关东煮/.test(text)) {
+    add('umbrella', '雨伞', '雨还很大，她没有主动开口求助。', '22%', '58%');
+    add('food', '关东煮', '手里的关东煮快凉了，她可能站了有一会儿。', '76%', '64%');
+  }
+  if (/电影|爆米花|电影院/.test(text)) {
+    add('popcorn', '爆米花', '爆米花已经不热了，她等你的时间比想象中更久。', '74%', '58%');
+    add('poster', '电影海报', '这场电影她期待了很久，迟到不是小事。', '22%', '46%');
+  }
+  if (/朋友圈|消息|手机|地铁|算了/.test(text)) {
+    add('screen', '手机屏幕', '那句“算了”很短，但更像是攒了很久才发出来的。', '74%', '44%');
+    add('platform', '站台', '地铁进站的声音让沉默显得更明显。', '20%', '58%');
+  }
+  if (/火锅|胃|不舒服|热水|药/.test(text)) {
+    add('water', '水杯', '她一直按着胃，嘴上说没事不代表真的没事。', '76%', '57%');
+    add('medicine', '药袋', '行动比一句“多喝热水”更容易让她安心。', '22%', '55%');
+  }
+
+  add('expression', '她的表情', '她没有直接发火，但眼神里有一点委屈。', '72%', '36%');
+  add('distance', '你们的距离', '你们离得不远，但气氛还没有真正靠近。', '20%', '68%');
+  add('background', '周围环境', '场景里的小细节，往往比台词更能说明她现在的状态。', '50%', '48%');
+  return pool.slice(0, 3);
+}
+
 /** 搭档特性标签池 —— 确认后锁定到对话 prompt（方案 A：人设标签） */
 const _traitPool: string[] = [
   '傲娇', '毒舌', '慢热', '温柔', '话痨', '闷骚', '机灵', '冷静',
@@ -354,6 +453,14 @@ const STORY_NODE_LABELS: Record<number, string> = {
   25: '见父母', 26: '大堵车', 27: '惊喜翻车', 28: '拉黑', 29: '不合适', 30: '分手边缘',
 };
 
+const STORY_NODE_PLACES: Record<number, string> = {
+  1: '雨夜便利店', 2: '生日朋友局', 3: '地铁口迟到', 4: '小餐馆账单', 5: '街角照相亭', 6: '深夜聊天窗',
+  7: '公司楼下', 8: '旧消息提醒', 9: '凌晨卧室', 10: '电影院门口', 11: '纪念日花店', 12: '商场电梯口',
+  13: '朋友聚会桌', 14: '未读消息栏', 15: '医院走廊', 16: '崩溃电话亭', 17: '合租厨房', 18: '异地车站',
+  19: '河边长椅', 20: '未来规划墙', 21: '旧人来信', 22: '同事茶水间', 23: '朋友圈边界', 24: '消费清单',
+  25: '见家长餐桌', 26: '堵车高架桥', 27: '生日房间', 28: '拉黑后的街', 29: '告别咖啡馆', 30: '分手边缘',
+};
+
 const CHALLENGE_NODE_LABELS: Record<number, string> = {
   101: '小纸条', 102: '歌声', 103: '多把伞', 104: '旧车票', 105: '冰水', 106: '草莓',
   107: '流浪猫', 108: '叹息', 109: '公式', 110: '第六稿', 111: '夜灯', 112: '偷拍',
@@ -362,16 +469,25 @@ const CHALLENGE_NODE_LABELS: Record<number, string> = {
   125: '随便问', 126: '已读', 127: '新人', 128: '迟到', 129: '否定', 130: '完美感',
 };
 
+const CHALLENGE_NODE_PLACES: Record<number, string> = {
+  101: '图书馆角落', 102: '隔壁窗边', 103: '雨伞架旁', 104: '诗集旧页', 105: '球场边线', 106: '奶茶小店',
+  107: '流浪猫巷', 108: '会议室门外', 109: '黑板前', 110: '垃圾桶旁', 111: '深夜工位', 112: '相机取景框',
+  113: '派对中心', 114: '笑声背后', 115: '关掉滤镜后', 116: '热闹街口', 117: '酒吧第三杯', 118: '名片夹里',
+  119: '落花小路', 120: '纸巾盒旁', 121: '沉默沙发', 122: '夜电话', 123: '旧手链', 124: '草稿箱',
+  125: '试探对话', 126: '已读界面', 127: '新人座位', 128: '迟到门口', 129: '否定现场', 130: '完美假面',
+};
+
 const CITY_MAP_POINTS = [
-  { left: 14, top: 72 },
-  { left: 30, top: 47 },
-  { left: 46, top: 64 },
-  { left: 61, top: 38 },
-  { left: 76, top: 55 },
-  { left: 88, top: 31 },
+  { left: 22, top: 72 },
+  { left: 38, top: 47 },
+  { left: 53, top: 64 },
+  { left: 67, top: 40 },
+  { left: 79, top: 56 },
+  { left: 88, top: 34 },
 ];
 
-function getCityMapBackground(mode: 'story' | 'challenge') {
+function getCityMapBackground(mode: 'story' | 'challenge', chapterId?: number) {
+  if (mode === 'story' && chapterId === 1) return '/chapters/maps/story-city-map-canva-v1.png';
   return mode === 'story' ? '/chapters/maps/story-city-map-source.jpg' : '/chapters/maps/encounter-city-map-source.jpg';
 }
 
@@ -397,64 +513,549 @@ const CITY_LANDMARK_PALETTES = {
 function CityLandmarkIcon({ mode, index, locked, current, completed, accent }: { mode: 'story' | 'challenge'; index: number; locked: boolean; current: boolean; completed: boolean; accent: string }) {
   const palette = CITY_LANDMARK_PALETTES[mode][index % CITY_LANDMARK_PALETTES[mode].length];
   const variant = index % 6;
-  const idPrefix = `landmark-${mode}-${index}`;
+  const idPrefix = `map-node-${mode}-${index}`;
+  const size = current ? 80 : 70;
+  const halo = current ? accent : completed ? '#7EE0D6' : palette.roof;
+  const muted = locked ? 'saturate(0.65) brightness(0.78)' : undefined;
+  const glyph = (() => {
+    if (variant === 0) {
+      return <path d="M43 21c-8 0-14 5.7-14 13 0 8.6 14 24 14 24s14-15.4 14-24c0-7.3-6-13-14-13Zm0 18.5a5.5 5.5 0 1 1 0-11 5.5 5.5 0 0 1 0 11Z" fill="#fff" opacity="0.96" />;
+    }
+    if (variant === 1) {
+      return <path d="M29 36c4-8 22-8 28 0-4-3-8-3-12 0v15h-4V36c-4-3-8-3-12 0Z" fill="#fff" opacity="0.96" />;
+    }
+    if (variant === 2) {
+      return <path d="M29 31h28v18H29V31Zm4 4 10 7 10-7M33 45h20" fill="none" stroke="#fff" strokeWidth="3.2" strokeLinecap="round" strokeLinejoin="round" />;
+    }
+    if (variant === 3) {
+      return <path d="M43 25l4.3 8.6 9.5 1.4-6.9 6.7 1.6 9.4L43 46.6l-8.5 4.5 1.6-9.4-6.9-6.7 9.5-1.4L43 25Z" fill="#fff" opacity="0.96" />;
+    }
+    if (variant === 4) {
+      return <path d="M43 52s-13-8.6-13-18c0-5 3.7-9 8.4-9 2.7 0 5 1.3 6.6 3.3A8.1 8.1 0 0 1 51.6 25c4.7 0 8.4 4 8.4 9 0 9.4-17 18-17 18Z" fill="#fff" opacity="0.96" />;
+    }
+    return <path d="M46 23 30 43h12l-2 16 17-22H45l1-14Z" fill="#fff" opacity="0.96" />;
+  })();
+
   return (
-    <div aria-hidden style={{ position: 'relative', width: current ? 98 : 90, height: current ? 88 : 82, filter: locked ? 'saturate(0.74) brightness(0.92)' : undefined }}>
-      <svg viewBox="0 0 96 88" width="100%" height="100%" style={{ display: 'block', overflow: 'visible', filter: `drop-shadow(0 13px 15px rgba(0,0,0,0.34)) ${current ? `drop-shadow(0 0 13px ${accent}72)` : ''}` }}>
+    <div aria-hidden style={{ position: 'relative', width: size, height: size + 10, filter: muted }}>
+      {current && (
+        <motion.div
+          aria-hidden
+          initial={{ opacity: 0.55, scale: 0.82 }}
+          animate={{ opacity: [0.55, 0.12, 0.55], scale: [0.82, 1.16, 0.82] }}
+          transition={{ duration: 2.2, repeat: Infinity, ease: 'easeInOut' }}
+          style={{ position: 'absolute', left: 7, right: 7, top: 8, height: size - 12, borderRadius: 999, border: `2px solid ${accent}`, boxShadow: `0 0 24px ${accent}70`, pointerEvents: 'none' }}
+        />
+      )}
+      <svg viewBox="0 0 86 96" width="100%" height="100%" style={{ display: 'block', overflow: 'visible', filter: `drop-shadow(0 15px 18px rgba(0,0,0,0.36)) ${current ? `drop-shadow(0 0 18px ${accent}80)` : ''}` }}>
         <defs>
-          <linearGradient id={`${idPrefix}-base`} x1="18" y1="26" x2="70" y2="72" gradientUnits="userSpaceOnUse">
+          <linearGradient id={`${idPrefix}-pin`} x1="22" y1="14" x2="66" y2="80" gradientUnits="userSpaceOnUse">
             <stop offset="0" stopColor="#FFFFFF" />
-            <stop offset="0.48" stopColor={palette.base} />
-            <stop offset="1" stopColor="#C9D3DE" />
+            <stop offset="0.18" stopColor={locked ? '#B9A879' : palette.front} />
+            <stop offset="0.58" stopColor={locked ? '#695E63' : palette.roof} />
+            <stop offset="1" stopColor={locked ? '#3D3540' : palette.sign} />
           </linearGradient>
-          <linearGradient id={`${idPrefix}-front`} x1="22" y1="31" x2="54" y2="68" gradientUnits="userSpaceOnUse">
-            <stop offset="0" stopColor="#FFFFFF" />
-            <stop offset="0.58" stopColor={palette.front} />
-            <stop offset="1" stopColor="#E4E8F2" />
+          <linearGradient id={`${idPrefix}-inner`} x1="25" y1="18" x2="62" y2="58" gradientUnits="userSpaceOnUse">
+            <stop offset="0" stopColor={locked ? '#6F6472' : palette.sign} />
+            <stop offset="1" stopColor={locked ? '#3A3440' : palette.roof} />
           </linearGradient>
-          <linearGradient id={`${idPrefix}-side`} x1="50" y1="30" x2="72" y2="65" gradientUnits="userSpaceOnUse">
-            <stop offset="0" stopColor={palette.side} />
-            <stop offset="1" stopColor="#5F5872" />
-          </linearGradient>
-          <linearGradient id={`${idPrefix}-roof`} x1="28" y1="12" x2="64" y2="40" gradientUnits="userSpaceOnUse">
-            <stop offset="0" stopColor="#FFFFFF" />
-            <stop offset="0.22" stopColor={palette.roof} />
-            <stop offset="1" stopColor={palette.sign} />
-          </linearGradient>
+          <filter id={`${idPrefix}-glass`} x="-40%" y="-40%" width="180%" height="180%">
+            <feGaussianBlur in="SourceGraphic" stdDeviation="1.2" />
+          </filter>
         </defs>
-        {current && <ellipse cx="48" cy="65" rx="37" ry="17" fill={accent} opacity="0.26" />}
-        <ellipse cx="48" cy="70" rx="38" ry="12" fill="rgba(28,24,39,0.25)" />
-        <polygon points="48 42 84 58 48 78 12 58" fill={`url(#${idPrefix}-base)`} stroke="rgba(255,255,255,0.88)" strokeWidth="1.5" />
-        <polygon points="12 58 48 78 48 84 12 64" fill="#B6C2CE" opacity="0.86" />
-        <polygon points="84 58 48 78 48 84 84 64" fill="#8FA0B3" opacity="0.86" />
-        <path d="M24 57 L39 49 L73 64" fill="none" stroke="#D0D9E4" strokeWidth="2" strokeLinecap="round" opacity="0.75" />
-        <circle cx="24" cy="59" r="4.8" fill="#75C97B" />
-        <rect x="23.2" y="61" width="1.5" height="7" fill="#6D7B55" />
-        <circle cx="74" cy="58" r="4.5" fill="#6FCC7D" />
-        <rect x="73.3" y="60" width="1.4" height="7" fill="#6D7B55" />
-        <polygon points="30 29 56 40 56 64 30 51" fill={`url(#${idPrefix}-front)`} stroke="rgba(255,255,255,0.72)" strokeWidth="0.9" />
-        <polygon points="56 40 71 32 71 55 56 64" fill={`url(#${idPrefix}-side)`} stroke="rgba(255,255,255,0.35)" strokeWidth="0.8" />
-        <polygon points="30 29 45 20 71 32 56 40" fill={`url(#${idPrefix}-roof)`} stroke="rgba(255,255,255,0.75)" strokeWidth="1.2" />
-        <polygon points="28 40 56 53 56 59 28 46" fill={palette.sign} opacity="0.96" />
-        <polygon points="31 41.5 36 43.8 36 49.5 31 47.1" fill="#FFF7E8" />
-        <polygon points="38 44.7 43 47 43 52.7 38 50.4" fill={palette.roof} opacity="0.9" />
-        <polygon points="45 47.9 50 50.1 50 55.8 45 53.6" fill="#FFF7E8" />
-        <polygon points="34 53 40 56 40 63 34 60" fill="#4B3F5E" />
-        <polygon points="44 43 50 46 50 51 44 48" fill={palette.glass} opacity="0.92" />
-        <polygon points="58 43 64 40 64 45 58 48" fill={palette.glass} opacity="0.72" />
-        <polygon points="58 51 64 48 64 53 58 56" fill={palette.glass} opacity="0.62" />
-        {variant === 0 && <path d="M44 18 C41 12 45 8 49 11 C52 7 58 10 57 16 C56 23 49 25 49 25 C49 25 46 22 44 18Z" fill={palette.roof} stroke="#fff" strokeWidth="1.2" />}
-        {variant === 1 && <path d="M50 7 L56 21 L49 19 L45 28 L42 17 L36 15Z" fill={palette.roof} stroke="#fff" strokeWidth="1.2" />}
-        {variant === 2 && <circle cx="50" cy="15" r="10" fill={palette.roof} stroke="#fff" strokeWidth="1.4" />}
-        {variant === 3 && <polygon points="49 6 54 17 66 18 56 25 59 36 49 29 39 36 42 25 32 18 44 17" fill={palette.roof} stroke="#fff" strokeWidth="1.2" />}
-        {variant === 4 && <path d="M38 25 C38 15 45 8 52 11 C60 14 62 25 57 32 C51 27 45 27 38 32Z" fill={palette.roof} stroke="#fff" strokeWidth="1.2" />}
-        {variant === 5 && <path d="M39 25 L45 12 L51 24 L58 11 L62 27 Z" fill={palette.roof} stroke="#fff" strokeWidth="1.2" />}
-        <circle cx="20" cy="53" r="2" fill={palette.sign} />
-        <circle cx="76" cy="55" r="2" fill={palette.roof} />
+        <ellipse cx="43" cy="83" rx="26" ry="8" fill="#10111D" opacity="0.32" />
+        <path d="M43 8c-19 0-34 14.8-34 33.2C9 64 43 91 43 91s34-27 34-49.8C77 22.8 62 8 43 8Z" fill={`url(#${idPrefix}-pin)`} stroke="rgba(255,255,255,0.86)" strokeWidth="2" />
+        <circle cx="43" cy="41" r="24" fill={`url(#${idPrefix}-inner)`} stroke="rgba(255,255,255,0.5)" strokeWidth="1.2" />
+        <path d="M25 24c8-8 24-10 35 1" fill="none" stroke="#fff" strokeWidth="5" strokeLinecap="round" opacity="0.22" filter={`url(#${idPrefix}-glass)`} />
+        <circle cx="43" cy="41" r="18" fill="rgba(24,20,34,0.26)" />
+        {glyph}
+        <circle cx="65" cy="22" r="5" fill={halo} opacity="0.95" stroke="#fff" strokeWidth="1.5" />
+        <circle cx="65" cy="22" r="8" fill="none" stroke={halo} strokeWidth="1.2" opacity="0.35" />
       </svg>
-      {completed && <div style={{ position: 'absolute', right: 2, top: 13, width: 17, height: 17, borderRadius: 999, background: '#7EE0D6', color: '#203142', fontSize: 11, fontWeight: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 4px 8px rgba(0,0,0,0.2)' }}>✓</div>}
-      {locked && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span style={{ width: 28, height: 28, borderRadius: 999, background: 'rgba(32,26,42,0.78)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 7px 14px rgba(0,0,0,0.32)' }}><Lock size={15} color="#FFCF78" strokeWidth={2.8} /></span></div>}
+      {completed && <div style={{ position: 'absolute', right: 4, top: 12, width: 22, height: 22, borderRadius: 999, background: '#7EE0D6', color: '#203142', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 7px 14px rgba(0,0,0,0.24)' }}><CheckCircle2 size={15} strokeWidth={3} /></div>}
+      {locked && <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}><span style={{ width: 34, height: 34, borderRadius: 999, background: 'rgba(32,26,42,0.82)', border: '1px solid rgba(255,207,120,0.34)', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 10px 18px rgba(0,0,0,0.36)' }}><Lock size={16} color="#FFCF78" strokeWidth={2.8} /></span></div>}
     </div>
+  );
+}
+
+function CityJournalNodeIcon({ index, locked, current, completed, accent }: { index: number; locked: boolean; current: boolean; completed: boolean; accent: string }) {
+  const rotate = [-7, 5, -4, 6, -6, 4][index % 6];
+  const glyph = (() => {
+    const stroke = '#3A2E42';
+    if (index % 6 === 0) return <path d="M20 16c-5.2 0-9.2 3.8-9.2 8.8 0 6.5 9.2 16.4 9.2 16.4s9.2-9.9 9.2-16.4c0-5-4-8.8-9.2-8.8Zm0 12a3.4 3.4 0 1 1 0-6.8 3.4 3.4 0 0 1 0 6.8Z" fill={stroke} />;
+    if (index % 6 === 1) return <path d="M10.5 26.5c4.6-7.2 15.5-7.2 20 0-3-2-5.8-2-8.5.2V36h-4v-9.3c-2.3-2.2-5.2-2.2-7.5-.2Z" fill={stroke} />;
+    if (index % 6 === 2) return <path d="M9.5 17.5h21v17h-21v-17Zm3 4 7.5 5.4 7.5-5.4M12.5 31h15" fill="none" stroke={stroke} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />;
+    if (index % 6 === 3) return <path d="M20 14l3.2 6.4 7.1 1-5.1 5 1.2 7-6.4-3.4-6.4 3.4 1.2-7-5.1-5 7.1-1L20 14Z" fill={stroke} />;
+    if (index % 6 === 4) return <path d="M20 35s-10-6.6-10-13.7c0-3.8 2.9-6.8 6.5-6.8 2 0 3.8 1 5 2.5a6.2 6.2 0 0 1 5-2.5c3.6 0 6.5 3 6.5 6.8C33 28.4 20 35 20 35Z" fill={stroke} />;
+    return <path d="M22.5 13.5 10.5 28h8.6L17.5 39l12.6-16.2h-8.5l.9-9.3Z" fill={stroke} />;
+  })();
+  return (
+    <div aria-hidden style={{ position: 'relative', width: 78, height: 74, filter: locked ? 'saturate(0.62) brightness(0.78)' : undefined }}>
+      {current && (
+        <motion.div
+          aria-hidden
+          initial={{ opacity: 0.62, scale: 0.88 }}
+          animate={{ opacity: [0.62, 0.16, 0.62], scale: [0.88, 1.2, 0.88] }}
+          transition={{ duration: 2.1, repeat: Infinity, ease: 'easeInOut' }}
+          style={{ position: 'absolute', inset: 4, borderRadius: 24, border: `2px solid ${accent}`, boxShadow: `0 0 24px ${accent}88` }}
+        />
+      )}
+      <div
+        style={{
+          position: 'absolute',
+          left: 8,
+          top: 7,
+          width: 61,
+          height: 54,
+          transform: `rotate(${rotate}deg)`,
+          borderRadius: '18px 18px 21px 21px',
+          background: 'linear-gradient(180deg, rgba(255,252,240,0.98), rgba(243,231,212,0.97))',
+          border: `2px solid ${current ? accent : 'rgba(255,244,220,0.9)'}`,
+          boxShadow: `0 14px 22px rgba(32,24,38,0.34), inset 0 -8px 16px ${accent}22`,
+        }}
+      >
+        <span style={{ position: 'absolute', left: 18, top: -9, width: 25, height: 15, borderRadius: 5, background: `${accent}cc`, boxShadow: '0 6px 12px rgba(0,0,0,0.18)', transform: 'rotate(3deg)' }} />
+        <svg viewBox="0 0 40 44" width="42" height="46" style={{ position: 'absolute', left: 9, top: 8 }}>
+          <circle cx="20" cy="23" r="17" fill={`${accent}44`} />
+          {glyph}
+        </svg>
+        <span style={{ position: 'absolute', left: 10, right: 10, bottom: 7, height: 2, borderRadius: 999, background: 'rgba(58,46,66,0.16)' }} />
+      </div>
+      {completed && <span style={{ position: 'absolute', right: 4, top: 6, width: 22, height: 22, borderRadius: 999, background: '#7EE0D6', color: '#203142', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 7px 14px rgba(0,0,0,0.24)' }}><CheckCircle2 size={14} strokeWidth={3} /></span>}
+      {locked && <span style={{ position: 'absolute', right: 4, top: 6, width: 22, height: 22, borderRadius: 999, background: 'rgba(32,26,42,0.9)', color: '#FFCF78', display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 7px 14px rgba(0,0,0,0.24)' }}><Lock size={12} strokeWidth={2.8} /></span>}
+    </div>
+  );
+}
+
+function CityMapRouteOverlay({ mode, completedCount, total }: { mode: 'story' | 'challenge'; completedCount: number; total: number }) {
+  const points = CITY_MAP_POINTS.slice(0, Math.max(0, Math.min(total, CITY_MAP_POINTS.length)));
+  if (points.length < 2) return null;
+  const route = points.map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.left} ${point.top}`).join(' ');
+  const progressIndex = Math.min(Math.max(completedCount, 0), points.length - 1);
+  const progress = points.slice(0, progressIndex + 1).map((point, index) => `${index === 0 ? 'M' : 'L'} ${point.left} ${point.top}`).join(' ');
+  const accent = mode === 'story' ? '#FFB199' : '#7EE0D6';
+  return (
+    <svg aria-hidden viewBox="0 0 100 100" preserveAspectRatio="none" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', overflow: 'visible', pointerEvents: 'none' }}>
+      <path d={route} fill="none" stroke="rgba(16,14,24,0.46)" strokeWidth="3.6" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+      <path d={route} fill="none" stroke="rgba(255,255,255,0.28)" strokeWidth="1.6" strokeDasharray="6 8" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" />
+      {progressIndex > 0 && <path d={progress} fill="none" stroke={accent} strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round" vectorEffect="non-scaling-stroke" style={{ filter: `drop-shadow(0 0 6px ${accent}99)` }} />}
+      {points.map((point, index) => (
+        <circle key={`${point.left}-${point.top}-${index}`} cx={point.left} cy={point.top} r={index <= progressIndex ? 1.55 : 1.1} fill={index <= progressIndex ? accent : 'rgba(255,255,255,0.48)'} stroke="rgba(19,17,28,0.7)" strokeWidth="0.8" vectorEffect="non-scaling-stroke" />
+      ))}
+    </svg>
+  );
+}
+
+type StoryMapLevel = typeof storyLevels[number];
+type StoryMapGroup = {
+  id: number;
+  name: string;
+  narrative: string;
+  synopsis: string;
+  coverImage: string;
+  readCount?: string;
+  vip?: boolean;
+};
+type SelectedStoryMapLevel = { level: StoryMapLevel; index: number } | null;
+
+function getMapNodePlace(mode: 'story' | 'challenge', level: StoryMapLevel) {
+  const place = mode === 'story' ? STORY_NODE_PLACES[level.id] : CHALLENGE_NODE_PLACES[level.id];
+  return place || compactStoryText(level.title, 8).replace('...', '');
+}
+
+function StoryChapterLedgerTabs({
+  mode,
+  groups,
+  activeGroup,
+  onChangeGroup,
+}: {
+  mode: 'story' | 'challenge';
+  groups: StoryMapGroup[];
+  activeGroup: StoryMapGroup;
+  onChangeGroup: (id: number) => void;
+}) {
+  const accent = mode === 'story' ? '#FFB199' : '#7EE0D6';
+  return (
+    <div className="relative z-10" style={{ marginBottom: 6 }}>
+      <div
+        style={{
+          borderRadius: 18,
+          padding: 7,
+          background: 'rgba(20,17,30,0.34)',
+          border: '1px solid rgba(255,255,255,0.1)',
+          boxShadow: '0 12px 26px rgba(12,10,18,0.18)',
+          backdropFilter: 'blur(14px)',
+        }}
+      >
+        <div className="flex gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
+          {groups.map(group => {
+            const selected = activeGroup.id === group.id;
+            return (
+              <button
+                key={`${mode}-${group.id}`}
+                data-chapter-id={group.id}
+                className="flex-shrink-0 text-left"
+                onClick={() => onChangeGroup(group.id)}
+                style={{
+                  minWidth: selected ? 98 : 76,
+                  borderRadius: 13,
+                  padding: '8px 9px',
+                  background: selected ? 'rgba(255,250,239,0.9)' : 'rgba(255,255,255,0.08)',
+                  border: selected ? `1px solid ${accent}88` : '1px solid rgba(255,255,255,0.08)',
+                  boxShadow: selected ? `0 10px 18px ${accent}18` : 'none',
+                  transform: selected ? 'translateY(-1px)' : 'none',
+                }}
+              >
+                <div className="flex items-center gap-1.5">
+                  <span style={{ color: selected ? '#2b2535' : 'rgba(245,239,232,0.56)', fontSize: 10, fontWeight: 1000 }}>
+                    {String(group.id).padStart(2, '0')}
+                  </span>
+                  {selected && <span style={{ width: 6, height: 6, borderRadius: 999, background: accent }} />}
+                  <span style={{ color: selected ? '#2b2535' : 'rgba(245,239,232,0.82)', fontSize: 12, fontWeight: 1000, whiteSpace: 'nowrap' }}>{group.name}</span>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function StoryMapTaskBoard({
+  mode,
+  group,
+  levels,
+  completedCount,
+  nextLevel,
+  onSelectNext,
+}: {
+  mode: 'story' | 'challenge';
+  group: StoryMapGroup;
+  levels: StoryMapLevel[];
+  completedCount: number;
+  nextLevel: { level: StoryMapLevel; index: number } | null;
+  onSelectNext: () => void;
+}) {
+  const accent = mode === 'story' ? '#FFB199' : '#7EE0D6';
+  const progressCount = Math.max(0, Math.min(completedCount, levels.length));
+  return (
+    <motion.div
+      key="story-map-task-board"
+      initial={{ opacity: 0, y: 18 }}
+      animate={{ opacity: 1, y: 0 }}
+      exit={{ opacity: 0, y: 18 }}
+      transition={{ duration: 0.22 }}
+      style={{
+        position: 'absolute',
+        left: 16,
+        right: 16,
+        bottom: 24,
+        zIndex: 12,
+        borderRadius: 20,
+        padding: '12px 13px',
+        background: 'rgba(20,17,30,0.7)',
+        border: '1px solid rgba(255,255,255,0.12)',
+        backdropFilter: 'blur(16px)',
+        boxShadow: '0 16px 36px rgba(0,0,0,0.3)',
+      }}
+    >
+      <div className="flex items-center justify-between gap-3">
+        <div style={{ minWidth: 0 }}>
+          <div className="flex items-center gap-1.5" style={{ marginBottom: 7 }}>
+            {levels.map((level, index) => (
+              <span
+                key={level.id}
+                style={{
+                  width: index < progressCount ? 18 : 14,
+                  height: 4,
+                  borderRadius: 999,
+                  background: index < progressCount ? accent : 'rgba(255,255,255,0.2)',
+                }}
+              />
+            ))}
+            <span style={{ color: 'rgba(245,239,232,0.5)', fontSize: 10, fontWeight: 900, marginLeft: 4 }}>{progressCount}/{levels.length}</span>
+          </div>
+          <div style={{ color: '#f5efe8', fontSize: 12, lineHeight: 1.4, fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+            {nextLevel ? `${getMapNodePlace(mode, nextLevel.level)} · ${getMapNodeLabelForBoard(mode, nextLevel.level)}` : `${group.name} 已完成`}
+          </div>
+        </div>
+        <button
+          type="button"
+          onClick={onSelectNext}
+          disabled={!nextLevel}
+          className="flex items-center gap-1.5"
+          style={{
+            flexShrink: 0,
+            padding: '9px 11px',
+            borderRadius: 999,
+            color: '#271f2d',
+            fontSize: 12,
+            fontWeight: 1000,
+            background: nextLevel ? 'rgba(255,250,239,0.9)' : 'rgba(255,255,255,0.22)',
+            opacity: nextLevel ? 1 : 0.58,
+          }}
+        >
+          继续
+          <ChevronRight size={13} strokeWidth={3} />
+        </button>
+      </div>
+    </motion.div>
+  );
+}
+
+function getMapNodeLabelForBoard(mode: 'story' | 'challenge', level: StoryMapLevel) {
+  const label = mode === 'story' ? STORY_NODE_LABELS[level.id] : CHALLENGE_NODE_LABELS[level.id];
+  return label || compactStoryText(level.title, 8).replace('...', '');
+}
+
+function StoryMapNodeSheet({
+  mode,
+  selected,
+  completedCount,
+  userIsPro,
+  onClose,
+  onEnter,
+}: {
+  mode: 'story' | 'challenge';
+  selected: { level: StoryMapLevel; index: number };
+  completedCount: number;
+  userIsPro: boolean;
+  onClose: () => void;
+  onEnter: () => void;
+}) {
+  const { level, index } = selected;
+  const isLocked = level.vip && !userIsPro;
+  const isCompleted = level.completed;
+  const isCurrent = !isCompleted && !isLocked && index === completedCount;
+  const accent = isLocked ? '#FFCF78' : isCompleted ? '#7EE0D6' : mode === 'story' ? '#FFB199' : '#CDBBFF';
+  const status = isLocked ? '会员章节' : isCompleted ? '已记录' : isCurrent ? '待记录' : '可回看';
+  return (
+    <motion.div
+      key={`story-map-sheet-${level.id}`}
+      initial={{ opacity: 0, y: 28, scale: 0.98 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: 18, scale: 0.98 }}
+      transition={{ duration: 0.24, ease: 'easeOut' }}
+      style={{
+        position: 'absolute',
+        left: 14,
+        right: 14,
+        bottom: 18,
+        zIndex: 16,
+        borderRadius: 26,
+        padding: 4,
+        background: `linear-gradient(135deg, ${accent}cc, rgba(255,244,220,0.28), rgba(255,255,255,0.12))`,
+        boxShadow: '0 22px 48px rgba(0,0,0,0.38)',
+      }}
+    >
+      <div style={{ borderRadius: 23, padding: '14px 14px 13px', background: 'linear-gradient(180deg, rgba(255,250,239,0.97), rgba(244,236,226,0.94))', color: '#2b2535', position: 'relative', overflow: 'hidden' }}>
+        <div aria-hidden style={{ position: 'absolute', left: -18, top: -20, width: 94, height: 74, borderRadius: 28, background: `${accent}24`, transform: 'rotate(-12deg)' }} />
+        <button
+          type="button"
+          aria-label="关闭关卡情报"
+          onClick={onClose}
+          style={{ position: 'absolute', right: 12, top: 12, width: 28, height: 28, borderRadius: 999, background: 'rgba(43,37,53,0.08)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+        >
+          <X size={14} color="#2b2535" strokeWidth={2.6} />
+        </button>
+        <div className="flex items-center gap-2" style={{ marginBottom: 9, paddingRight: 34, position: 'relative' }}>
+          <span style={{ color: 'rgba(43,37,53,0.42)', fontSize: 10, fontWeight: 1000, letterSpacing: 0.5 }}>线索卡</span>
+          <span style={{ color: '#fffaf2', background: '#2b2535', borderRadius: 999, padding: '5px 8px', fontSize: 10, fontWeight: 1000 }}>{status}</span>
+          <span style={{ color: 'rgba(43,37,53,0.5)', fontSize: 11, fontWeight: 900 }}>{mode === 'story' ? `第 ${index + 1} 节` : `邂逅 ${index + 1}`}</span>
+          <span style={{ width: 6, height: 6, borderRadius: 999, background: accent }} />
+        </div>
+        <div style={{ color: 'rgba(43,37,53,0.56)', fontSize: 11, fontWeight: 1000, marginBottom: 4, position: 'relative' }}>
+          {getMapNodePlace(mode, level)}
+        </div>
+        <h3 style={{ margin: 0, color: '#241d2c', fontSize: 20, lineHeight: 1.15, fontWeight: 1000, position: 'relative' }}>{level.title}</h3>
+        <p style={{ margin: '8px 0 13px', color: 'rgba(43,37,53,0.72)', fontSize: 12, lineHeight: 1.6, fontWeight: 650, position: 'relative' }}>
+          {compactStoryText(level.desc, 72)}
+        </p>
+        <div className="flex items-center justify-between gap-3">
+          <div className="flex items-center gap-2" style={{ minWidth: 0 }}>
+            <span style={{ width: 31, height: 31, borderRadius: 12, background: `${accent}33`, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#2b2535' }}>
+              {isLocked ? <Lock size={14} strokeWidth={2.8} /> : <Archive size={15} strokeWidth={2.6} />}
+            </span>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ color: '#2b2535', fontSize: 11, fontWeight: 1000 }}>{isLocked ? '需要会员权限' : isCompleted ? '可重新练习' : '会打开搭档与剧情预览'}</div>
+              <div style={{ color: 'rgba(43,37,53,0.45)', fontSize: 10, fontWeight: 800, marginTop: 1 }}>{mode === 'story' ? '主线手记' : '人物邂逅'}</div>
+            </div>
+          </div>
+          <button
+            type="button"
+            onClick={onEnter}
+            className="flex items-center gap-1.5"
+            style={{ flexShrink: 0, padding: '10px 13px', borderRadius: 999, background: '#2b2535', color: '#fffaf2', fontSize: 12, fontWeight: 1000, boxShadow: '0 12px 22px rgba(43,37,53,0.22)' }}
+          >
+            {isLocked ? '查看权益' : '进入对话'}
+            <ChevronRight size={13} strokeWidth={3} />
+          </button>
+        </div>
+      </div>
+    </motion.div>
+  );
+}
+
+function StoryMapView({
+  mode,
+  activeGroup,
+  groups,
+  levels,
+  completedCount,
+  userIsPro,
+  selectedLevel,
+  getNodeLabel,
+  onBack,
+  onOpenIntro,
+  onChangeGroup,
+  onSelectLevel,
+  onClearSelected,
+  onEnterLevel,
+}: {
+  mode: 'story' | 'challenge';
+  activeGroup: StoryMapGroup;
+  groups: StoryMapGroup[];
+  levels: StoryMapLevel[];
+  completedCount: number;
+  userIsPro: boolean;
+  selectedLevel: SelectedStoryMapLevel;
+  getNodeLabel: (level: StoryMapLevel) => string;
+  onBack: () => void;
+  onOpenIntro: () => void;
+  onChangeGroup: (id: number) => void;
+  onSelectLevel: (level: StoryMapLevel, index: number) => void;
+  onClearSelected: () => void;
+  onEnterLevel: (level: StoryMapLevel, index: number) => void;
+}) {
+  const accent = mode === 'story' ? '#FFB199' : '#7EE0D6';
+  const isPrototypeChapter = mode === 'story' && activeGroup.id === 1;
+  const nextLevel = levels
+    .map((level, index) => ({ level, index }))
+    .find(item => !item.level.completed && !(item.level.vip && !userIsPro))
+    ?? (levels.length ? { level: levels[0], index: 0 } : null);
+  return (
+    <motion.div
+      className="relative overflow-hidden"
+      style={{ minHeight: 'calc(100vh - 82px)', margin: '-10px -20px -32px', padding: '12px 16px 126px', background: '#151b2d' }}
+      initial={{ opacity: 0 }}
+      animate={{ opacity: 1 }}
+      transition={{ duration: 0.35 }}
+    >
+      <img
+        aria-hidden
+        src={getCityMapBackground(mode, activeGroup.id)}
+        alt=""
+        draggable={false}
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center top', filter: mode === 'story' ? 'saturate(0.96) contrast(1.02) brightness(0.88)' : 'saturate(1.08) contrast(1.05) brightness(0.88)' }}
+      />
+      <div aria-hidden style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(24,21,32,0.78) 0%, rgba(24,21,32,0.3) 32%, rgba(18,17,28,0.62) 100%)' }} />
+      <div aria-hidden style={{ position: 'absolute', inset: 0, background: 'radial-gradient(circle at 20% 18%, rgba(255,177,153,0.12), transparent 28%), radial-gradient(circle at 80% 26%, rgba(126,224,214,0.1), transparent 28%)' }} />
+
+      <div className="relative z-10 flex items-center justify-between gap-3" style={{ marginBottom: 12 }}>
+        <button
+          className="flex items-center gap-1.5"
+          style={{ color: '#f5efe8', fontSize: 13, fontWeight: 900, padding: '8px 10px', borderRadius: 999, background: 'rgba(21,18,31,0.5)', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(12px)' }}
+          onClick={onBack}
+        >
+          <ChevronLeft size={16} color="#f5efe8" strokeWidth={2.6} />
+          返回
+        </button>
+        <button
+          className="flex items-center gap-1.5"
+          style={{ color: 'rgba(245,239,232,0.86)', fontSize: 12, fontWeight: 800, padding: '8px 10px', borderRadius: 999, background: 'rgba(21,18,31,0.42)', border: '1px solid rgba(255,255,255,0.1)', backdropFilter: 'blur(12px)' }}
+          onClick={onOpenIntro}
+        >
+          简介
+          <ChevronRight size={13} color="rgba(245,239,232,0.78)" strokeWidth={2.5} />
+        </button>
+      </div>
+
+      <div className="relative z-10" style={{ marginBottom: 10 }}>
+        <div style={{ color: 'rgba(245,239,232,0.62)', fontSize: 12, fontWeight: 900, marginBottom: 5 }}>
+          {mode === 'story' ? `第 ${activeGroup.id} 章 · 城市手记` : `第 ${activeGroup.id} 组 · 人物邂逅`}
+        </div>
+        <h1 style={{ color: '#f5efe8', fontSize: 28, lineHeight: 1.04, fontWeight: 1000, margin: 0, textShadow: '0 4px 20px rgba(0,0,0,0.42)' }}>{activeGroup.name}</h1>
+        <p style={{ color: 'rgba(245,239,232,0.68)', fontSize: 12, lineHeight: 1.48, maxWidth: 310, marginTop: 7, textShadow: '0 2px 12px rgba(0,0,0,0.42)' }}>{activeGroup.narrative}</p>
+      </div>
+
+      <StoryChapterLedgerTabs
+        mode={mode}
+        groups={groups}
+        activeGroup={activeGroup}
+        onChangeGroup={onChangeGroup}
+      />
+
+      <div className="absolute" data-chapter-id={activeGroup.id} style={{ left: 0, right: 0, top: isPrototypeChapter ? 226 : 232, bottom: 132, zIndex: 2 }}>
+        <CityMapRouteOverlay mode={mode} completedCount={completedCount} total={levels.length} />
+        {levels.map((level, levelIndex) => {
+          const point = CITY_MAP_POINTS[levelIndex % CITY_MAP_POINTS.length];
+          const isLocked = level.vip && !userIsPro;
+          const isCurrent = !level.completed && !isLocked && levelIndex === completedCount;
+          const isCompleted = level.completed;
+          const isSelected = selectedLevel?.level.id === level.id;
+          const accentColor = isLocked ? '#FFCF78' : isCompleted ? '#7EE0D6' : isCurrent || isSelected ? '#FF8A80' : accent;
+          return (
+            <div key={level.id} style={{ position: 'absolute', left: `${point.left}%`, top: `${point.top}%`, transform: 'translate(-50%, -50%)' }}>
+              <motion.button
+                className="flex flex-col items-center"
+                style={{ width: isPrototypeChapter ? 122 : 106, minHeight: isPrototypeChapter ? 104 : 96, opacity: isLocked ? 0.78 : isCompleted || isCurrent || isSelected ? 1 : 0.9 }}
+                initial={{ opacity: 0, scale: 0.82, y: 10 }}
+                animate={{ opacity: isLocked ? 0.78 : 1, scale: isSelected ? 1.05 : 1, y: 0 }}
+                transition={{ delay: levelIndex * 0.045, type: 'spring', damping: 16, stiffness: 260 }}
+                whileTap={{ scale: 0.94 }}
+                onClick={() => onSelectLevel(level, levelIndex)}
+                aria-label={`查看${getNodeLabel(level)}`}
+              >
+                {isPrototypeChapter
+                  ? <CityJournalNodeIcon index={levelIndex} locked={isLocked} current={isCurrent || isSelected} completed={isCompleted} accent={accentColor} />
+                  : <CityLandmarkIcon mode={mode} index={levelIndex} locked={isLocked} current={isCurrent || isSelected} completed={isCompleted} accent={accentColor} />}
+                <div style={{
+                  marginTop: isPrototypeChapter ? -4 : 2,
+                  maxWidth: isPrototypeChapter ? 112 : 94,
+                  padding: isPrototypeChapter ? '6px 9px 7px' : '5px 9px',
+                  borderRadius: isPrototypeChapter ? 13 : 999,
+                  color: isPrototypeChapter ? '#2b2535' : '#f5efe8',
+                  fontSize: 12,
+                  fontWeight: 1000,
+                  lineHeight: 1.1,
+                  background: isPrototypeChapter ? 'rgba(255,250,239,0.93)' : isSelected ? 'rgba(43,37,53,0.9)' : 'rgba(18,16,25,0.74)',
+                  border: isSelected ? `1px solid ${accentColor}` : isPrototypeChapter ? '1px solid rgba(255,244,220,0.76)' : '1px solid rgba(255,255,255,0.18)',
+                  backdropFilter: 'blur(10px)',
+                  boxShadow: '0 8px 18px rgba(0,0,0,0.24)',
+                  overflow: 'hidden',
+                }}>
+                  <div style={{ whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{getNodeLabel(level)}</div>
+                  {isPrototypeChapter && <div style={{ color: 'rgba(43,37,53,0.48)', fontSize: 9, fontWeight: 900, marginTop: 3, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{getMapNodePlace(mode, level)}</div>}
+                </div>
+              </motion.button>
+            </div>
+          );
+        })}
+      </div>
+
+      <AnimatePresence mode="wait">
+        {selectedLevel ? (
+          <StoryMapNodeSheet
+            mode={mode}
+            selected={selectedLevel}
+            completedCount={completedCount}
+            userIsPro={userIsPro}
+            onClose={onClearSelected}
+            onEnter={() => onEnterLevel(selectedLevel.level, selectedLevel.index)}
+          />
+        ) : (
+          <StoryMapTaskBoard
+            mode={mode}
+            group={activeGroup}
+            levels={levels}
+            completedCount={completedCount}
+            nextLevel={nextLevel}
+            onSelectNext={() => nextLevel && onSelectLevel(nextLevel.level, nextLevel.index)}
+          />
+        )}
+      </AnimatePresence>
+    </motion.div>
   );
 }
 
@@ -553,30 +1154,121 @@ const userProgress = {
 type HealingMode = 'vent' | 'reply' | 'review' | 'translate';
 type HealingTier = 'free' | 'lite' | 'pro' | 'proplus';
 type HealingMessage = { role: 'fox' | 'user'; text: string; tag?: string; pending?: boolean; error?: boolean };
+type RelationshipProfile = {
+  id: string;
+  alias: string;
+  stage: string;
+  goal: string;
+  traits: string;
+  likes: string;
+  dislikes: string;
+  communicationStyle: string;
+  topics: string;
+  boundaries: string;
+  notes: string;
+  lastEvent: string;
+  createdAt: number;
+  updatedAt: number;
+};
+type RelationshipDraft = Pick<RelationshipProfile, 'alias' | 'stage' | 'goal' | 'traits' | 'likes' | 'dislikes' | 'communicationStyle' | 'topics' | 'boundaries' | 'notes' | 'lastEvent'>;
 type HealingModeConfig = {
   id: HealingMode;
   label: string;
-  icon: string;
+  icon: LucideIcon;
   cost: number;
   desc: string;
   placeholder: string;
+  template: string;
   requiredTier?: 'member' | 'proplus';
 };
 
 const HEALING_LEGACY_KEY = 'foxsay_healing_energy';
 const HEALING_TEST_ENERGY_LIMIT = 300;
 const HEALING_MESSAGES_LIMIT = 50;
+const RELATIONSHIP_PROFILE_LIMIT = 12;
+const RELATIONSHIP_TEXT_FIELD_LIMIT = 260;
 const HEALING_GREETING: HealingMessage = { role: 'fox', tag: '尼克大叔', text: '我在。你不用把话整理好，先坐一会儿，把最堵的那一句慢慢说出来就行。' };
 
 const HEALING_MODE_CONFIGS: HealingModeConfig[] = [
-  { id: 'vent', label: '树洞', icon: '月', cost: 1, desc: '先把情绪放下来', placeholder: '把心里最堵的那句话放在这里...' },
-  { id: 'reply', label: '帮我回', icon: '回', cost: 1, desc: '一起想一句稳的', placeholder: '粘贴对方的话，或者说说你想怎么回...' },
-  { id: 'review', label: '复盘', icon: '想', cost: 1, desc: '慢慢理清发生了什么', placeholder: '把事情经过、对方原话和你的感受放进来...' },
-  { id: 'translate', label: '翻译', icon: '译', cost: 1, desc: '听懂话里的话', placeholder: '粘贴对方原话，我陪你拆可能含义...' },
+  {
+    id: 'vent',
+    label: '树洞',
+    icon: Moon,
+    cost: 1,
+    desc: '先接住情绪，再找今天能做的一步',
+    placeholder: '乱一点也没关系，直接说你最堵的那句...',
+    template: '发生了什么：\n我现在最堵的是：\n我怕的是：',
+  },
+  {
+    id: 'reply',
+    label: '帮我回',
+    icon: MessageSquareReply,
+    cost: 1,
+    desc: '判断该不该回，再给能直接发的话',
+    placeholder: '粘贴对方原话，再说你想达到什么效果...',
+    template: '对方原话：\n我想表达：\n我不想显得：',
+  },
+  {
+    id: 'review',
+    label: '复盘',
+    icon: ClipboardCheck,
+    cost: 1,
+    desc: '拆信号、拆失误、给下一步动作',
+    placeholder: '把经过、对方原话、你怎么回的都放进来...',
+    template: '事情经过：\n对方原话：\n我当时怎么回：\n现在卡住的是：',
+  },
+  {
+    id: 'translate',
+    label: '翻译',
+    icon: Languages,
+    cost: 1,
+    desc: '把字面话翻成可能的真实信号',
+    placeholder: '粘贴对方原话，加上当时场景会更准...',
+    template: '对方原话：\n当时场景：\n我担心的是：',
+  },
 ];
 
 const NICK_AVATAR_SRC = '/avatars/nick-uncle.png';
 const NICK_AVATAR_FALLBACK_SRC = '/avatars/nick-uncle.svg';
+
+const RELATIONSHIP_STAGE_OPTIONS = ['刚认识', '暧昧中', '约会中', '恋爱中', '冷战中', '分手后', '复联中', '想退出'];
+const RELATIONSHIP_GOAL_OPTIONS = ['推进关系', '确认心意', '降温观察', '道歉修复', '设定边界', '复联试探', '体面退出'];
+
+function getDefaultRelationshipDraft(): RelationshipDraft {
+  return {
+    alias: '',
+    stage: RELATIONSHIP_STAGE_OPTIONS[1],
+    goal: RELATIONSHIP_GOAL_OPTIONS[0],
+    traits: '',
+    likes: '',
+    dislikes: '',
+    communicationStyle: '',
+    topics: '',
+    boundaries: '',
+    notes: '',
+    lastEvent: '',
+  };
+}
+
+function cleanRelationshipField(value: unknown, limit = RELATIONSHIP_TEXT_FIELD_LIMIT) {
+  return String(value || '').trim().slice(0, limit);
+}
+
+function getRelationshipDraftFromProfile(profile: RelationshipProfile): RelationshipDraft {
+  return {
+    alias: profile.alias,
+    stage: profile.stage,
+    goal: profile.goal,
+    traits: profile.traits,
+    likes: profile.likes,
+    dislikes: profile.dislikes,
+    communicationStyle: profile.communicationStyle,
+    topics: profile.topics,
+    boundaries: profile.boundaries,
+    notes: profile.notes,
+    lastEvent: profile.lastEvent,
+  };
+}
 
 function useNickAvatarFallback(event: { currentTarget: HTMLImageElement }) {
   const img = event.currentTarget;
@@ -603,6 +1295,14 @@ function getHealingStorageKey(userId?: string | null) {
 
 function getHealingMessagesStorageKey(userId?: string | null) {
   return `foxsay_healing_messages_v1_${userId || 'guest'}`;
+}
+
+function getRelationshipProfilesStorageKey(userId?: string | null) {
+  return `foxsay_relationship_profiles_v1_${userId || 'guest'}`;
+}
+
+function getSelectedRelationshipProfileKey(userId?: string | null) {
+  return `foxsay_selected_relationship_profile_v1_${userId || 'guest'}`;
 }
 
 function getHealingTier(user: any): HealingTier {
@@ -693,6 +1393,87 @@ function clearHealingMessages(userId: string | null | undefined) {
   } catch {}
 }
 
+function normalizeRelationshipProfile(input: any): RelationshipProfile | null {
+  const alias = String(input?.alias || '').trim().slice(0, 18);
+  if (!alias) return null;
+  const now = Date.now();
+  const stage = String(input?.stage || RELATIONSHIP_STAGE_OPTIONS[1]).trim().slice(0, 16) || RELATIONSHIP_STAGE_OPTIONS[1];
+  const goal = String(input?.goal || RELATIONSHIP_GOAL_OPTIONS[0]).trim().slice(0, 16) || RELATIONSHIP_GOAL_OPTIONS[0];
+  return {
+    id: String(input?.id || `rel_${now}_${Math.random().toString(36).slice(2, 8)}`),
+    alias,
+    stage,
+    goal,
+    traits: cleanRelationshipField(input?.traits || input?.personality),
+    likes: cleanRelationshipField(input?.likes),
+    dislikes: cleanRelationshipField(input?.dislikes),
+    communicationStyle: cleanRelationshipField(input?.communicationStyle),
+    topics: cleanRelationshipField(input?.topics),
+    boundaries: cleanRelationshipField(input?.boundaries),
+    notes: cleanRelationshipField(input?.notes),
+    lastEvent: cleanRelationshipField(input?.lastEvent),
+    createdAt: Number.isFinite(Number(input?.createdAt)) ? Number(input.createdAt) : now,
+    updatedAt: Number.isFinite(Number(input?.updatedAt)) ? Number(input.updatedAt) : now,
+  };
+}
+
+function loadRelationshipProfiles(userId: string | null | undefined): RelationshipProfile[] {
+  try {
+    const raw = localStorage.getItem(getRelationshipProfilesStorageKey(userId));
+    if (!raw) return [];
+    const parsed = JSON.parse(raw);
+    if (!Array.isArray(parsed)) return [];
+    return parsed
+      .map(normalizeRelationshipProfile)
+      .filter(Boolean)
+      .sort((a, b) => (b!.updatedAt || 0) - (a!.updatedAt || 0))
+      .slice(0, RELATIONSHIP_PROFILE_LIMIT) as RelationshipProfile[];
+  } catch {}
+  return [];
+}
+
+function saveRelationshipProfiles(userId: string | null | undefined, profiles: RelationshipProfile[]) {
+  try {
+    localStorage.setItem(getRelationshipProfilesStorageKey(userId), JSON.stringify(profiles.slice(0, RELATIONSHIP_PROFILE_LIMIT)));
+  } catch {}
+}
+
+function loadSelectedRelationshipProfileId(userId: string | null | undefined, profiles: RelationshipProfile[]) {
+  try {
+    const saved = localStorage.getItem(getSelectedRelationshipProfileKey(userId));
+    if (saved && profiles.some(profile => profile.id === saved)) return saved;
+  } catch {}
+  return profiles[0]?.id || null;
+}
+
+function saveSelectedRelationshipProfileId(userId: string | null | undefined, profileId: string | null) {
+  try {
+    const key = getSelectedRelationshipProfileKey(userId);
+    if (profileId) localStorage.setItem(key, profileId);
+    else localStorage.removeItem(key);
+  } catch {}
+}
+
+function buildRelationshipProfileContext(profile: RelationshipProfile | null) {
+  if (!profile) {
+    return '当前没有选中关系档案。不要假装记得某个具体对象的历史，只根据用户本轮输入回答；如果用户提到这是持续关系，可以自然提醒他去档案库建一个档案。';
+  }
+  return [
+    `当前选中的关系档案：${profile.alias}`,
+    `关系阶段：${profile.stage}`,
+    `用户当前目标：${profile.goal}`,
+    profile.traits ? `对方性格/状态：${profile.traits}` : '对方性格/状态：暂无，不要臆测。',
+    profile.likes ? `TA 喜欢/加分项：${profile.likes}` : 'TA 喜欢/加分项：暂无。',
+    profile.dislikes ? `TA 不喜欢/减分项：${profile.dislikes}` : 'TA 不喜欢/减分项：暂无。',
+    profile.communicationStyle ? `沟通风格：${profile.communicationStyle}` : '沟通风格：暂无，先按用户本轮信息判断。',
+    profile.topics ? `可聊话题：${profile.topics}` : '可聊话题：暂无。',
+    profile.boundaries ? `雷区/边界：${profile.boundaries}` : '雷区/边界：暂无，仍需优先尊重对方明确拒绝。',
+    profile.lastEvent ? `最近关键事件：${profile.lastEvent}` : '最近关键事件：用户还没写，优先从本轮输入里补信息。',
+    profile.notes ? `补充备注：${profile.notes}` : '补充备注：暂无。',
+    '回答时要自然使用这份档案做判断，例如“你和这个人这条线现在...”这种口吻；给回复建议时优先避开雷区，贴合 TA 的偏好、沟通风格和可聊话题；但不要编造档案里没有的事实。若本轮出现新的偏好、反感、阶段变化或关键事件，提醒用户回档案库更新。',
+  ].join('\n');
+}
+
 function isHealingModeUnlocked(mode: HealingModeConfig, tier: HealingTier) {
   if (!mode.requiredTier) return true;
   if (mode.requiredTier === 'member') return tier !== 'free';
@@ -704,12 +1485,12 @@ function getHealingLockedLabel(mode: HealingModeConfig, tier: HealingTier) {
   return mode.requiredTier === 'proplus' ? 'PRO+' : '会员';
 }
 
-function buildHealingSystemPrompt(mode: HealingMode) {
+function buildHealingSystemPrompt(mode: HealingMode, relationshipProfile: RelationshipProfile | null) {
   const modeRules: Record<HealingMode, string> = {
-    vent: '当前触发【深夜酒馆模式】。收起大部分毒舌，先让用户觉得被接住。允许他脆弱，用一个有画面感的比喻稀释痛苦，再把失败重构成成长税，最后只给一个今天能做到的小动作。',
-    reply: '当前触发【枪套模式】。先判断这段关系里的压力点、用户有没有暴露需求感，再给一条可以直接发送的克制回复，并附一个更柔和版本。回复要自然、有边界、有生活感，不攻击对方，也不讨好。',
-    review: '当前触发【黑匣子模式】。像审视案发现场的老刑警一样复盘：指出用户哪个动作丢了分、哪句话暴露底牌，再解释底层心理逻辑，最后告诉用户下一步如何找回场子以及绝对别做什么。',
-    translate: '当前触发【透视镜模式】。像 X 光一样扫描对方的话，忽略表面客套，拆出可能的情绪状态、博弈身位和不能下定论的部分。输出要包含：轻微嘲讽用户迟钝、翻译可能潜台词、给一条反制或确认话术。',
+    vent: '当前触发【深夜酒馆模式】。目标不是讲大道理，而是先稳住用户的情绪系统。回答结构：1）先用一句短口语接住他的感受；2）把“事实、感受、脑补”分开；3）指出他真正害怕的东西；4）只给一个今天能做到的小动作。毒舌压低，不催他立刻做决定。',
+    reply: '当前触发【枪套模式】。目标是让用户拿到可以直接发送的回复。先判断“现在该回、晚点回、还是先别回”，再给三条可复制话术：稳妥版、轻松版、有边界版。每条都要像真人消息，别像客服模板。最后补一句“别这么发”，指出最容易暴露需求感或攻击性的说法。',
+    review: '当前触发【黑匣子模式】。目标是复盘一段真实互动。回答结构：1）按事实还原发生了什么；2）拆对方信号，标注确定/不确定；3）指出用户哪个动作加分、哪个动作扣分；4）给 24 小时内下一步；5）如果有新偏好、雷区、阶段变化，提醒用户更新关系档案。不要把不确定信号说成铁证。',
+    translate: '当前触发【透视镜模式】。目标是翻译“话里的话”，但禁止装成读心术。回答结构：1）字面意思；2）三种可能潜台词，按概率排序；3）最危险的误读；4）一句低压确认话术。可以轻微调侃用户迟钝，但不要用“反制”“拿捏”这种操控味表达。',
   };
   return `你是 FoxSay 里的“尼克大叔”，内部人格名“狐叔 / Nick”。你是退役的情感与人际博弈大师，现任 FoxSay 首席社交顾问、深夜解忧酒馆老板。你的心理年龄 35+，穿着略微起皱的绿色衬衫和松垮的橘色领带，眼神半眯带笑，手里常端着一杯加冰的威士忌。
 
@@ -723,11 +1504,14 @@ function buildHealingSystemPrompt(mode: HealingMode) {
 
 社交法则：任何关系都有价值交换，舔狗式付出不是爱；对方更容易被有边界、有生活、有未知感的人吸引；被拒绝不可耻，被拒绝后死缠烂打才丢分；所谓博弈不是操控别人，而是先管住自己的需求感、节奏和边界。
 
+关系档案读取规则：
+${buildRelationshipProfileContext(relationshipProfile)}
+
 ${modeRules[mode]}
 
 安全边界：禁止鼓励骚扰、跟踪、控制、欺骗、冷暴力、报复、羞辱或无视对方明确拒绝。不要把所有女性或男性绝对化，优先说“这个人此刻可能”。如果用户提到自伤、伤人、被威胁、家暴、跟踪、严重创伤或现实安全风险，立刻进入严肃模式，停止玩笑和博弈建议，建议联系身边可信任的人、当地紧急服务或专业心理援助。你不能替代专业心理咨询。
 
-每次回答控制在 180-320 字，使用中文。先判断用户处境和情绪能量，再决定毒舌强度。输出要具体、可执行、像真人叔叔在深夜酒馆里说话。`;
+每次回答控制在 220-420 字，使用中文。可以用很短的小标题，但不要堆 markdown。先判断用户处境和情绪能量，再决定毒舌强度。输出要具体、可执行、像真人叔叔在深夜酒馆里说话。`;
 }
 
 function cleanHealingReply(text: string) {
@@ -742,15 +1526,22 @@ function cleanHealingReply(text: string) {
 function buildLocalHealingReply(mode: HealingMode, text: string) {
   const brief = text.length > 54 ? `${text.slice(0, 54)}...` : text;
   if (mode === 'reply') {
-    return `我先帮你稳住这一句。你可以回：“我看到你这句话了，也想认真处理。但我不想在情绪很满的时候互相误解。你愿意的话，我们先把具体发生了什么说清楚。”这句的重点是：不急着自证，也不把话说成攻击。`;
+    return `先别急着证明你多在乎，越急越像把方向盘递出去。\n\n稳妥版：“我看到你这句话了，也想认真处理。我们别在情绪最满的时候互相误解，你愿意的话，把具体卡住的点说清楚。”\n\n轻松版：“行，我先不乱猜。你告诉我是哪一点让你不舒服，我认真听。”\n\n有边界版：“我愿意沟通，但不想靠猜和内耗解决问题。你直接说，我也直接改。”\n\n别发：别上来就连环解释、道歉十句，那是在把压力塞给对方。`;
   }
   if (mode === 'review') {
-    return `我先按复盘方式拆这段：“${brief}”。你现在最累的点，可能是事件本身加上反复猜测一起消耗。先分三层看：事实是什么；你因此产生的感受是什么；你真正需要对方给出的改变是什么。下一步别急着求一个大结论，先要一个具体、可执行的小回应。`;
+    return `先按黑匣子拆：“${brief}”。\n\n事实层：现在能确认的只有你们发生了这件事，别把沉默、冷淡、慢回复全部自动翻译成“不在乎”。\n\n信号层：对方可能在防御、观望，也可能只是没准备好继续聊，确定度不够。\n\n你这边最容易扣分的动作，是急着追一个最终答案。下一步 24 小时内只做一件事：发一条低压确认，问清楚具体卡点，然后停。别复读、别追问、别把复盘变成审判。`;
   }
   if (mode === 'translate') {
-    return `我先做可能含义翻译，不替对方下定论。“${brief}”表层是在表达态度，底层可能有防御、试探、退缩或要安全感。更稳的做法是先确认：“你这句话是在说你的感受，还是希望我做某个具体改变？”这样能减少误读，也保住你的边界。`;
+    return `翻译一下“${brief}”，但先说清楚：叔不是读心术摊主，别把一种可能当圣旨。\n\n字面意思：对方在表达一个态度或边界。\n\n可能潜台词一：她在观察你会不会急、会不会压迫。\n可能潜台词二：她有情绪，但还没组织好怎么说。\n可能潜台词三：她在降温，不想继续把话聊深。\n\n最危险的误读，是你立刻脑补成“她彻底没兴趣”，然后开始自毁。你可以回：“我不乱猜，你这句话是想让我调整什么，还是只是想让我知道你的感受？”`;
   }
-  return `我听见了。“${brief}”最消耗人的地方，可能不是单一事件，而是你一直在心里反复猜。先别急着判断自己是不是想太多。我们先把它放平：发生了什么，你哪里最难受，你希望对方以后怎么做。你可以继续讲，我会陪你往下理。`;
+  return `我听见了。“${brief}”最消耗人的地方，可能不是单一事件，而是你在脑子里反复补完所有最坏版本。\n\n先把它放平：事实是什么，感受是什么，脑补是什么。你难受是真的，但难受不等于结论也是真的。\n\n今天先别做大动作，别连环发消息，别逼自己马上想通。你只做一件小事：把最刺痛你的那句话写出来，再问自己“我是在怕失去这个人，还是怕自己又不被选择”。这两个答案，不是一回事。`;
+}
+
+function getHealingPendingText(mode: HealingMode) {
+  if (mode === 'reply') return '尼克大叔正在给你挑一句能发的...';
+  if (mode === 'review') return '尼克大叔正在把现场倒回去看一遍...';
+  if (mode === 'translate') return '尼克大叔正在拆这句话的暗线...';
+  return '尼克大叔正在把这件事放平一点...';
 }
 
 /* ========================================
@@ -790,6 +1581,9 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
   const [attemptGate, setAttemptGate] = useState<{ reason: string } | null>(null); // 次数上限弹层
   const [messages, setMessages] = useState<{ role: string; text: string; innerOS?: string; mood?: string; delta?: number }[]>([]); // 对话消息列表（带 meta 装饰）
   const [chatInput, setChatInput] = useState('');                  // 输入框内容
+  const [chatInputFocused, setChatInputFocused] = useState(false);  // 手机键盘弹出时用于压缩底部舞台
+  const [chatKeyboardInset, setChatKeyboardInset] = useState(0);    // 软键盘覆盖高度（部分 WebView 不会自动缩 viewport）
+  const [showChatHistory, setShowChatHistory] = useState(false);   // 沉浸式对话记录抽屉
   /* ---------- 关卡五件套运行时状态 ---------- */
   const [chatLevelKid, setChatLevelKid] = useState<string | null>(null);           // 当前关卡 kid（例：L003）。null = 自由/邂逅
   const [chatMode, setChatMode] = useState<'story' | 'challenge' | 'freestyle'>('freestyle');
@@ -809,10 +1603,18 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
   const [deltaPopup, setDeltaPopup] = useState<{ val: number; id: number } | null>(null);
   const [summaryAbilityEvent, setSummaryAbilityEvent] = useState<AbilityEvent | null>(null);
   const [openingChoices, setOpeningChoices] = useState<string[]>([]);
+  const [sceneHotspots, setSceneHotspots] = useState<SceneHotspot[]>([]);
+  const [usedSceneHotspotIds, setUsedSceneHotspotIds] = useState<string[]>([]);
+  const [activeSceneHint, setActiveSceneHint] = useState<SceneHotspot | null>(null);
+  const [chatMicroReaction, setChatMicroReaction] = useState<string | null>(null);
+  const [lastObservedHotspotId, setLastObservedHotspotId] = useState<string | null>(null);
+  const [chatBreakEnding, setChatBreakEnding] = useState(false);
   /** 当前聊天的关卡散文式剧情简介（注入 system prompt，保证 AI 贴合关卡） */
   const [chatSceneSynopsis, setChatSceneSynopsis] = useState<string>('');
   /** 聊天消息滚动容器 ref —— 新消息自动滚到底部 */
   const chatScrollRef = useRef<HTMLDivElement | null>(null);
+  const sceneHintTimerRef = useRef<number | null>(null);
+  const microReactionTimerRef = useRef<number | null>(null);
   /** 本局结束后 AI 教练点评（null=加载中；对象=生成完成） */
   const [coachReview, setCoachReview] = useState<{
     overall: string;
@@ -836,6 +1638,11 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
   const [healingEnergy, setHealingEnergy] = useState(() => loadHealingEnergy((user as any).userId, healingEnergyLimit));
   const [healingSending, setHealingSending] = useState(false);
   const [healingMessages, setHealingMessages] = useState<HealingMessage[]>(() => loadHealingMessages((user as any).userId));
+  const [showRelationshipLibrary, setShowRelationshipLibrary] = useState(false);
+  const [relationshipProfiles, setRelationshipProfiles] = useState<RelationshipProfile[]>(() => loadRelationshipProfiles((user as any).userId));
+  const [selectedRelationshipId, setSelectedRelationshipId] = useState<string | null>(() => loadSelectedRelationshipProfileId((user as any).userId, loadRelationshipProfiles((user as any).userId)));
+  const [relationshipDraft, setRelationshipDraft] = useState<RelationshipDraft>(() => getDefaultRelationshipDraft());
+  const [editingRelationshipId, setEditingRelationshipId] = useState<string | null>(null);
   const healingScrollRef = useRef<HTMLDivElement | null>(null);
   const [showRanking, setShowRanking] = useState(false);          // 排行榜弹窗
   const [bookingSuccess, setBookingSuccess] = useState<{ name: string; time: string } | null>(null); // 预约成功弹窗
@@ -847,6 +1654,7 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
       ? { chapterId: pendingAction.chapterId, index: pendingAction.levelIndex ?? 0 }
       : null
   ); // 小关卡沉浸页
+  const [selectedMapLevel, setSelectedMapLevel] = useState<SelectedStoryMapLevel>(null);
   const cameFromHomeRef = useRef(!!pendingAction); // 是否从首页推荐进入
   // 已锁定的搭档（按小关卡 id 记录，进入该关直接使用）
   const [levelPartners, setLevelPartners] = useState<Record<number, { kid?: string; img: string; name: string; age: number; signature: string; traits: string[] }>>({});
@@ -856,9 +1664,44 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
     const el = chatScrollRef.current;
     if (!el) return;
     requestAnimationFrame(() => {
-      el.scrollTo({ top: el.scrollHeight, behavior: 'smooth' });
+      el.scrollTo({ top: el.scrollHeight, behavior: 'auto' });
+      requestAnimationFrame(() => {
+        el.scrollTo({ top: el.scrollHeight, behavior: 'auto' });
+      });
     });
   }, [messages, showChat]);
+
+  useEffect(() => {
+    if (!showChat || !chatInputFocused) {
+      setChatKeyboardInset(0);
+      return;
+    }
+
+    const viewport = window.visualViewport;
+    const updateKeyboardInset = () => {
+      if (!viewport) {
+        setChatKeyboardInset(0);
+        return;
+      }
+      const inset = Math.max(0, window.innerHeight - viewport.height - viewport.offsetTop);
+      setChatKeyboardInset(inset > 80 ? Math.round(inset) : 0);
+    };
+
+    updateKeyboardInset();
+    viewport?.addEventListener('resize', updateKeyboardInset);
+    viewport?.addEventListener('scroll', updateKeyboardInset);
+    window.addEventListener('resize', updateKeyboardInset);
+    return () => {
+      viewport?.removeEventListener('resize', updateKeyboardInset);
+      viewport?.removeEventListener('scroll', updateKeyboardInset);
+      window.removeEventListener('resize', updateKeyboardInset);
+    };
+  }, [showChat, chatInputFocused]);
+
+  useEffect(() => () => {
+    if (sceneHintTimerRef.current) window.clearTimeout(sceneHintTimerRef.current);
+    if (microReactionTimerRef.current) window.clearTimeout(microReactionTimerRef.current);
+  }, []);
 
   useEffect(() => {
     setHealingEnergy(loadHealingEnergy((user as any).userId, healingEnergyLimit));
@@ -875,6 +1718,30 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
   useEffect(() => {
     saveHealingMessages((user as any).userId, healingMessages);
   }, [healingMessages, (user as any).userId]);
+
+  useEffect(() => {
+    const profiles = loadRelationshipProfiles((user as any).userId);
+    setRelationshipProfiles(profiles);
+    setSelectedRelationshipId(loadSelectedRelationshipProfileId((user as any).userId, profiles));
+  }, [(user as any).userId]);
+
+  useEffect(() => {
+    saveRelationshipProfiles((user as any).userId, relationshipProfiles);
+  }, [relationshipProfiles, (user as any).userId]);
+
+  useEffect(() => {
+    if (relationshipProfiles.length === 0 && selectedRelationshipId) {
+      setSelectedRelationshipId(null);
+      return;
+    }
+    if (selectedRelationshipId && !relationshipProfiles.some(profile => profile.id === selectedRelationshipId)) {
+      setSelectedRelationshipId(relationshipProfiles[0]?.id || null);
+    }
+  }, [relationshipProfiles, selectedRelationshipId]);
+
+  useEffect(() => {
+    saveSelectedRelationshipProfileId((user as any).userId, selectedRelationshipId);
+  }, [selectedRelationshipId, (user as any).userId]);
 
   useEffect(() => {
     const el = healingScrollRef.current;
@@ -906,6 +1773,7 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
     if (entryPressTimerRef.current) window.clearTimeout(entryPressTimerRef.current);
     setEntryPressMode(mode);
     entryPressTimerRef.current = window.setTimeout(() => {
+      setSelectedMapLevel(null);
       setPracticeMode(mode);
       setExpandedChapter(mode === 'story' ? (storyChapters[0]?.id ?? 1) : (challengeGroups[0]?.id ?? 1));
       setEntryPressMode(null);
@@ -927,6 +1795,10 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
     }
     setLevelImmersive({ chapterId: level.chapter, index: levelIndex });
   };
+
+  useEffect(() => {
+    setSelectedMapLevel(null);
+  }, [practiceMode, expandedChapter]);
 
   useEffect(() => {
     if (featuredRecommendations.length <= 1) return;
@@ -1093,10 +1965,11 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
     partner: { kid?: string; img: string; name: string; age: number; signature: string; traits: string[] } | null = null,
     opts?: { levelKid?: string | null; mode?: 'story' | 'challenge' | 'freestyle'; coverImage?: string | null; isFinale?: boolean; sceneSynopsis?: string },
   ) => {
+    const resolvedPartner = partner ?? (opts?.mode === 'story' ? partnerCardToPartnerInfo('P001') : null);
     setChatTarget(dialogueKey);
     setChatTitle(title);
-    setChatPartner(partner);
-    setChatCoverImg(opts?.coverImage ?? partner?.img ?? null);
+    setChatPartner(resolvedPartner);
+    setChatCoverImg(opts?.coverImage ?? resolvedPartner?.img ?? null);
     setChatLevelKid(opts?.levelKid ?? null);
     setChatMode(opts?.mode ?? 'freestyle');
     setChatIsFinale(!!opts?.isFinale);
@@ -1115,6 +1988,15 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
     setShowSummary(false);
     setCoachReview(null);
     setSummaryAbilityEvent(null);
+    setShowChatHistory(false);
+    setSceneHotspots(buildSceneHotspots(title, opts?.sceneSynopsis));
+    setUsedSceneHotspotIds([]);
+    setActiveSceneHint(null);
+    setChatMicroReaction(null);
+    setLastObservedHotspotId(null);
+    setChatBreakEnding(false);
+    if (sceneHintTimerRef.current) window.clearTimeout(sceneHintTimerRef.current);
+    if (microReactionTimerRef.current) window.clearTimeout(microReactionTimerRef.current);
 
     // ---- 开场白 ----
     let initialMessages: { role: string; text: string }[] = [];
@@ -1143,18 +2025,31 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
         { role: 'ai', text: '（你们终于坐下来了，对方看着你，等你先开口）' },
       ];
     }
-    setMessages(initialMessages);
+    setMessages(initialMessages.map(msg => (
+      msg.role === 'ai' ? { ...msg, text: stripRolePlayMarkers(msg.text) } : msg
+    )));
     setShowChat(true);
     setActivePractice(null);
   };
 
   /** 清理 AI 回复中的动作/表情旁白（圆括号或方括号内容）——让对话更像真人 */
   const stripRolePlayMarkers = (text: string): string => {
-    return text
-      .replace(/[（(][^（()）]*?(?:稍显|微笑|皱眉|点头|叹气|低头|抬头|思索|犹豫|停顿|沉默|略带|深呼吸|摇头|歪头|眯眼|看着|注视|摸|握|靠|侧|转身|眨眼|撇嘴|抿嘴|动作|表情|语气|神情|脸色|脸上|眼神)[^（()）]*?[)）]/g, '')
+    const cleaned = text
+      .replace(/^(\s*[（(][^（）()]{0,120}[)）]\s*)+/g, '')
+      .replace(/[（(][^（()）]*?(?:稍显|微笑|皱眉|点头|叹气|低头|抬头|思索|犹豫|停顿|沉默|略带|深呼吸|摇头|歪头|眯眼|看着|注视|摸|握|靠|侧|转身|眨眼|撇嘴|抿嘴|动作|表情|语气|神情|脸色|脸上|眼神|愣|笑|把|拿|放|收|翻|捏|盯|望)[^（()）]*?[)）]/g, '')
       .replace(/[\[【][^\[\]【】]*?(?:动作|旁白|内心|内心独白|stage)[^\[\]【】]*?[\]】]/gi, '')
       .replace(/\n{3,}/g, '\n\n')
       .trim();
+    const quotedLines = Array.from(cleaned.matchAll(/[“「](.*?)[”」]/g))
+      .map(match => match[1].trim())
+      .filter(Boolean);
+    return quotedLines.length ? quotedLines.join('') : cleaned;
+  };
+
+  const detectConversationBreak = (reply: string): boolean => {
+    const normalized = reply.replace(/\s+/g, '');
+    if (!normalized) return false;
+    return /(?:我先(?:走|回去|回家|离开)|我(?:要|想|还是)回去|我不想(?:聊|说|继续)|不想再(?:聊|说|继续)|今天(?:就)?到(?:这|这里)吧|先(?:这样|到这|到这里)吧|下次再说吧|改天再说吧|算了(?:吧)?|别(?:跟|追|送)了|别再说了|别说了|不用(?:送|解释)了|没什么好说|到此为止|让我一个人(?:待|静)|我想一个人(?:待|静)|冷静一下|我累了|我要走了|我走了)/.test(normalized);
   };
 
   /**
@@ -1163,6 +2058,7 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
    */
   const abortRef = useRef<AbortController | null>(null);
   const typingTimerRef = useRef<number | null>(null);
+  const chatRequestSeqRef = useRef(0);
   const clearTypingTimer = () => {
     if (typingTimerRef.current == null) return;
     window.clearTimeout(typingTimerRef.current);
@@ -1173,14 +2069,21 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
     const text = (override ?? chatInput).trim();
     if (!text) return;
     if (showSummary) return; // 已结束
+    if (chatBreakEnding) return;
 
+    const observedSceneHints = sceneHotspots
+      .filter(spot => usedSceneHotspotIds.includes(spot.id))
+      .map(spot => `${spot.label}：${spot.hint}`);
+    const requestSeq = chatRequestSeqRef.current + 1;
+    chatRequestSeqRef.current = requestSeq;
     clearTypingTimer();
     abortRef.current?.abort();
     abortRef.current = null;
 
     const userMsg = text;
     const nextMessages = [...messages, { role: 'user', text: userMsg }];
-    setMessages([...nextMessages, { role: 'ai', text: '' }]);
+    const pendingMessages = [...nextMessages, { role: 'ai', text: '' }];
+    setMessages(pendingMessages);
     if (!override) setChatInput('');
     setOpeningChoices([]); // 用户一旦开口就撤掉预设选项
     setTurnsUsed(t => t + 1);
@@ -1220,9 +2123,11 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
       levelSceneBlock ? `【完整关卡剧情】\n${levelSceneBlock}` : '',
       sceneHint ? `当前开场/背景：${sceneHint}` : '',
       chatSceneSynopsis ? `封面剧情摘要：${chatSceneSynopsis.slice(0, 220)}` : '',
+      observedSceneHints.length ? `玩家已观察到的场景细节：${observedSceneHints.join('；')}。你可以自然延续这些细节，但不要直接说“你观察到”。` : '',
       partnerBlock,
       `当前阶段：${stage}；好感=${mainAffinity(affinity)}。`,
       levelSceneBlock ? `必须严格读取并延续【完整关卡剧情】中的地点、冲突、人物状态、玩家目标和关键节拍，不要回到旧封面剧情或泛化搭讪场景。` : '',
+      `如果角色已经明确想离开或结束对话，只用一句自然结束台词收住，不要开启新话题。`,
       `只输出角色本人会说的话，1-2句，短、自然、像微信聊天。不要动作旁白，不要括号，不要评分/建议/系统说明，不要 meta。`,
     ].filter(Boolean).join('\n\n');
 
@@ -1260,26 +2165,33 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
     let hasChunk = false;
     let streamSettled = false;
     const requestStartedAt = Date.now();
+    const upsertAssistantReply = (message: { role: string; text: string; innerOS?: string; mood?: string; delta?: number }) => {
+      if (requestSeq !== chatRequestSeqRef.current) return;
+      setMessages(prev => {
+        const copy = [...prev];
+        const last = copy[copy.length - 1];
+        if (last && last.role === 'ai') {
+          copy[copy.length - 1] = message;
+        } else {
+          copy.push(message);
+        }
+        return copy;
+      });
+    };
     const finishRealReply = (rawReply: string) => {
+      if (requestSeq !== chatRequestSeqRef.current) return;
       clearTypingTimer();
       const finalText = stripRolePlayMarkers(rawReply).trim();
       const meta = buildLocalMeta(userMsg, finalText);
       const d = meta.deltas;
       const newAff = applyDelta(affinity, d);
       const deltaMain = mainAffinity(newAff) - mainAffinity(affinity);
-      setMessages(prev => {
-        const copy = [...prev];
-        const last = copy[copy.length - 1];
-        if (last && last.role === 'ai') {
-          copy[copy.length - 1] = {
-            role: 'ai',
-            text: finalText || '我在，刚刚有点卡。你再说一遍，我认真听。',
-            innerOS: meta.inner_os,
-            mood: meta.mood,
-            delta: deltaMain,
-          };
-        }
-        return copy;
+      upsertAssistantReply({
+        role: 'ai',
+        text: finalText || '我在，刚刚有点卡。你再说一遍，我认真听。',
+        innerOS: meta.inner_os,
+        mood: meta.mood,
+        delta: deltaMain,
       });
       setAffinity(newAff);
       setAffinityHistory(h => [...h, newAff]);
@@ -1289,6 +2201,19 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
         setDeltaPopup({ val: deltaMain, id });
         setTimeout(() => setDeltaPopup(p => (p && p.id === id ? null : p)), 1800);
       }
+      const reaction = deltaMain >= 2
+        ? `${chatPartner?.name || '她'}的语气明显松了一点。`
+        : deltaMain <= -2
+          ? `${chatPartner?.name || '她'}短暂避开了你的视线。`
+          : lastObservedHotspotId
+            ? `${chatPartner?.name || '她'}像是注意到你看见了那个细节。`
+            : '';
+      if (reaction) {
+        setChatMicroReaction(reaction);
+        if (microReactionTimerRef.current) window.clearTimeout(microReactionTimerRef.current);
+        microReactionTimerRef.current = window.setTimeout(() => setChatMicroReaction(null), 2600);
+      }
+      setLastObservedHotspotId(null);
 
       const userTurn = nextMessages[nextMessages.length - 1]?.text || '';
       const snippet = (finalText || '').slice(0, 60);
@@ -1302,6 +2227,17 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
       const hitMaxTurns = turnsUsed + 1 >= chatMaxTurns;
       const tooLow = mainAffinity(newAff) < 40 && turnsUsed + 1 >= 4;
       const aiSuggestEnd = !!meta.suggest_end && turnsUsed + 1 >= chatMinTurnsGood;
+      const conversationBreak = detectConversationBreak(finalText);
+      if (conversationBreak) {
+        setChatBreakEnding(true);
+        setOpeningChoices([]);
+        setSceneHotspots([]);
+        setChatInputFocused(false);
+        setChatMicroReaction(`${chatPartner?.name || '她'}结束了这次对话。`);
+        if (microReactionTimerRef.current) window.clearTimeout(microReactionTimerRef.current);
+        setTimeout(() => finalizeChat(newAff), 850);
+        return;
+      }
       if (hitMaxTurns || tooLow || aiSuggestEnd) {
         if (tooLow && !hitMaxTurns && !aiSuggestEnd) {
           const worstTurn = [...regrets].sort((a, b) => a.deltaMain - b.deltaMain)[0];
@@ -1326,24 +2262,19 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
       const minTypingMs = Math.min(2000, Math.max(1250, 980 + userMsg.length * 20));
       const waitMs = Math.max(0, minTypingMs - (Date.now() - requestStartedAt));
       typingTimerRef.current = window.setTimeout(() => {
+        if (requestSeq !== chatRequestSeqRef.current) return;
         typingTimerRef.current = null;
         finishRealReply(fullReply);
       }, waitMs);
     };
 
     const timeoutTimer = window.setTimeout(() => {
+      if (requestSeq !== chatRequestSeqRef.current) return;
       if (streamSettled || hasChunk) return;
       streamSettled = true;
       abortRef.current?.abort();
       clearTypingTimer();
-      setMessages(prev => {
-        const copy = [...prev];
-        const last = copy[copy.length - 1];
-        if (last && last.role === 'ai') {
-          copy[copy.length - 1] = { role: 'ai', text: '网络这下真的卡住了，点一下重试吧。' };
-        }
-        return copy;
-      });
+      upsertAssistantReply({ role: 'ai', text: '网络这下真的卡住了，点一下重试吧。' });
       abortRef.current = null;
     }, 12000);
 
@@ -1351,10 +2282,12 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
     abortRef.current = chatStream(
       apiMessages,
       (chunk) => {
+        if (requestSeq !== chatRequestSeqRef.current) return;
         hasChunk = true;
         fullReply += chunk;
       },
       () => {
+        if (requestSeq !== chatRequestSeqRef.current) return;
         if (streamSettled) return;
         streamSettled = true;
         window.clearTimeout(timeoutTimer);
@@ -1366,16 +2299,12 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
         abortRef.current = null;
       },
       (err) => {
+        if (requestSeq !== chatRequestSeqRef.current) return;
         if (streamSettled) return;
         streamSettled = true;
         window.clearTimeout(timeoutTimer);
         clearTypingTimer();
-        setMessages(prev => {
-          const copy = [...prev];
-          const last = copy[copy.length - 1];
-          if (last && last.role === 'ai') copy[copy.length - 1] = { role: 'ai', text: `网络连接失败：${err.message}` };
-          return copy;
-        });
+        upsertAssistantReply({ role: 'ai', text: `网络连接失败：${err.message}` });
         abortRef.current = null;
       },
       { model: 'deepseek-chat', temperature: 0.72, max_tokens: 120 }
@@ -1469,7 +2398,10 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
       ? scoreLevel({ levelKid: chatLevelKid, aiDimScores, metrics: hard })
       : scoreLevel({ levelKid: 'L001', aiDimScores: {}, metrics: hard }); // fallback
 
-    // 累积好感：仅在通关（star >= 1）且 challenge 模式下才写入
+    // 通关后解锁角色联系方式；人物邂逅仍保留原有好感累计。
+    if (scoring.star >= 1 && chatPartner?.kid) {
+      unlockRoleCard(chatPartner.kid);
+    }
     if (scoring.star >= 1 && chatMode === 'challenge' && chatPartner?.kid) {
       persistOnEnd('challenge', chatPartner.kid, finalAffinity);
     }
@@ -1574,10 +2506,100 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
   }));
   const activeHealingMode = healingModes.find(mode => mode.id === healingMode) || healingModes[0];
   const canUseHealing = healingEnergy >= activeHealingMode.cost && !healingSending;
+  const activeRelationshipProfile = relationshipProfiles.find(profile => profile.id === selectedRelationshipId) || null;
 
   const openHealingRoom = () => {
     setHealingMode('vent');
     setShowHealingModal(true);
+  };
+
+  const openRelationshipLibrary = () => {
+    setShowRelationshipLibrary(true);
+  };
+
+  const updateRelationshipDraft = (key: keyof RelationshipDraft, value: string) => {
+    setRelationshipDraft(prev => ({ ...prev, [key]: value }));
+  };
+
+  const beginEditRelationshipProfile = (profile: RelationshipProfile) => {
+    setEditingRelationshipId(profile.id);
+    setRelationshipDraft(getRelationshipDraftFromProfile(profile));
+  };
+
+  const cancelRelationshipEditing = () => {
+    setEditingRelationshipId(null);
+    setRelationshipDraft(getDefaultRelationshipDraft());
+  };
+
+  const saveRelationshipProfile = () => {
+    const alias = relationshipDraft.alias.trim();
+    if (!alias) return;
+    const now = Date.now();
+    const profileFields: RelationshipDraft = {
+      alias: alias.slice(0, 18),
+      stage: relationshipDraft.stage || RELATIONSHIP_STAGE_OPTIONS[1],
+      goal: relationshipDraft.goal || RELATIONSHIP_GOAL_OPTIONS[0],
+      traits: cleanRelationshipField(relationshipDraft.traits),
+      likes: cleanRelationshipField(relationshipDraft.likes),
+      dislikes: cleanRelationshipField(relationshipDraft.dislikes),
+      communicationStyle: cleanRelationshipField(relationshipDraft.communicationStyle),
+      topics: cleanRelationshipField(relationshipDraft.topics),
+      boundaries: cleanRelationshipField(relationshipDraft.boundaries),
+      notes: cleanRelationshipField(relationshipDraft.notes),
+      lastEvent: cleanRelationshipField(relationshipDraft.lastEvent),
+    };
+
+    if (editingRelationshipId) {
+      setRelationshipProfiles(prev => {
+        const existingProfile = prev.find(profile => profile.id === editingRelationshipId);
+        if (!existingProfile) return prev;
+        const updatedProfile: RelationshipProfile = {
+          ...existingProfile,
+          ...profileFields,
+          updatedAt: now,
+        };
+        return [
+          updatedProfile,
+          ...prev.filter(profile => profile.id !== editingRelationshipId && profile.alias !== updatedProfile.alias),
+        ].slice(0, RELATIONSHIP_PROFILE_LIMIT);
+      });
+      setSelectedRelationshipId(editingRelationshipId);
+    } else {
+      const profile: RelationshipProfile = {
+        id: `rel_${now}_${Math.random().toString(36).slice(2, 8)}`,
+        ...profileFields,
+        createdAt: now,
+        updatedAt: now,
+      };
+      setRelationshipProfiles(prev => [profile, ...prev.filter(item => item.alias !== profile.alias)].slice(0, RELATIONSHIP_PROFILE_LIMIT));
+      setSelectedRelationshipId(profile.id);
+    }
+
+    setRelationshipDraft(getDefaultRelationshipDraft());
+    setEditingRelationshipId(null);
+    setShowRelationshipLibrary(false);
+  };
+
+  const selectRelationshipProfile = (profileId: string | null) => {
+    setSelectedRelationshipId(profileId);
+    cancelRelationshipEditing();
+    setShowRelationshipLibrary(false);
+  };
+
+  const deleteRelationshipProfile = (profileId: string) => {
+    setRelationshipProfiles(prev => prev.filter(profile => profile.id !== profileId));
+    setSelectedRelationshipId(prev => (prev === profileId ? null : prev));
+    if (editingRelationshipId === profileId) cancelRelationshipEditing();
+  };
+
+  const touchRelationshipProfile = (profile: RelationshipProfile | null) => {
+    if (!profile) return;
+    const now = Date.now();
+    setRelationshipProfiles(prev => prev.map(item => (
+      item.id === profile.id
+        ? { ...item, updatedAt: now }
+        : item
+    )).sort((leftProfile, rightProfile) => rightProfile.updatedAt - leftProfile.updatedAt));
   };
 
   const resetHealingChat = () => {
@@ -1595,6 +2617,7 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
     if (!text || !canUseHealing) return;
     const mode = healingMode;
     const modeConfig = activeHealingMode;
+    const relationshipProfileForReply = activeRelationshipProfile;
     const history: ChatMessage[] = healingMessages
       .filter(message => !message.pending)
       .slice(-8)
@@ -1604,11 +2627,12 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
       }));
 
     setHealingEnergy(prev => Math.max(0, prev - activeHealingMode.cost));
+    touchRelationshipProfile(relationshipProfileForReply);
     setHealingSending(true);
     setHealingMessages(prev => [
       ...prev,
       { role: 'user', text },
-      { role: 'fox', tag: '尼克大叔', text: '尼克大叔正在把这件事放平一点...', pending: true },
+      { role: 'fox', tag: '尼克大叔', text: getHealingPendingText(mode), pending: true },
     ]);
     setHealingInput('');
 
@@ -1617,10 +2641,10 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
     try {
       const aiModel: 'deepseek-chat' | 'deepseek-reasoner' = mode === 'review' || mode === 'translate' ? 'deepseek-reasoner' : 'deepseek-chat';
       reply = await chatOnce([
-        { role: 'system', content: buildHealingSystemPrompt(mode) },
+        { role: 'system', content: buildHealingSystemPrompt(mode, relationshipProfileForReply) },
         ...history,
         { role: 'user', content: text },
-      ], { model: aiModel, temperature: 0.55 });
+      ], { model: aiModel, temperature: 0.55, max_tokens: 680 });
     } catch (err) {
       failed = true;
       console.warn('[HealingRoom] AI reply failed, using local fallback:', err);
@@ -1713,6 +2737,26 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
   /* ========================================
    *  渲染
    * ======================================== */
+  const chatVisibleMessages = messages.filter(m => m.role !== 'system');
+  const chatLastAi = [...chatVisibleMessages].reverse().find(m => m.role === 'ai');
+  const chatAiTyping = !!chatLastAi && !chatLastAi.text;
+  const chatPortraitState = (chatLastAi?.delta ?? 0) > 0 ? 'happy' : (chatLastAi?.delta ?? 0) < 0 ? 'angry' : 'normal';
+  const chatPortraitFallback = chatPartner?.img || chatCoverImg;
+  const chatPortraitSrc = resolveImmersivePortrait(chatPartner?.kid, chatPortraitState) || chatPortraitFallback;
+  const chatBackgroundFallback = chatCoverImg || chatPartner?.img || '/chapters/cover/story-1.jpg';
+  const chatBackgroundSrc = resolveImmersiveBackground(chatLevelKid, chatMode) || chatBackgroundFallback;
+  const chatPartnerRoleLabel = getPartnerRoleLabel(chatPartner);
+  const availableSceneHotspots = sceneHotspots.filter(spot => !usedSceneHotspotIds.includes(spot.id));
+  const currentSceneHotspot = availableSceneHotspots.length ? availableSceneHotspots[turnsUsed % availableSceneHotspots.length] : null;
+  const showSceneHotspot = !chatInputFocused && !chatAiTyping && turnsUsed < 6 && !!currentSceneHotspot && !activeSceneHint;
+  const handleSceneHotspot = (spot: SceneHotspot) => {
+    setUsedSceneHotspotIds(prev => prev.includes(spot.id) ? prev : [...prev, spot.id]);
+    setActiveSceneHint(spot);
+    setLastObservedHotspotId(spot.id);
+    if (sceneHintTimerRef.current) window.clearTimeout(sceneHintTimerRef.current);
+    sceneHintTimerRef.current = window.setTimeout(() => setActiveSceneHint(null), 3600);
+  };
+
   return (
     <>
       <div className="px-5 pt-8 pb-8 relative overflow-hidden">
@@ -1944,130 +2988,28 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
         </motion.div>)}
 
         {activeGroup && (
-          <motion.div
-            className="relative overflow-hidden"
-            style={{ minHeight: 'calc(100vh - 82px)', margin: '-10px -20px -32px', padding: '18px 16px 112px', background: '#151b2d' }}
-            initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ duration: 0.35 }}
-          >
-            <img
-              aria-hidden
-              src={getCityMapBackground(practiceMode)}
-              alt=""
-              draggable={false}
-              style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', objectPosition: 'center top', filter: practiceMode === 'story' ? 'saturate(1.08) contrast(1.02) brightness(0.92)' : 'saturate(1.08) contrast(1.05) brightness(0.88)' }}
-            />
-            <div aria-hidden style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(18,17,28,0.62) 0%, rgba(18,17,28,0.1) 30%, rgba(18,17,28,0.56) 100%)' }} />
-
-            <div className="relative z-10 flex items-center justify-between gap-3" style={{ marginBottom: 14 }}>
-              <button
-                className="flex items-center gap-1.5"
-                style={{ color: '#f5efe8', fontSize: 13, fontWeight: 900, padding: '8px 11px', borderRadius: 999, background: 'rgba(21,18,31,0.58)', border: '1px solid rgba(255,255,255,0.14)', backdropFilter: 'blur(12px)' }}
-                onClick={() => setExpandedChapter(null)}
-              >
-                <ChevronLeft size={16} color="#f5efe8" strokeWidth={2.6} />
-                返回入口
-              </button>
-              <button
-                className="flex items-center gap-1.5"
-                style={{ color: '#f5efe8', fontSize: 12, fontWeight: 800, padding: '8px 10px', borderRadius: 999, background: 'rgba(21,18,31,0.48)', border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(12px)' }}
-                onClick={() => setImmersive({ mode: practiceMode, index: Math.max(0, currentGroups.findIndex(group => group.id === activeGroup.id)) })}
-              >
-                简介
-                <ChevronRight size={13} color="rgba(245,239,232,0.78)" strokeWidth={2.5} />
-              </button>
-            </div>
-
-            <div className="relative z-10" style={{ marginBottom: 14 }}>
-              <div className="flex items-center gap-2 mb-2">
-                <span style={{ color: practiceMode === 'story' ? '#FFB199' : '#9BF0EA', fontSize: 12, fontWeight: 1000, padding: '5px 9px', borderRadius: 999, background: 'rgba(21,18,31,0.56)', border: '1px solid rgba(255,255,255,0.12)', backdropFilter: 'blur(10px)' }}>{practiceMode === 'story' ? '我的故事' : '人物邂逅'}</span>
-                <span style={{ color: 'rgba(245,239,232,0.72)', fontSize: 12, fontWeight: 900 }}>{practiceMode === 'story' ? `第 ${activeGroup.id} 章` : `第 ${activeGroup.id} 组`}</span>
-              </div>
-              <h1 style={{ color: '#f5efe8', fontSize: 30, lineHeight: 1.08, fontWeight: 1000, margin: 0, textShadow: '0 4px 20px rgba(0,0,0,0.42)' }}>{activeGroup.name}</h1>
-              <p style={{ color: 'rgba(245,239,232,0.74)', fontSize: 13, lineHeight: 1.58, maxWidth: 320, marginTop: 8, textShadow: '0 2px 12px rgba(0,0,0,0.42)' }}>{activeGroup.narrative}</p>
-            </div>
-
-            <div className="relative z-10 flex gap-2 overflow-x-auto pb-2" style={{ scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch', marginBottom: 6 }}>
-              {currentGroups.map(group => {
-                const selected = activeGroup?.id === group.id;
-                return (
-                  <button
-                    key={`${practiceMode}-${group.id}`}
-                    data-chapter-id={group.id}
-                    className="flex-shrink-0 text-left"
-                    style={{
-                      minWidth: 104,
-                      borderRadius: 16,
-                      padding: '10px 12px',
-                      background: selected ? 'rgba(245,239,232,0.9)' : 'rgba(20,17,30,0.48)',
-                      border: selected ? '1px solid rgba(245,239,232,0.85)' : '1px solid rgba(255,255,255,0.14)',
-                      backdropFilter: 'blur(12px)',
-                      boxShadow: selected ? '0 12px 26px rgba(0,0,0,0.22)' : 'none',
-                    }}
-                    onClick={() => setExpandedChapter(group.id)}
-                  >
-                    <div style={{ color: selected ? '#2b2535' : 'rgba(245,239,232,0.58)', fontSize: 11, fontWeight: 1000, marginBottom: 3 }}>
-                      {practiceMode === 'story' ? `第 ${group.id} 章` : `第 ${group.id} 组`}
-                    </div>
-                    <div style={{ color: selected ? '#2b2535' : '#f5efe8', fontSize: 13, fontWeight: 900, whiteSpace: 'nowrap' }}>{group.name}</div>
-                  </button>
-                );
-              })}
-            </div>
-
-            <div className="absolute" data-chapter-id={activeGroup.id} style={{ left: 0, right: 0, top: 232, bottom: 104, zIndex: 2 }}>
-              {activeGroupLevels.map((level, levelIndex) => {
-                const point = CITY_MAP_POINTS[levelIndex % CITY_MAP_POINTS.length];
-                const isLocked = level.vip && !userIsProForMaps;
-                const isCurrent = !level.completed && !isLocked && levelIndex === activeCompletedCount;
-                const isCompleted = level.completed;
-                const accent = isLocked ? '#FFCF78' : isCompleted ? '#7EE0D6' : isCurrent ? '#FF8A80' : (practiceMode === 'story' ? '#FFB199' : '#CDBBFF');
-                return (
-                  <div key={level.id} style={{ position: 'absolute', left: `${point.left}%`, top: `${point.top}%`, transform: 'translate(-50%, -50%)' }}>
-                    <motion.button
-                      className="flex flex-col items-center"
-                      style={{ width: 112, minHeight: 100 }}
-                      initial={{ opacity: 0, scale: 0.82, y: 10 }}
-                      animate={{ opacity: 1, scale: 1, y: 0 }}
-                      transition={{ delay: levelIndex * 0.045, type: 'spring', damping: 16, stiffness: 260 }}
-                      whileTap={{ scale: 0.94 }}
-                      onClick={() => openLevelPreview(level, levelIndex)}
-                    >
-                      <CityLandmarkIcon mode={practiceMode} index={levelIndex} locked={isLocked} current={isCurrent} completed={isCompleted} accent={accent} />
-                      <span style={{
-                        marginTop: 3,
-                        maxWidth: 96,
-                        padding: '5px 9px',
-                        borderRadius: 999,
-                        color: '#f5efe8',
-                        fontSize: 12,
-                        fontWeight: 1000,
-                        lineHeight: 1.1,
-                        background: 'rgba(18,16,25,0.74)',
-                        border: '1px solid rgba(255,255,255,0.18)',
-                        backdropFilter: 'blur(10px)',
-                        boxShadow: '0 8px 18px rgba(0,0,0,0.24)',
-                        whiteSpace: 'nowrap',
-                        overflow: 'hidden',
-                        textOverflow: 'ellipsis',
-                      }}>
-                        {getMapNodeLabel(level)}
-                      </span>
-                    </motion.button>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div style={{ position: 'absolute', left: 16, right: 16, bottom: 30, zIndex: 10, display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 14px', borderRadius: 18, background: 'rgba(20,17,28,0.72)', border: '1px solid rgba(255,255,255,0.14)', backdropFilter: 'blur(14px)', boxShadow: '0 18px 38px rgba(0,0,0,0.3)' }}>
-                <div className="flex items-center gap-2">
-                  <div style={{ width: 74, height: 5, borderRadius: 999, background: 'rgba(255,255,255,0.16)', overflow: 'hidden' }}>
-                    <div style={{ width: `${activeGroupLevels.length ? (activeCompletedCount / activeGroupLevels.length) * 100 : 0}%`, height: '100%', borderRadius: 999, background: practiceMode === 'story' ? '#FF8A80' : '#B39DDB' }} />
-                  </div>
-                  <span style={{ color: 'rgba(245,239,232,0.78)', fontSize: 12, fontWeight: 900 }}>{activeCompletedCount}/{activeGroupLevels.length} 节</span>
-                </div>
-                <span style={{ color: 'rgba(245,239,232,0.56)', fontSize: 12, fontWeight: 800 }}>{practiceMode === 'story' ? '主线剧情' : '人物挑战'}</span>
-              </div>
-          </motion.div>
+          <StoryMapView
+            mode={practiceMode}
+            activeGroup={activeGroup}
+            groups={currentGroups}
+            levels={activeGroupLevels}
+            completedCount={activeCompletedCount}
+            userIsPro={userIsProForMaps}
+            selectedLevel={selectedMapLevel}
+            getNodeLabel={getMapNodeLabel}
+            onBack={() => {
+              setSelectedMapLevel(null);
+              setExpandedChapter(null);
+            }}
+            onOpenIntro={() => setImmersive({ mode: practiceMode, index: Math.max(0, currentGroups.findIndex(group => group.id === activeGroup.id)) })}
+            onChangeGroup={(id) => {
+              setSelectedMapLevel(null);
+              setExpandedChapter(id);
+            }}
+            onSelectLevel={(level, index) => setSelectedMapLevel({ level, index })}
+            onClearSelected={() => setSelectedMapLevel(null)}
+            onEnterLevel={openLevelPreview}
+          />
         )}
 
         <div style={{ height: 20 }} />
@@ -2189,51 +3131,95 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
         )}
       </AnimatePresence>
 
-      {/* ====== AI 对话全屏页（微信风 · 氛围感聊天） ====== */}
+      {/* ====== AI 对话全屏页（沉浸式剧情舞台） ====== */}
       <AnimatePresence>
         {showChat && (
           <motion.div className="fixed inset-0 z-[1000] flex flex-col"
             style={{
-              background: 'linear-gradient(180deg, #ededed 0%, #e7e3dc 100%)',
+              background: '#17121f',
+              color: '#f5efe8',
             }}
             initial={{ opacity: 0, y: '100%' }} animate={{ opacity: 1, y: 0 }} exit={{ opacity: 0, y: '100%' }}
             transition={{ type: 'spring', damping: 30, stiffness: 300 }}>
 
-            {/* 顶部导航（微信风，毛玻璃浅色） */}
+            <div className="absolute inset-0 overflow-hidden">
+              <img
+                src={chatBackgroundSrc}
+                alt=""
+                className="w-full h-full"
+                style={{ objectFit: 'cover', filter: 'saturate(1.02) contrast(1.02)' }}
+                onError={e => useImageFallback(e, chatBackgroundFallback)}
+              />
+              <div className="absolute inset-0" style={{
+                background: 'linear-gradient(180deg, rgba(12,9,18,0.32) 0%, rgba(12,9,18,0.08) 34%, rgba(12,9,18,0.72) 100%)',
+              }} />
+              <div className="absolute inset-x-0 bottom-0" style={{
+                height: '42%',
+                background: 'linear-gradient(180deg, rgba(23,18,31,0) 0%, rgba(23,18,31,0.86) 68%, #17121f 100%)',
+              }} />
+            </div>
+
+            <div className="relative z-10 flex flex-col h-full">
+            {/* 顶部导航（沉浸式 HUD） */}
             <div style={{
-              paddingTop: 'env(safe-area-inset-top, 44px)',
-              background: 'rgba(237,237,237,0.92)',
-              backdropFilter: 'blur(20px)',
-              WebkitBackdropFilter: 'blur(20px)',
-              borderBottom: '1px solid rgba(0,0,0,0.06)',
+              paddingTop: 'env(safe-area-inset-top, 32px)',
+              background: 'linear-gradient(180deg, rgba(14,10,22,0.7), rgba(14,10,22,0))',
             }}>
-              <div className="relative flex items-center justify-center px-4 h-11">
-                <motion.button className="absolute left-3 flex items-center" whileTap={{ scale: 0.9 }} onClick={() => setShowChat(false)}>
-                  <ChevronLeft size={26} color="#1f1f1f" />
+              <div className="relative flex items-center justify-center px-4 h-12">
+                <motion.button
+                  className="absolute left-3 flex items-center justify-center"
+                  whileTap={{ scale: 0.9 }}
+                  onClick={() => setShowChat(false)}
+                  style={{
+                    width: 36, height: 36, borderRadius: 18,
+                    background: 'rgba(0,0,0,0.28)',
+                    border: '1px solid rgba(255,255,255,0.12)',
+                  }}
+                >
+                  <ChevronLeft size={23} color="#f5efe8" />
                 </motion.button>
-                <div className="text-center">
-                  <p style={{ color: '#1f1f1f', fontSize: '16px', fontWeight: 600, lineHeight: 1.1 }}>{chatTitle || 'Ta'}</p>
+                <div className="text-center" style={{ maxWidth: 230 }}>
+                  <p style={{ color: '#f5efe8', fontSize: 15, fontWeight: 700, lineHeight: 1.15, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{chatTitle || '互动场景'}</p>
+                  <p style={{ color: 'rgba(245,239,232,0.58)', fontSize: 10, marginTop: 3 }}>{chatPartner?.name || '搭档'} · {chatMode === 'challenge' ? '人物邂逅' : chatMode === 'story' ? '剧情练习' : '自由练习'}</p>
                 </div>
-                {chatLevelKid && (
+                <div className="absolute right-3 flex items-center gap-2">
                   <motion.button
-                    className="absolute right-3"
+                    className="flex items-center justify-center"
                     whileTap={{ scale: 0.9 }}
-                    onClick={() => finalizeChat(affinity)}
-                    style={{ color: '#EC407A', fontSize: 13, fontWeight: 600 }}
+                    onClick={() => setShowChatHistory(true)}
+                    style={{
+                      width: 36, height: 36, borderRadius: 18,
+                      background: 'rgba(0,0,0,0.28)',
+                      border: '1px solid rgba(255,255,255,0.12)',
+                    }}
+                    aria-label="对话记录"
                   >
-                    结束
+                    <Archive size={17} color="#f5efe8" />
                   </motion.button>
+                {chatLevelKid && (
+                    <motion.button
+                      whileTap={{ scale: 0.9 }}
+                      onClick={() => finalizeChat(affinity)}
+                      style={{
+                        height: 34, padding: '0 12px', borderRadius: 17,
+                        background: 'rgba(236,64,122,0.88)',
+                        color: '#fff', fontSize: 12, fontWeight: 700,
+                      }}
+                    >
+                      结束
+                    </motion.button>
                 )}
+                </div>
                 {/* DEV 调试：预览结算页（精彩回放+踩雷回看+教练点评+金色信封） */}
                 {import.meta.env.DEV && (
                   <motion.button
-                    className="absolute right-14"
+                    className="absolute right-24"
                     whileTap={{ scale: 0.9 }}
                     onClick={() => previewSummary()}
-                    style={{ color: '#B8A4E8', fontSize: 13, fontWeight: 600 }}
+                    style={{ color: '#FFD93D', fontSize: 12, fontWeight: 700 }}
                     title="DEV 预览结算"
                   >
-                    🎬预览
+                    预览
                   </motion.button>
                 )}
               </div>
@@ -2241,8 +3227,8 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
               {(chatLevelKid || chatPartner) && (
                 <div className="px-4 pb-2 pt-1">
                   <div className="flex items-center gap-2">
-                    <div style={{ color: '#FF6B9D', fontSize: 11, fontWeight: 600, minWidth: 26 }}>♥{mainAffinity(affinity)}</div>
-                    <div className="relative flex-1" style={{ height: 6, background: 'rgba(0,0,0,0.08)', borderRadius: 3, overflow: 'visible' }}>
+                    <div style={{ color: '#FF8A80', fontSize: 11, fontWeight: 800, minWidth: 34 }}>♥ {mainAffinity(affinity)}</div>
+                    <div className="relative flex-1" style={{ height: 6, background: 'rgba(255,255,255,0.16)', borderRadius: 3, overflow: 'visible' }}>
                       <motion.div
                         animate={{ width: `${mainAffinity(affinity)}%` }}
                         transition={{ type: 'spring', damping: 20, stiffness: 200 }}
@@ -2257,8 +3243,8 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
                             exit={{ opacity: 0, y: -26 }}
                             style={{
                               position: 'absolute', right: 4, top: -12,
-                              color: deltaPopup.val >= 0 ? '#EC407A' : '#607D8B',
-                              fontSize: 12, fontWeight: 700, pointerEvents: 'none',
+                              color: deltaPopup.val >= 0 ? '#FFD93D' : '#9CC7FF',
+                              fontSize: 12, fontWeight: 800, pointerEvents: 'none',
                             }}
                           >
                             {deltaPopup.val >= 0 ? '+' : ''}{deltaPopup.val}
@@ -2266,12 +3252,12 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
                         )}
                       </AnimatePresence>
                     </div>
-                    <div style={{ color: 'rgba(0,0,0,0.55)', fontSize: 11, minWidth: 40, textAlign: 'right' }}>
+                    <div style={{ color: 'rgba(245,239,232,0.68)', fontSize: 11, minWidth: 42, textAlign: 'right' }}>
                       {turnsUsed}/{chatMaxTurns}
                     </div>
                   </div>
                   {attemptBadge && (
-                    <div className="mt-1 text-right" style={{ color: attemptBadge.willGrantXP ? '#07c160' : 'rgba(0,0,0,0.4)', fontSize: 10 }}>
+                    <div className="mt-1 text-right" style={{ color: attemptBadge.willGrantXP ? '#95E1D3' : 'rgba(245,239,232,0.48)', fontSize: 10 }}>
                       {attemptBadge.willGrantXP ? `第 ${attemptBadge.used} 次 · 本次计 XP` : `第 ${attemptBadge.used}/${attemptBadge.max} 次 · 练习模式`}
                     </div>
                   )}
@@ -2279,152 +3265,321 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
               )}
             </div>
 
-            {/* 消息列表 */}
-            <div ref={chatScrollRef} className="flex-1 overflow-y-auto px-3" style={{ paddingTop: 12, paddingBottom: 12 }}>
-              {messages.map((msg, i) => {
-                if (msg.role === 'system') {
-                  return (
-                    <motion.div key={i} className="flex justify-center my-3"
-                      initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.06 }}>
-                      <div style={{
-                        background: 'rgba(0,0,0,0.08)', color: 'rgba(0,0,0,0.55)',
-                        fontSize: 11, padding: '4px 10px', borderRadius: 4, maxWidth: '80%',
-                        textAlign: 'center', whiteSpace: 'pre-wrap', lineHeight: 1.5,
-                      }}>
-                        {msg.text}
-                      </div>
-                    </motion.div>
-                  );
-                }
-                const isUser = msg.role === 'user';
-                const isEmptyAi = !isUser && !msg.text;
-                const userAvatarSrc = (user as any).avatar || '/avatars/face5.webp';
-                const aiAvatarSrc = chatPartner?.img || chatCoverImg || null;
-                return (
-                  <div key={i}>
-                  <motion.div className={`flex ${isUser ? 'justify-end' : 'justify-start'} mb-1`}
-                    initial={{ opacity: 0, y: 6 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.06 }}>
-                    {!isUser && (
-                      <div className="mr-2 flex-shrink-0" style={{
-                        width: 36, height: 36, borderRadius: 4, overflow: 'hidden',
-                        background: '#d6d3cd', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      }}>
-                        {aiAvatarSrc ? (
-                          <img src={aiAvatarSrc} alt={chatPartner?.name || 'AI'} className="w-full h-full" style={{ objectFit: 'cover' }} />
-                        ) : (
-                          <IconBubble size={36} bg={gradients.coral}><IcRobot size={18} color="#fff" /></IconBubble>
-                        )}
-                      </div>
-                    )}
-                    <div className="relative" style={{
-                      maxWidth: '72%',
-                      background: isUser ? '#95ec69' : '#ffffff',
-                      color: '#1f1f1f',
-                      padding: '9px 12px',
-                      borderRadius: 6,
-                      fontSize: 15,
-                      lineHeight: 1.45,
-                      whiteSpace: 'pre-wrap',
-                      boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
-                      minHeight: isEmptyAi ? 20 : undefined,
-                    }}>
-                      {/* 气泡小尖角 */}
-                      <span aria-hidden style={{
-                        position: 'absolute', top: 10,
-                        ...(isUser
-                          ? { right: -5, borderWidth: '5px 0 5px 6px', borderColor: 'transparent transparent transparent #95ec69' }
-                          : { left: -5, borderWidth: '5px 6px 5px 0', borderColor: 'transparent #ffffff transparent transparent' }),
-                        borderStyle: 'solid', width: 0, height: 0,
-                      }} />
-                      {isEmptyAi ? (
-                        <span className="inline-flex items-center gap-1" aria-label="对方正在输入">
-                          {[0, 1, 2].map(k => (
-                            <motion.span key={k}
-                              style={{ width: 6, height: 6, borderRadius: '50%', background: 'rgba(0,0,0,0.35)', display: 'inline-block' }}
-                              animate={{ opacity: [0.25, 1, 0.25], y: [0, -2, 0] }}
-                              transition={{ duration: 1.1, repeat: Infinity, delay: k * 0.18 }} />
-                          ))}
-                        </span>
-                      ) : (
-                        <>{msg.text}</>
-                      )}
-                    </div>
-                    {isUser && (
-                      <div className="ml-2 flex-shrink-0" style={{
-                        width: 36, height: 36, borderRadius: 4, overflow: 'hidden',
-                        background: '#d6d3cd', display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      }}>
-                        <img src={userAvatarSrc} alt="我" className="w-full h-full" style={{ objectFit: 'cover' }} />
-                      </div>
-                    )}
-                  </motion.div>
-                  {!isUser && (msg as any).delta != null && (msg as any).delta !== 0 && <div className="mb-2" />}
+            <div className="relative flex-1 min-h-0 overflow-hidden">
+              <motion.div
+                className="absolute inset-x-0 bottom-0 flex justify-center"
+                initial={{ opacity: 0, y: 18 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.28 }}
+                style={{ height: '92%', pointerEvents: 'none' }}
+              >
+                {chatPortraitSrc ? (
+                  <img
+                    src={chatPortraitSrc}
+                    alt={chatPartner?.name || '搭档'}
+                    onError={e => useImageFallback(e, chatPortraitFallback)}
+                    style={{
+                      height: '108%',
+                      maxWidth: '150%',
+                      objectFit: 'contain',
+                      objectPosition: 'center bottom',
+                      filter: 'drop-shadow(0 28px 34px rgba(0,0,0,0.34))',
+                    }}
+                  />
+                ) : (
+                  <div style={{ width: 180, height: 180, alignSelf: 'center' }}>
+                    <IconBubble size={180} bg={gradients.coral}><IcRobot size={72} color="#fff" /></IconBubble>
                   </div>
-                );
-              })}
+                )}
+              </motion.div>
+
+              <AnimatePresence>
+                {showSceneHotspot && currentSceneHotspot && (
+                    <motion.button
+                      key={currentSceneHotspot.id}
+                      className="absolute z-20 flex items-center gap-1"
+                      initial={{ opacity: 0, scale: 0.86, x: '-50%', y: '-50%' }}
+                      animate={{ opacity: 1, scale: 1, x: '-50%', y: '-50%' }}
+                      exit={{ opacity: 0, scale: 0.86, x: '-50%', y: '-50%' }}
+                      whileTap={{ scale: 0.94 }}
+                      onClick={() => handleSceneHotspot(currentSceneHotspot)}
+                      style={{
+                        left: currentSceneHotspot.x,
+                        top: currentSceneHotspot.y,
+                        padding: '6px 9px',
+                        borderRadius: 999,
+                        background: 'rgba(255,255,255,0.84)',
+                        border: '1px solid rgba(255,255,255,0.72)',
+                        color: '#251f30',
+                        fontSize: 11,
+                        fontWeight: 800,
+                        boxShadow: '0 10px 26px rgba(0,0,0,0.2)',
+                        backdropFilter: 'blur(12px)',
+                        WebkitBackdropFilter: 'blur(12px)',
+                      }}
+                    >
+                      <span style={{
+                        width: 6,
+                        height: 6,
+                        borderRadius: 999,
+                        background: '#EC407A',
+                        boxShadow: '0 0 0 5px rgba(236,64,122,0.16)',
+                      }} />
+                      {currentSceneHotspot.label}
+                    </motion.button>
+                )}
+              </AnimatePresence>
+
+              <AnimatePresence>
+                {activeSceneHint && (
+                  <motion.div
+                    key={activeSceneHint.id}
+                    className="absolute left-4 right-4 z-30"
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, y: -10 }}
+                    style={{
+                      top: 12,
+                      padding: '10px 12px',
+                      borderRadius: 14,
+                      background: 'rgba(22,17,30,0.76)',
+                      color: '#f8f1ea',
+                      fontSize: 12,
+                      lineHeight: 1.55,
+                      border: '1px solid rgba(255,255,255,0.14)',
+                      boxShadow: '0 14px 34px rgba(0,0,0,0.28)',
+                      backdropFilter: 'blur(14px)',
+                      WebkitBackdropFilter: 'blur(14px)',
+                    }}
+                  >
+                    <span style={{ color: '#FFD93D', fontWeight: 800 }}>{activeSceneHint.label}</span>
+                    <span style={{ color: 'rgba(248,241,234,0.82)' }}> · {activeSceneHint.hint}</span>
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              <AnimatePresence>
+                {chatMicroReaction && (
+                  <motion.div
+                    key={chatMicroReaction}
+                    className="absolute left-1/2 z-30"
+                    initial={{ opacity: 0, y: 8, x: '-50%' }}
+                    animate={{ opacity: 1, y: 0, x: '-50%' }}
+                    exit={{ opacity: 0, y: 8, x: '-50%' }}
+                    style={{
+                      bottom: 12,
+                      maxWidth: '82%',
+                      padding: '7px 11px',
+                      borderRadius: 999,
+                      background: 'rgba(255,255,255,0.82)',
+                      color: '#3a3144',
+                      fontSize: 11,
+                      fontWeight: 700,
+                      boxShadow: '0 12px 30px rgba(0,0,0,0.22)',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {chatMicroReaction}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
             </div>
 
-            {/* 预设开场回复 Chip（前 2 轮且有预设时显示） */}
-            {openingChoices.length > 0 && turnsUsed < 2 && (
-              <div className="px-3 pb-2" style={{ background: 'transparent' }}>
-                <div className="flex gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
+            <div
+              className="relative px-4 pb-3"
+              style={{
+                paddingBottom: 'calc(env(safe-area-inset-bottom, 10px) + 12px)',
+                transform: chatKeyboardInset ? `translateY(-${chatKeyboardInset}px)` : 'translateY(0)',
+                transition: 'transform 180ms ease',
+              }}
+            >
+              <motion.div
+                initial={{ opacity: 0, y: 10 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.18 }}
+                style={{
+                  borderRadius: 18,
+                  background: 'linear-gradient(180deg, rgba(255,255,255,0.92), rgba(247,244,239,0.88))',
+                  border: '1px solid rgba(255,255,255,0.65)',
+                  boxShadow: '0 18px 44px rgba(0,0,0,0.28)',
+                  overflow: 'hidden',
+                }}
+              >
+                <div className="flex items-center justify-between px-4 pt-3 pb-2" style={{ borderBottom: '1px solid rgba(30,24,40,0.08)' }}>
+                  <div className="min-w-0">
+                    <div style={{ color: '#251f30', fontSize: 15, fontWeight: 800 }}>{chatPartner?.name || 'Ta'}</div>
+                    <p style={{ color: 'rgba(37,31,48,0.48)', fontSize: 10, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {chatPartnerRoleLabel}
+                    </p>
+                  </div>
+                  <div className="flex items-center justify-center" style={{ minWidth: 22, color: '#EC407A', fontSize: 18, fontWeight: 900 }}>
+                    {chatAiTyping ? <TypingDots size={4} /> : '▾'}
+                  </div>
+                </div>
+                <div style={{
+                  minHeight: chatInputFocused ? 58 : 82,
+                  maxHeight: chatInputFocused ? 88 : 128,
+                  overflowY: 'auto',
+                  padding: '12px 15px 14px',
+                  color: '#251f30',
+                  fontSize: 15,
+                  lineHeight: 1.62,
+                  whiteSpace: 'pre-wrap',
+                }}>
+                  {chatAiTyping ? (
+                    <span className="inline-flex items-center" style={{ height: 24 }}>
+                      <TypingDots size={7} color="rgba(236,64,122,0.82)" />
+                    </span>
+                  ) : (
+                    chatLastAi?.text || '她看着你，像是在等你先开口。'
+                  )}
+                </div>
+              </motion.div>
+
+              {openingChoices.length > 0 && turnsUsed < 2 && !chatInputFocused && !chatBreakEnding && (
+                <div className="mt-2 flex gap-2 overflow-x-auto" style={{ scrollbarWidth: 'none' }}>
                   {openingChoices.map((c, i) => (
                     <motion.button
                       key={i}
                       whileTap={{ scale: 0.95 }}
                       onClick={() => sendMessage(c)}
                       style={{
-                        flexShrink: 0, background: '#fff', border: '1px solid rgba(236,64,122,0.3)',
-                        color: '#EC407A', fontSize: 12, padding: '6px 12px', borderRadius: 16,
-                        maxWidth: 240, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis',
+                        flexShrink: 0,
+                        background: 'rgba(255,255,255,0.88)',
+                        border: '1px solid rgba(255,138,128,0.45)',
+                        color: '#B83F69',
+                        fontSize: 12,
+                        fontWeight: 700,
+                        padding: '7px 12px',
+                        borderRadius: 999,
+                        maxWidth: 250,
+                        whiteSpace: 'nowrap',
+                        overflow: 'hidden',
+                        textOverflow: 'ellipsis',
                       }}
                     >
                       {c}
                     </motion.button>
                   ))}
                 </div>
-              </div>
-            )}
+              )}
 
-            {/* 输入框（微信风浅色工具栏） */}
-            <div style={{
-              background: '#f7f7f7',
-              borderTop: '1px solid rgba(0,0,0,0.06)',
-              padding: '8px 10px',
-              paddingBottom: 'calc(env(safe-area-inset-bottom, 10px) + 8px)',
-            }}>
-              <div className="flex items-end gap-2">
-                <input
+              <div className="mt-2 flex items-end gap-2" style={{
+                padding: 8,
+                borderRadius: 16,
+                background: 'rgba(15,11,23,0.72)',
+                border: '1px solid rgba(255,255,255,0.12)',
+                backdropFilter: 'blur(18px)',
+                WebkitBackdropFilter: 'blur(18px)',
+              }}>
+                <textarea
                   value={chatInput}
                   onChange={e => setChatInput(e.target.value)}
-                  onKeyDown={e => e.key === 'Enter' && sendMessage()}
-                  placeholder=""
-                  className="flex-1 outline-none"
+                  onFocus={() => setChatInputFocused(true)}
+                  onBlur={() => setChatInputFocused(false)}
+                  onKeyDown={e => {
+                    if (e.key === 'Enter' && !e.shiftKey) {
+                      e.preventDefault();
+                      sendMessage();
+                    }
+                  }}
+                  placeholder="输入你的回应..."
+                  disabled={chatBreakEnding}
+                  rows={1}
+                  className="flex-1 outline-none resize-none"
                   style={{
-                    background: '#ffffff',
-                    border: '1px solid rgba(0,0,0,0.06)',
-                    borderRadius: 6,
-                    height: 36,
-                    padding: '0 10px',
-                    color: '#1f1f1f',
-                    fontSize: 15,
+                    minHeight: 40,
+                    maxHeight: 74,
+                    background: chatBreakEnding ? 'rgba(255,255,255,0.64)' : 'rgba(255,255,255,0.94)',
+                    border: '1px solid rgba(255,255,255,0.35)',
+                    borderRadius: 12,
+                    padding: '10px 12px',
+                    color: chatBreakEnding ? 'rgba(33,26,44,0.45)' : '#211a2c',
+                    fontSize: 14,
+                    lineHeight: 1.42,
                   }}
                 />
                 <motion.button
                   className="flex items-center justify-center"
                   style={{
-                    height: 36, padding: '0 14px',
-                    background: chatInput.trim() ? '#07c160' : 'rgba(0,0,0,0.08)',
-                    color: chatInput.trim() ? '#fff' : 'rgba(0,0,0,0.35)',
-                    borderRadius: 6, fontSize: 14, fontWeight: 500,
+                    width: 44,
+                    height: 40,
+                    flexShrink: 0,
+                    background: chatInput.trim() && !chatBreakEnding ? 'linear-gradient(135deg,#FF8A80,#EC407A)' : 'rgba(255,255,255,0.18)',
+                    color: '#fff',
+                    borderRadius: 12,
+                    boxShadow: chatInput.trim() && !chatBreakEnding ? '0 10px 22px rgba(236,64,122,0.32)' : 'none',
                   }}
                   whileTap={{ scale: 0.94 }}
-                  onClick={sendMessage}
+                  onClick={() => sendMessage()}
+                  disabled={chatBreakEnding}
+                  aria-label="发送"
                 >
-                  发送
+                  <Send size={17} />
                 </motion.button>
               </div>
             </div>
+
+            <AnimatePresence>
+              {showChatHistory && (
+                <motion.div
+                  className="absolute inset-0 z-20 flex items-end justify-center"
+                  style={{ background: 'rgba(8,6,12,0.62)', backdropFilter: 'blur(6px)' }}
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  exit={{ opacity: 0 }}
+                  onClick={() => setShowChatHistory(false)}
+                >
+                  <motion.div
+                    className="w-full"
+                    initial={{ y: '100%' }}
+                    animate={{ y: 0 }}
+                    exit={{ y: '100%' }}
+                    transition={{ type: 'spring', damping: 28, stiffness: 300 }}
+                    onClick={e => e.stopPropagation()}
+                    style={{
+                      maxWidth: 430,
+                      maxHeight: '72vh',
+                      background: '#261f33',
+                      borderRadius: '20px 20px 0 0',
+                      border: '1px solid rgba(255,255,255,0.1)',
+                      overflow: 'hidden',
+                    }}
+                  >
+                    <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid rgba(255,255,255,0.08)' }}>
+                      <span style={{ color: '#f5efe8', fontSize: 15, fontWeight: 800 }}>对话记录</span>
+                      <motion.button whileTap={{ scale: 0.9 }} onClick={() => setShowChatHistory(false)}>
+                        <X size={20} color="rgba(245,239,232,0.62)" />
+                      </motion.button>
+                    </div>
+                    <div ref={chatScrollRef} className="px-4 py-3 overflow-y-auto" style={{ maxHeight: 'calc(72vh - 54px)' }}>
+                      {chatVisibleMessages.map((msg, i) => {
+                        const isUser = msg.role === 'user';
+                        return (
+                          <div key={i} className={`mb-3 flex ${isUser ? 'justify-end' : 'justify-start'}`}>
+                            <div style={{
+                              maxWidth: '82%',
+                              padding: '9px 11px',
+                              borderRadius: isUser ? '14px 14px 4px 14px' : '14px 14px 14px 4px',
+                              background: isUser ? 'rgba(255,138,128,0.92)' : 'rgba(255,255,255,0.08)',
+                              color: isUser ? '#fff' : 'rgba(245,239,232,0.88)',
+                              fontSize: 13,
+                              lineHeight: 1.52,
+                              whiteSpace: 'pre-wrap',
+                            }}>
+                              {msg.text || '...'}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </motion.div>
+                </motion.div>
+              )}
+            </AnimatePresence>
 
             {/* 关卡总结 */}
             {showSummary && (() => {
@@ -2622,6 +3777,7 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
                 </motion.div>
               )}
             </AnimatePresence>
+            </div>
           </motion.div>
         )}
       </AnimatePresence>
@@ -2641,6 +3797,10 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
+                  <button onClick={openRelationshipLibrary} className="px-2.5 py-1 flex items-center gap-1.5" style={{ borderRadius: 999, background: activeRelationshipProfile ? 'rgba(104,180,94,0.14)' : 'rgba(47,40,37,0.06)', color: activeRelationshipProfile ? '#3f6d36' : 'rgba(47,40,37,0.58)', fontSize: 11, fontWeight: 800, border: activeRelationshipProfile ? '1px solid rgba(82,129,70,0.20)' : '1px solid rgba(47,40,37,0.06)' }}>
+                    <Archive size={13} />
+                    {activeRelationshipProfile ? activeRelationshipProfile.alias : '档案库'}
+                  </button>
                   <div className="px-2.5 py-1" style={{ borderRadius: 999, background: 'rgba(62,87,67,0.10)', color: '#4d6f45', fontSize: 11, fontWeight: 800 }}>
                     小灯 {healingEnergy}
                   </div>
@@ -2657,6 +3817,23 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
                   {activeHealingMode.desc}
                 </span>
               </div>
+              {activeRelationshipProfile && (
+                <div className="mb-4 px-3 py-2" style={{ borderRadius: 16, background: 'rgba(104,180,94,0.10)', border: '1px solid rgba(82,129,70,0.16)' }}>
+                  <div className="flex items-center justify-between gap-3">
+                    <div style={{ minWidth: 0 }}>
+                      <div style={{ color: '#3f6d36', fontSize: 12, fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                        正在读取：{activeRelationshipProfile.alias}
+                      </div>
+                      <div style={{ color: 'rgba(47,40,37,0.52)', fontSize: 11, marginTop: 3 }}>
+                        {activeRelationshipProfile.stage} · {activeRelationshipProfile.goal}
+                      </div>
+                    </div>
+                    <button onClick={openRelationshipLibrary} style={{ flexShrink: 0, borderRadius: 999, padding: '5px 9px', background: '#fffaf2', color: '#5f774f', fontSize: 11, fontWeight: 800, border: '1px solid rgba(82,129,70,0.14)' }}>
+                      换档案
+                    </button>
+                  </div>
+                </div>
+              )}
 
               <div className="flex flex-col gap-3">
                 {healingMessages.map((message, index) => (
@@ -2694,14 +3871,28 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
                   <span style={{ color: 'rgba(47,40,37,0.38)', fontSize: 11, flexShrink: 0 }}>这句想让叔怎么陪你</span>
                   {healingModes.map(mode => {
                     const selected = healingMode === mode.id;
+                    const ModeIcon = mode.icon;
                     return (
                       <button key={mode.id} type="button" className="px-2.5 py-1 flex items-center gap-1" style={{ borderRadius: 999, background: selected ? '#e0f1d4' : 'rgba(47,40,37,0.05)', border: selected ? '1px solid rgba(82,129,70,0.22)' : '1px solid rgba(47,40,37,0.06)', color: selected ? '#3f6d36' : 'rgba(47,40,37,0.54)', fontSize: 11, fontWeight: 800 }} onClick={() => setHealingMode(mode.id)}>
-                        <span style={{ fontSize: 10 }}>{mode.icon}</span>
+                        <ModeIcon size={12} strokeWidth={2.4} />
                         {mode.label}
                       </button>
                     );
                   })}
                 </div>
+              </div>
+              <div className="mb-2 flex items-center justify-between gap-2 px-1">
+                <button type="button" onClick={() => setHealingInput(prev => prev.trim() ? `${prev.trim()}\n\n${activeHealingMode.template}` : activeHealingMode.template)} disabled={healingSending}
+                  style={{ color: '#5f774f', fontSize: 11, fontWeight: 900, opacity: healingSending ? 0.45 : 1 }}>
+                  套个框架
+                </button>
+                {activeRelationshipProfile ? (
+                  <span style={{ color: 'rgba(63,109,54,0.62)', fontSize: 10, fontWeight: 800 }}>读取 {activeRelationshipProfile.alias}</span>
+                ) : (
+                  <button type="button" onClick={openRelationshipLibrary} disabled={healingSending} style={{ color: 'rgba(47,40,37,0.38)', fontSize: 10, fontWeight: 800, opacity: healingSending ? 0.45 : 1 }}>
+                    档案库
+                  </button>
+                )}
               </div>
               <div className="flex items-end gap-2">
                 <textarea
@@ -2729,6 +3920,135 @@ export function PracticePage({ pendingAction, onActionConsumed }: {
                 <span style={{ color: 'rgba(47,40,37,0.35)', fontSize: 10 }}>尼克大叔不能替代专业心理咨询</span>
               </div>
             </div>
+          </motion.div>,
+          document.body
+        ) : null}
+
+      {/* ====== 关系档案库 ====== */}
+      {showRelationshipLibrary ? createPortal(
+          <motion.div className="fixed inset-0 z-[1700] flex items-end sm:items-center justify-center p-4" style={{ background: 'rgba(28,23,20,0.38)', backdropFilter: 'blur(8px)' }}
+            initial={{ opacity: 0 }} animate={{ opacity: 1 }} exit={{ opacity: 0 }}>
+            <motion.div className="w-full overflow-hidden" style={{ maxWidth: 440, maxHeight: '88vh', borderRadius: 24, background: '#f7f1e8', boxShadow: '0 24px 70px rgba(38,25,17,0.28)', border: '1px solid rgba(47,40,37,0.08)' }}
+              initial={{ y: 30, opacity: 0 }} animate={{ y: 0, opacity: 1 }} exit={{ y: 30, opacity: 0 }}>
+              <div className="flex items-center justify-between px-4 py-3" style={{ borderBottom: '1px solid rgba(47,40,37,0.08)' }}>
+                <div className="flex items-center gap-2">
+                  <div className="w-9 h-9 flex items-center justify-center" style={{ borderRadius: 14, background: 'rgba(104,180,94,0.14)' }}>
+                    <Archive size={18} color="#4d6f45" />
+                  </div>
+                  <div>
+                    <h3 style={{ color: '#2f2825', fontSize: 16, fontWeight: 900, margin: 0 }}>关系档案库</h3>
+                    <p style={{ color: 'rgba(47,40,37,0.48)', fontSize: 11, margin: '2px 0 0' }}>选中后，尼克会带着这份背景跟你聊</p>
+                  </div>
+                </div>
+                <button onClick={() => setShowRelationshipLibrary(false)} className="w-9 h-9 flex items-center justify-center" style={{ borderRadius: 12, background: 'rgba(47,40,37,0.06)' }}>
+                  <X size={18} color="rgba(47,40,37,0.58)" />
+                </button>
+              </div>
+
+              <div className="overflow-y-auto p-4" style={{ maxHeight: 'calc(88vh - 66px)', WebkitOverflowScrolling: 'touch' }}>
+                {relationshipProfiles.length > 0 ? (
+                  <div className="mb-4">
+                    <div className="flex items-center justify-between mb-2">
+                      <span style={{ color: 'rgba(47,40,37,0.48)', fontSize: 12, fontWeight: 800 }}>已有档案</span>
+                      <button onClick={() => selectRelationshipProfile(null)} style={{ color: 'rgba(47,40,37,0.44)', fontSize: 11, fontWeight: 800 }}>
+                        暂不绑定
+                      </button>
+                    </div>
+                    <div className="flex flex-col gap-2">
+                      {relationshipProfiles.map(profile => {
+                        const selected = profile.id === selectedRelationshipId;
+                        return (
+                          <div key={profile.id} className="p-3" style={{ borderRadius: 16, background: selected ? 'rgba(104,180,94,0.12)' : '#fffaf2', border: selected ? '1px solid rgba(82,129,70,0.22)' : '1px solid rgba(47,40,37,0.07)' }}>
+                            <div className="flex items-start justify-between gap-3">
+                              <div style={{ minWidth: 0 }}>
+                                <div className="flex items-center gap-2" style={{ minWidth: 0 }}>
+                                  <span style={{ color: '#2f2825', fontSize: 14, fontWeight: 900, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>{profile.alias}</span>
+                                  {selected && <CheckCircle2 size={14} color="#4d6f45" style={{ flexShrink: 0 }} />}
+                                </div>
+                                <div style={{ color: 'rgba(47,40,37,0.52)', fontSize: 11, marginTop: 4 }}>{profile.stage} · {profile.goal}</div>
+                                {(profile.likes || profile.dislikes || profile.boundaries) && (
+                                  <div className="flex flex-wrap gap-1.5" style={{ marginTop: 7 }}>
+                                    {profile.likes && <span style={{ borderRadius: 999, padding: '3px 7px', background: 'rgba(104,180,94,0.10)', color: '#4d6f45', fontSize: 10, fontWeight: 800 }}>喜欢：{profile.likes}</span>}
+                                    {profile.dislikes && <span style={{ borderRadius: 999, padding: '3px 7px', background: 'rgba(190,118,76,0.10)', color: '#8a593f', fontSize: 10, fontWeight: 800 }}>不喜欢：{profile.dislikes}</span>}
+                                    {profile.boundaries && <span style={{ borderRadius: 999, padding: '3px 7px', background: 'rgba(219,91,69,0.08)', color: '#a65446', fontSize: 10, fontWeight: 800 }}>雷区：{profile.boundaries}</span>}
+                                  </div>
+                                )}
+                                {profile.lastEvent && <div style={{ color: 'rgba(47,40,37,0.58)', fontSize: 12, marginTop: 7, lineHeight: 1.5 }}>最近：{profile.lastEvent}</div>}
+                              </div>
+                              <div className="flex items-center gap-1" style={{ flexShrink: 0 }}>
+                                <button onClick={() => beginEditRelationshipProfile(profile)} className="px-2.5 py-1 flex items-center gap-1" style={{ borderRadius: 999, background: editingRelationshipId === profile.id ? '#e8f4dd' : 'rgba(47,40,37,0.06)', color: editingRelationshipId === profile.id ? '#3f6d36' : 'rgba(47,40,37,0.56)', fontSize: 11, fontWeight: 900 }}>
+                                  <Pencil size={12} />
+                                  编辑
+                                </button>
+                                <button onClick={() => selectRelationshipProfile(profile.id)} className="px-2.5 py-1" style={{ borderRadius: 999, background: selected ? '#dff1d6' : 'rgba(47,40,37,0.06)', color: selected ? '#3f6d36' : 'rgba(47,40,37,0.56)', fontSize: 11, fontWeight: 900 }}>
+                                  {selected ? '已选' : '使用'}
+                                </button>
+                                <button onClick={() => deleteRelationshipProfile(profile.id)} className="w-8 h-8 flex items-center justify-center" style={{ borderRadius: 10, background: 'rgba(219,91,69,0.08)' }}>
+                                  <Trash2 size={14} color="#b65d4e" />
+                                </button>
+                              </div>
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : (
+                  <div className="mb-4 px-4 py-5 text-center" style={{ borderRadius: 18, background: '#fffaf2', border: '1px dashed rgba(47,40,37,0.16)' }}>
+                    <div style={{ color: '#2f2825', fontSize: 15, fontWeight: 900 }}>还没有关系档案</div>
+                    <div style={{ color: 'rgba(47,40,37,0.52)', fontSize: 12, lineHeight: 1.6, marginTop: 6 }}>先给这个人起个代号，之后尼克就能记住你们这条线。</div>
+                  </div>
+                )}
+
+                <div className="p-4" style={{ borderRadius: 18, background: 'rgba(47,40,37,0.04)', border: '1px solid rgba(47,40,37,0.06)' }}>
+                  <div className="flex items-center justify-between gap-3 mb-3">
+                    <div className="flex items-center gap-2">
+                      {editingRelationshipId ? <Pencil size={16} color="#4d6f45" /> : <Plus size={16} color="#4d6f45" />}
+                      <span style={{ color: '#2f2825', fontSize: 14, fontWeight: 900 }}>{editingRelationshipId ? '编辑关系档案' : '新建关系档案'}</span>
+                    </div>
+                    {editingRelationshipId && (
+                      <button onClick={cancelRelationshipEditing} style={{ flexShrink: 0, color: 'rgba(47,40,37,0.46)', fontSize: 11, fontWeight: 800 }}>
+                        取消编辑
+                      </button>
+                    )}
+                  </div>
+                  <div className="flex flex-col gap-3">
+                    <input value={relationshipDraft.alias} onChange={event => updateRelationshipDraft('alias', event.target.value)} placeholder="给 TA 一个代号，比如 小夏 / 相亲对象 A" maxLength={18}
+                      style={{ height: 42, borderRadius: 14, border: '1px solid rgba(47,40,37,0.10)', background: '#fffaf2', color: '#2f2825', fontSize: 14, padding: '0 12px', outline: 'none' }} />
+                    <div className="grid grid-cols-2 gap-2">
+                      <select value={relationshipDraft.stage} onChange={event => updateRelationshipDraft('stage', event.target.value)} style={{ height: 40, borderRadius: 13, border: '1px solid rgba(47,40,37,0.10)', background: '#fffaf2', color: '#2f2825', fontSize: 13, padding: '0 10px', outline: 'none' }}>
+                        {RELATIONSHIP_STAGE_OPTIONS.map(stage => <option key={stage} value={stage}>{stage}</option>)}
+                      </select>
+                      <select value={relationshipDraft.goal} onChange={event => updateRelationshipDraft('goal', event.target.value)} style={{ height: 40, borderRadius: 13, border: '1px solid rgba(47,40,37,0.10)', background: '#fffaf2', color: '#2f2825', fontSize: 13, padding: '0 10px', outline: 'none' }}>
+                        {RELATIONSHIP_GOAL_OPTIONS.map(goal => <option key={goal} value={goal}>{goal}</option>)}
+                      </select>
+                    </div>
+                    <textarea value={relationshipDraft.traits} onChange={event => updateRelationshipDraft('traits', event.target.value)} placeholder="TA 的性格/状态：慢热、边界感强、容易焦虑、很重视事业..." rows={2} maxLength={RELATIONSHIP_TEXT_FIELD_LIMIT}
+                      style={{ minHeight: 58, borderRadius: 14, border: '1px solid rgba(47,40,37,0.10)', background: '#fffaf2', color: '#2f2825', fontSize: 13, lineHeight: 1.5, padding: '10px 12px', outline: 'none', resize: 'none' }} />
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+                      <textarea value={relationshipDraft.likes} onChange={event => updateRelationshipDraft('likes', event.target.value)} placeholder="TA 喜欢什么：猫、摄影、独处、被尊重边界..." rows={2} maxLength={RELATIONSHIP_TEXT_FIELD_LIMIT}
+                        style={{ minHeight: 58, borderRadius: 14, border: '1px solid rgba(47,40,37,0.10)', background: '#fffaf2', color: '#2f2825', fontSize: 13, lineHeight: 1.5, padding: '10px 12px', outline: 'none', resize: 'none' }} />
+                      <textarea value={relationshipDraft.dislikes} onChange={event => updateRelationshipDraft('dislikes', event.target.value)} placeholder="TA 不喜欢什么：催回复、说教、开过界玩笑..." rows={2} maxLength={RELATIONSHIP_TEXT_FIELD_LIMIT}
+                        style={{ minHeight: 58, borderRadius: 14, border: '1px solid rgba(47,40,37,0.10)', background: '#fffaf2', color: '#2f2825', fontSize: 13, lineHeight: 1.5, padding: '10px 12px', outline: 'none', resize: 'none' }} />
+                    </div>
+                    <textarea value={relationshipDraft.communicationStyle} onChange={event => updateRelationshipDraft('communicationStyle', event.target.value)} placeholder="沟通风格：回复慢但认真，讨厌连环追问，更吃轻松分享..." rows={2} maxLength={RELATIONSHIP_TEXT_FIELD_LIMIT}
+                      style={{ minHeight: 58, borderRadius: 14, border: '1px solid rgba(47,40,37,0.10)', background: '#fffaf2', color: '#2f2825', fontSize: 13, lineHeight: 1.5, padding: '10px 12px', outline: 'none', resize: 'none' }} />
+                    <textarea value={relationshipDraft.topics} onChange={event => updateRelationshipDraft('topics', event.target.value)} placeholder="可聊话题：咖啡店、旅行、电影、她最近的项目、共同朋友..." rows={2} maxLength={RELATIONSHIP_TEXT_FIELD_LIMIT}
+                      style={{ minHeight: 58, borderRadius: 14, border: '1px solid rgba(47,40,37,0.10)', background: '#fffaf2', color: '#2f2825', fontSize: 13, lineHeight: 1.5, padding: '10px 12px', outline: 'none', resize: 'none' }} />
+                    <textarea value={relationshipDraft.boundaries} onChange={event => updateRelationshipDraft('boundaries', event.target.value)} placeholder="雷区/边界：别查岗，别追问前任，别在她忙的时候连续发消息..." rows={2} maxLength={RELATIONSHIP_TEXT_FIELD_LIMIT}
+                      style={{ minHeight: 58, borderRadius: 14, border: '1px solid rgba(47,40,37,0.10)', background: '#fffaf2', color: '#2f2825', fontSize: 13, lineHeight: 1.5, padding: '10px 12px', outline: 'none', resize: 'none' }} />
+                    <textarea value={relationshipDraft.lastEvent} onChange={event => updateRelationshipDraft('lastEvent', event.target.value)} placeholder="你和 TA 最近发生了什么？比如：她两天没回，但刚刚点赞了你的朋友圈。" rows={2} maxLength={RELATIONSHIP_TEXT_FIELD_LIMIT}
+                      style={{ minHeight: 58, borderRadius: 14, border: '1px solid rgba(47,40,37,0.10)', background: '#fffaf2', color: '#2f2825', fontSize: 13, lineHeight: 1.5, padding: '10px 12px', outline: 'none', resize: 'none' }} />
+                    <textarea value={relationshipDraft.notes} onChange={event => updateRelationshipDraft('notes', event.target.value)} placeholder="补充备注：你最怕什么、你们目前卡在哪里、需要尼克特别记住的事。" rows={2} maxLength={RELATIONSHIP_TEXT_FIELD_LIMIT}
+                      style={{ minHeight: 58, borderRadius: 14, border: '1px solid rgba(47,40,37,0.10)', background: '#fffaf2', color: '#2f2825', fontSize: 13, lineHeight: 1.5, padding: '10px 12px', outline: 'none', resize: 'none' }} />
+                    <button onClick={saveRelationshipProfile} disabled={!relationshipDraft.alias.trim()} className="h-11 flex items-center justify-center gap-2" style={{ borderRadius: 15, background: relationshipDraft.alias.trim() ? '#68b45e' : 'rgba(47,40,37,0.10)', color: '#fff', fontSize: 14, fontWeight: 900, opacity: relationshipDraft.alias.trim() ? 1 : 0.6 }}>
+                      {editingRelationshipId ? <CheckCircle2 size={16} /> : <Plus size={16} />}
+                      {editingRelationshipId ? '保存修改' : '新建并使用'}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </motion.div>
           </motion.div>,
           document.body
         ) : null}
